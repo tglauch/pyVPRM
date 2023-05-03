@@ -1,0 +1,13 @@
+#!/bin/bash
+
+#SBATCH --partition=compute
+#SBATCH --account=bd1231
+#SBATCH --time=8:00:00
+#SBATCH --mem=0
+#SBATCH --output=./slurm_out/slurm-%j.out
+#SBATCH --error=./slurm_out/slurm-%j.err
+#SBATCH --constrain=512G
+
+# Begin of section with executable commands
+
+python VPRM_preprocessor_viirs.py 

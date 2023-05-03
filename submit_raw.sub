@@ -1,0 +1,13 @@
+#!/bin/bash
+
+#SBATCH --partition=shared
+#SBATCH --account=bd1231
+#SBATCH --nodes=1
+#SBATCH --time=2-00:00:00
+#SBATCH --mem=220000
+#SBATCH --output=./slurm_out/slurm-%j.out
+#SBATCH --error=./slurm_out/slurm-%j.err
+
+# Begin of section with executable commands
+
+python /home/b/b309233/software/VPRM_preprocessor/fit_params_{}.py --h {} --v {}

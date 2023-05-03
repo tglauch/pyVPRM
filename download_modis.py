@@ -10,14 +10,15 @@ with open("logins.yaml", "r") as stream:
     except yaml.YAMLError as exc:
         print(exc)
 
-hv = [(17,2), (17,3), (17,4), (17,5), (18,2), (18,3), (18,4), (18,5), (19,2), (19,3), (19,4), (19,5)]
+hv = [(17,2), (17,3), (17,4), (17,5), (18,2), (18,3), (18,4),
+      (18,5), (19,2), (19,3), (19,4), (19,5), (20,2), (20,3),
+       (20,4), (20,5), (17,1), (18,1), (19,1), (20,1)]
 for i in hv:
-    print(i)
-    handler = VIIRS()
+    handler = modis()
     handler.download(date(2012, 1, 1),
-                    savepath = '/work/bd1231/tglauch/one_year_viirs_europe_new_2012',
+                    savepath = '/work/bd1231/tglauch/one_year_modis_europe_new_2012/',
                     username = logins['modis'][0],
                     pwd = logins['modis'][1],
-                    hv = i,
+                    hv=i,
                     delta = 1,
                     enddate=date(2013, 1, 1))
