@@ -10,4 +10,4 @@
 
 # Begin of section with executable commands
 
-python /home/b/b309233/software/VPRM_preprocessor/fit_params_{}.py --h {} --v {}
+python /home/b/b309233/software/VPRM_preprocessor/fit_params.py --h {} --v {} --config {}

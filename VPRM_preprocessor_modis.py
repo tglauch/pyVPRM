@@ -1,6 +1,5 @@
 import sys
 import os
-sys.path.append('/home/b/b309233/software/CO2KI/VPRM/')
 sys.path.append('/home/b/b309233/software/SatManager/')
 sys.path.append('/home/b/b309233/software/CO2KI/harvard_forest/')
 import yaml 

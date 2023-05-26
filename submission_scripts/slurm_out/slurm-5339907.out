@@ -1,0 +1,36 @@
+Namespace(h=17, v=3, out_folder='/work/bd1231/tglauch/VPRM_output_modis_new_sites_new', year=2012)
+/work/bd1231/tglauch/VPRM_output_modis_new_sites_new/h17v3_2012.pickle
+{}
+
+********************************************************************************
+*                                                                              *
+*  This is the automated job summary provided by DKRZ.                         *
+*  If you encounter problems, need assistance or have any suggestion, please   *
+*  write an email to                                                           *
+*                                                                              *
+*  --  support@dkrz.de --                                                      *
+*                                                                              *
+*                       We hope you enjoyed the DKRZ supercomputer LEVANTE ... *
+*
+* JobID            : 5339907
+* JobName          : submit_temp.sub                                   
+* Account          : bd1231
+* User             : b309233 (250077), bd1231 (201165)                 
+* Partition        : shared
+* QOS              : normal
+* Nodelist         : l40009 (1)                                                
+* Submit date      : 2023-05-24T23:18:05
+* Start time       : 2023-05-24T23:18:07
+* End time         : 2023-05-24T23:18:16
+* Elapsed time     : 00:00:09 (Timelimit=2-00:00:00)                   
+* Command          : /home/b/b309233/software/VPRM_preprocessor/
+*                    submission_scripts/submit_temp.sub
+* WorkDir          : /home/b/b309233/software/VPRM_preprocessor/
+*                    submission_scripts
+*
+* StepID | JobName      NodeHours    MaxRSS [Byte] (@task)
+* ------------------------------------------------------------------------------
+* batch  | batch           0.0022
+* extern | extern          0.0022                2432K (0)
+* ------------------------------------------------------------------------------
+

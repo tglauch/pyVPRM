@@ -10,4 +10,4 @@
 
 # Begin of section with executable commands
 
-python VPRM_preprocessor_viirs.py 
+python /home/b/b309233/software/VPRM_preprocessor/VPRM_preprocessor_modis.py 

@@ -10,7 +10,7 @@ import warnings
 import sys
 import pandas as pd
 warnings.filterwarnings("ignore")
-from era5_class import ERA5
+from era5_class_new import ERA5
 import pandas as pdt
 map_function = lambda lon: (lon + 360) if (lon < 0) else lon
 from datetime import datetime
@@ -21,11 +21,6 @@ import time
 from datetime import timedelta
 from dateutil import parser
 from scipy.ndimage import uniform_filter
-with open("logins.yaml", "r") as stream:
-    try:
-        logins = yaml.safe_load(stream)
-    except yaml.YAMLError as exc:
-        print(exc)
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from pyproj import Transformer
 import copy
@@ -63,20 +58,23 @@ p = argparse.ArgumentParser(
         formatter_class = argparse.RawTextHelpFormatter)
 p.add_argument("--h", type=int)
 p.add_argument("--v", type=int)
-p.add_argument("--out_folder", type=str,
-               default='/work/bd1231/tglauch/VPRM_output_modis_new_sites')
-p.add_argument("--year", type=int,
-               default=2012)
+p.add_argument("--config", type=str)
 args = p.parse_args()
 print(args)
+
+with open(args.config, "r") as stream:
+    try:
+        cfg  = yaml.safe_load(stream)
+    except yaml.YAMLError as exc:
+        print(exc)
 
 h = args.h
 v = args.v
 
-if not os.path.exists(args.out_folder):
-    os.makedirs(args.out_folder)
+if not os.path.exists(cfg['out_path']):
+    os.makedirs(cfg['out_path'])
 
-outfile = os.path.join(args.out_folder, 'h{}v{}_{}.pickle'.format(h, v, args.year))
+outfile = os.path.join(cfg['out_path'], 'h{}v{}_{}.pickle'.format(h, v, cfg['year']))
 print(outfile)
 site_info = pd.read_pickle('/home/b/b309233/software/CO2KI/VPRM/fluxnet_sites.pkl')
 
@@ -94,15 +92,16 @@ variables = ['NEE_CUT_REF', 'NEE_VUT_REF', 'NEE_CUT_REF_QC', 'NEE_VUT_REF_QC',
             'GPP_NT_VUT_REF', 'GPP_NT_CUT_REF', 'GPP_DT_VUT_REF', 'GPP_DT_CUT_REF',
             'TIMESTAMP_START', 'TIMESTAMP_END']
 all_sites = np.concatenate([site_list[i] for i in site_list.keys()])
+
+c = 0
 for s in all_sites:
     row = site_info.loc[site_info['SITE_ID'] == s]
     lat = float(row['lat'])
-    long = float(row['long'])
-    hv = lat_lon_to_modis(lat, long)
+    lon = float(row['lon'])
+    hv = lat_lon_to_modis(lat, lon)
     if not ((hv[0] == h) & (hv[1] == v)):
         continue
-    em = ''
-    data_files = glob.glob(os.path.join('/work/bd1231/tglauch/data/*{}*/*_FULLSET_H*'.format(s)))
+    data_files = glob.glob(os.path.join(cfg['fluxnet_path'], '*{}*/*_FULLSET_H*'.format(s)))
     if len(data_files) == 0:
         print('No data for {}'.format(s))
         continue
@@ -110,41 +109,60 @@ for s in all_sites:
         print('Load {}'.format(data_files[0]))
     idata = pd.read_csv(data_files[0], usecols=variables)
     tzw = tzwhere.tzwhere()
-    timezone_str = tzw.tzNameAt(lat, long) 
+    timezone_str = tzw.tzNameAt(lat, lon) 
     timezone = pytz.timezone(timezone_str)
-    dt = datetime.datetime.now()
+    dt = parser.parse('200001010000') # pick a date that is definitely standard time and not DST /// old: datetime.datetime.now()
     datetime_u = []
     for i, row in idata.iterrows():
         datetime_u.append(parser.parse(str(int(row['TIMESTAMP_START'])))  -  timezone.utcoffset(dt))
     years = [t.year for t in datetime_u]
-    if args.year not in years:
-        print('No data for {}'.format(args.year))
+    if cfg['year'] not in years:
+        print('No data for {}'.format(cfg['year']))
         continue
     idata['datetime_utc'] = datetime_u
-    site_dict[s] = {'lonlat': (long, lat), 'input_data': [],
+    site_dict[s] = {'lonlat': (lon, lat), 'input_data': [],
                     'fluxnet_data': idata, 'input_data_timestamps': [] }
-print(site_dict)    
+    c+=1
+#    if c > 2:
+#        break
+
+if len(site_dict.keys()) == 0 :
+    exit()
+
 vprm_inst = vprm()
-for c, i in enumerate(glob.glob('/work/bd1231/tglauch/one_year_modis_europe_new_{}/*h{:02d}v{:02d}*.hdf'.format(str(args.year), h, v))):
+
+for c, i in enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*h{:02d}v{:02d}*.hdf'.format(h, v)))):
     print(i)
-    handler = modis(sat_image_path=i)
-    handler.load()
-    vprm_inst.add_sat_img(handler, b_nir='B02', b_red='B01',
-                          b_blue='B03', b_swir='B06',
+#    if c>1:
+#        continue
+    if cgf['satellite'] == 'modis':
+        handler = modis(sat_image_path=i)
+        handler.load()
+        vprm_inst.add_sat_img(handler, b_nir='B02', b_red='B01',
+                              b_blue='B03', b_swir='B06',
+                              smearing=False,
+                              which_evi='evi',
+                              drop_bands=True)
+    else:
+        handler = VIIRS(sat_image_path=i)
+        handler.load()
+        vprm_inst.add_sat_img(handler, b_nir='SurfReflect_I2', b_red='SurfReflect_I1',
+                          b_blue='no_blue_sensor', b_swir='SurfReflect_I3',
                           smearing=False,
-                          which_evi='evi',
-                          drop_bands=True) 
-vprm_inst.sort_sat_imgs_by_timestamp()
+                          which_evi='evi2',
+                          drop_bands=True)
+
+vprm_inst.sort_and_merge_by_timestamp()
 
 vprm_inst.lowess(n_cpus=120)
 
 vprm_inst.calc_min_max_evi_lswi()
 
-bounds = vprm_inst.prototype.rio.bounds()
 lcm = None
-for c in glob.glob('/work/bd1231/tglauch/copernicus_classification/*'):
+for c in glob.glob(os.path.join(cfg['/work/bd1231/tglauch/copernicus_classification/'], '*')):
     thandler = copernicus_land_cover_map(c)
     thandler.load()
+    bounds = vprm_inst.prototype.sat_img.rio.transform_bounds(thandler.sat_img.rio.crs)
     dj = rasterio.coords.disjoint_bounds(bounds, thandler.sat_img.rio.bounds())
     if dj:
         print('Do not add {}'.format(c))
@@ -157,29 +175,34 @@ for c in glob.glob('/work/bd1231/tglauch/copernicus_classification/*'):
         lcm.add_tile(thandler)
 vprm_inst.add_land_cover_map(lcm)
 
-#for i in vprm_inst.sat_imgs:
-#    i.reproject('CRS')
-#vprm_inst.land_cover_map.reproject(vprm_inst.sat_imgs[0].sat_img.rio.crs)
 
 
-t0 = time.time()
 targets = []
 vprm_inst.counter =0
 inputs = []
-time_range = pd.date_range(start="{}-01-01".format(args.year),end="{}-01-01".format(args.year + 1), freq='H')
+time_range = pd.date_range(start="{}-01-01".format(cfg['year']),
+                           end="{}-01-01".format(cfg['year'] + 1),
+                           freq='H')
+lats = []
+lons = []
+for key in site_dict.keys():
+    lats.append(site_dict[key]['lonlat'][1])
+    lons.append(site_dict[key]['lonlat'][0])
 for c,t in enumerate(time_range):
+    t0 = time.time()
     # if (row['datetime_utc'].minute != 00):
     #     continue
-    if (t.hour % 2 != 0):
+    if (t.hour % 1 != 0):
         continue
-    for key in site_dict.keys():
-        vrbls = vprm_inst.get_gee_variables(t, lat=site_dict[key]['lonlat'][1],
-                                            lon=site_dict[key]['lonlat'][0])
-        if vrbls is None:
-            continue
-        site_dict[key]['input_data'].append(vrbls)
-        site_dict[key]['input_data_timestamps'].append(t)
-    print(t, (time.time() - t0)/60)
+    vrbls = vprm_inst.get_gee_variables(t, lat=lats, lon=lons)
+    if vrbls is None:
+        continue
+    else:
+        vrbls = np.array(vrbls)
+        for key_c, key in enumerate(site_dict.keys()):
+            site_dict[key]['input_data'].append(vrbls[:, key_c])
+            site_dict[key]['input_data_timestamps'].append(t)
+    print(t, (time.time() - t0))
 
 with open(outfile, 'w+b') as handle:
     pickle.dump(site_dict, handle,

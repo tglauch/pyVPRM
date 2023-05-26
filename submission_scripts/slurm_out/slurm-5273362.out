@@ -1,0 +1,111 @@
+Namespace(h=17, v=5, out_folder='/work/bd1231/tglauch/VPRM_output_modis_new_sites_new', year=2012)
+/work/bd1231/tglauch/VPRM_output_modis_new_sites_new/h17v5_2012.pickle
+Load /work/bd1231/tglauch/data/FLX_ES-Amo_FLUXNET2015_FULLSET_2007-2012_1-4/FLX_ES-Amo_FLUXNET2015_FULLSET_HH_2007-2012_1-4.csv
+Load /work/bd1231/tglauch/data/FLX_ES-LJu_FLUXNET2015_FULLSET_2004-2013_1-4/FLX_ES-LJu_FLUXNET2015_FULLSET_HH_2004-2013_1-4.csv
+{'ES-Amo': {'lonlat': (-2.25232, 36.83361), 'input_data': [], 'fluxnet_data':         TIMESTAMP_START  TIMESTAMP_END  ...  GPP_DT_CUT_REF        datetime_utc
+0          200701010000   200701010030  ...             0.0 2006-12-31 23:00:00
+1          200701010030   200701010100  ...             0.0 2006-12-31 23:30:00
+2          200701010100   200701010130  ...             0.0 2007-01-01 00:00:00
+3          200701010130   200701010200  ...             0.0 2007-01-01 00:30:00
+4          200701010200   200701010230  ...             0.0 2007-01-01 01:00:00
+...                 ...            ...  ...             ...                 ...
+105211     201212312130   201212312200  ...             0.0 2012-12-31 20:30:00
+105212     201212312200   201212312230  ...             0.0 2012-12-31 21:00:00
+105213     201212312230   201212312300  ...             0.0 2012-12-31 21:30:00
+105214     201212312300   201212312330  ...             0.0 2012-12-31 22:00:00
+105215     201212312330   201301010000  ...             0.0 2012-12-31 22:30:00
+
+[105216 rows x 11 columns], 'input_data_timestamps': []}, 'ES-LJu': {'lonlat': (-2.75212, 36.92659), 'input_data': [], 'fluxnet_data':         TIMESTAMP_START  TIMESTAMP_END  ...  GPP_DT_CUT_REF        datetime_utc
+0          200401010000   200401010030  ...             0.0 2003-12-31 23:00:00
+1          200401010030   200401010100  ...             0.0 2003-12-31 23:30:00
+2          200401010100   200401010130  ...             0.0 2004-01-01 00:00:00
+3          200401010130   200401010200  ...             0.0 2004-01-01 00:30:00
+4          200401010200   200401010230  ...             0.0 2004-01-01 01:00:00
+...                 ...            ...  ...             ...                 ...
+175339     201312312130   201312312200  ...             0.0 2013-12-31 20:30:00
+175340     201312312200   201312312230  ...             0.0 2013-12-31 21:00:00
+175341     201312312230   201312312300  ...             0.0 2013-12-31 21:30:00
+175342     201312312300   201312312330  ...             0.0 2013-12-31 22:00:00
+175343     201312312330   201401010000  ...             0.0 2013-12-31 22:30:00
+
+[175344 rows x 11 columns], 'input_data_timestamps': []}}
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012169.h17v05.006.2015247091555.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012065.h17v05.006.2015238192223.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012057.h17v05.006.2015238171804.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012217.h17v05.006.2015248134404.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012233.h17v05.006.2015248162925.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012081.h17v05.006.2015239174743.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012017.h17v05.006.2015237120319.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012281.h17v05.006.2015250012321.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012009.h17v05.006.2015236193654.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012345.h17v05.006.2015253032411.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012361.h17v05.006.2015254025057.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012185.h17v05.006.2015247120735.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012001.h17v05.006.2015230181149.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012073.h17v05.006.2015238175839.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012265.h17v05.006.2015249190822.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012225.h17v05.006.2015248130502.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012337.h17v05.006.2015253032430.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012273.h17v05.006.2015249191949.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012089.h17v05.006.2015240025016.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012329.h17v05.006.2015252222114.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012321.h17v05.006.2015251181855.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012209.h17v05.006.2015248125859.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012257.h17v05.006.2015249155238.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012249.h17v05.006.2015249160153.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012161.h17v05.006.2015246141847.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012305.h17v05.006.2015251175213.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012297.h17v05.006.2015251122958.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012241.h17v05.006.2015249022142.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012313.h17v05.006.2015251163303.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012201.h17v05.006.2015247203017.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012041.h17v05.006.2015237232244.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012153.h17v05.006.2015246100657.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012105.h17v05.006.2015240140946.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012025.h17v05.006.2015237123350.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012177.h17v05.006.2015247052337.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012353.h17v05.006.2015253042412.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012289.h17v05.006.2015251061017.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012137.h17v05.006.2015246073122.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012193.h17v05.006.2015247113718.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012097.h17v05.006.2015240042755.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2013001.h17v05.006.2015254185722.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012121.h17v05.006.2015240230038.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012049.h17v05.006.2015238141437.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012145.h17v05.006.2015246134343.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012129.h17v05.006.2015246103721.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012033.h17v05.006.2015237131312.hdf
+/work/bd1231/tglauch/one_year_modis_europe_new_2012/MOD09A1.A2012113.h17v05.006.2015240161809.hdf
+
+********************************************************************************
+*                                                                              *
+*  This is the automated job summary provided by DKRZ.                         *
+*  If you encounter problems, need assistance or have any suggestion, please   *
+*  write an email to                                                           *
+*                                                                              *
+*  --  support@dkrz.de --                                                      *
+*                                                                              *
+*                       We hope you enjoyed the DKRZ supercomputer LEVANTE ... *
+*
+* JobID            : 5273362
+* JobName          : submit_temp.sub                                   
+* Account          : bd1231
+* User             : b309233 (250077), bd1231 (201165)                 
+* Partition        : shared
+* QOS              : normal
+* Nodelist         : l40008 (1)                                                
+* Submit date      : 2023-05-22T10:49:27
+* Start time       : 2023-05-22T11:01:24
+* End time         : 2023-05-24T00:03:09
+* Elapsed time     : 1-13:01:45 (Timelimit=2-00:00:00)                 
+* Command          : /home/b/b309233/software/VPRM_preprocessor/
+*                    submission_scripts/submit_temp.sub
+* WorkDir          : /home/b/b309233/software/VPRM_preprocessor/
+*                    submission_scripts
+*
+* StepID | JobName      NodeHours    MaxRSS [Byte] (@task)
+* ------------------------------------------------------------------------------
+* batch  | batch          3.3e+01
+* extern | extern         3.3e+01                2436K (0)
+* ------------------------------------------------------------------------------
+
