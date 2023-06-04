@@ -1,57 +1,25 @@
 import sys
 import os
-sys.path.append('/home/b/b309233/software/CO2KI/VPRM/')
-sys.path.append('/home/b/b309233/software/CO2KI/harvard_forest/')
-sys.path.append('/home/b/b309233/software/SatManager')
+import pathlib
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), 'lib'))
 from sat_manager import VIIRS, sentinel2, modis, copernicus_land_cover_map, satellite_data_manager
-import earthpy.plot as ep
 from VPRM import vprm 
 import warnings
-import sys
 import pandas as pd
 warnings.filterwarnings("ignore")
 from era5_class_new import ERA5
-import pandas as pdt
-map_function = lambda lon: (lon + 360) if (lon < 0) else lon
-from datetime import datetime
-from datetime import date
+from pyproj import Proj
 import yaml
 import glob
 import time
-from datetime import timedelta
 from dateutil import parser
-from scipy.ndimage import uniform_filter
-from statsmodels.nonparametric.smoothers_lowess import lowess
-from pyproj import Transformer
-import copy
-from joblib import Parallel, delayed
-import scipy.interpolate as si
 import numpy as np
 import rasterio
-import datetime
 import pytz
 from tzwhere import tzwhere
-from pyproj import Proj
-import pandas as pd
-import math
 import pickle
 import argparse
-
-def lat_lon_to_modis(lat, lon):
-    CELLS = 2400
-    VERTICAL_TILES = 18
-    HORIZONTAL_TILES = 36
-    EARTH_RADIUS = 6371007.181
-    EARTH_WIDTH = 2 * math.pi * EARTH_RADIUS
-
-    TILE_WIDTH = EARTH_WIDTH / HORIZONTAL_TILES
-    TILE_HEIGHT = TILE_WIDTH
-    CELL_SIZE = TILE_WIDTH / CELLS
-    MODIS_GRID = Proj(f'+proj=sinu +R={EARTH_RADIUS} +nadgrids=@null +wktext')
-    x, y = MODIS_GRID(lon, lat)
-    h = (EARTH_WIDTH * .5 + x) / TILE_WIDTH
-    v = -(EARTH_WIDTH * .25 + y - (VERTICAL_TILES - 0) * TILE_HEIGHT) / TILE_HEIGHT
-    return int(h), int(v)
+from functions import lat_lon_to_modis
 
 p = argparse.ArgumentParser(
         description = "Commend Line Arguments",
@@ -76,6 +44,10 @@ if not os.path.exists(cfg['out_path']):
 
 outfile = os.path.join(cfg['out_path'], 'h{}v{}_{}.pickle'.format(h, v, cfg['year']))
 print(outfile)
+
+
+
+#Prepare Fluxnet Dataset
 site_info = pd.read_pickle('/home/b/b309233/software/CO2KI/VPRM/fluxnet_sites.pkl')
 
 site_list = {'grassland': ['AT-Neu', 'CH-Cha', 'CH-Fru', 'CZ-BK2', 'DE-Gri', 'DE-RuR', 'IT-MBo', 'IT-Tor'],
@@ -93,11 +65,10 @@ variables = ['NEE_CUT_REF', 'NEE_VUT_REF', 'NEE_CUT_REF_QC', 'NEE_VUT_REF_QC',
             'TIMESTAMP_START', 'TIMESTAMP_END']
 all_sites = np.concatenate([site_list[i] for i in site_list.keys()])
 
-c = 0
 for s in all_sites:
     row = site_info.loc[site_info['SITE_ID'] == s]
     lat = float(row['lat'])
-    lon = float(row['lon'])
+    lon = float(row['long'])
     hv = lat_lon_to_modis(lat, lon)
     if not ((hv[0] == h) & (hv[1] == v)):
         continue
@@ -122,25 +93,30 @@ for s in all_sites:
     idata['datetime_utc'] = datetime_u
     site_dict[s] = {'lonlat': (lon, lat), 'input_data': [],
                     'fluxnet_data': idata, 'input_data_timestamps': [] }
-    c+=1
-#    if c > 2:
-#        break
 
 if len(site_dict.keys()) == 0 :
     exit()
 
+lats = []
+lons = []
+lonlats = []
+for key in site_dict.keys():
+    lonlats.append((site_dict[key]['lonlat'][0], site_dict[key]['lonlat'][1]))
+    lats.append(site_dict[key]['lonlat'][1])
+    lons.append(site_dict[key]['lonlat'][0])
+
+# ----------- Using the new VPRM Processing Code --------------------
+
+
 vprm_inst = vprm()
 
-for c, i in enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*h{:02d}v{:02d}*.hdf'.format(h, v)))):
+for c, i in enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*h{:02d}v{:02d}*.h*'.format(h, v)))):
     print(i)
-#    if c>1:
-#        continue
-    if cgf['satellite'] == 'modis':
+    if cfg['satellite'] == 'modis':
         handler = modis(sat_image_path=i)
         handler.load()
         vprm_inst.add_sat_img(handler, b_nir='B02', b_red='B01',
                               b_blue='B03', b_swir='B06',
-                              smearing=False,
                               which_evi='evi',
                               drop_bands=True)
     else:
@@ -148,18 +124,18 @@ for c, i in enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*h{:02d}v{:
         handler.load()
         vprm_inst.add_sat_img(handler, b_nir='SurfReflect_I2', b_red='SurfReflect_I1',
                           b_blue='no_blue_sensor', b_swir='SurfReflect_I3',
-                          smearing=False,
                           which_evi='evi2',
                           drop_bands=True)
+vprm_inst.smearing(lonlats=lonlats)
 
 vprm_inst.sort_and_merge_by_timestamp()
 
-vprm_inst.lowess(n_cpus=120)
+vprm_inst.lowess(n_cpus=1, lonlats=lonlats)
 
 vprm_inst.calc_min_max_evi_lswi()
 
 lcm = None
-for c in glob.glob(os.path.join(cfg['/work/bd1231/tglauch/copernicus_classification/'], '*')):
+for c in glob.glob(os.path.join(cfg['copernicus_path'], '*')):
     thandler = copernicus_land_cover_map(c)
     thandler.load()
     bounds = vprm_inst.prototype.sat_img.rio.transform_bounds(thandler.sat_img.rio.crs)
@@ -176,31 +152,29 @@ for c in glob.glob(os.path.join(cfg['/work/bd1231/tglauch/copernicus_classificat
 vprm_inst.add_land_cover_map(lcm)
 
 
+# ------------------------------------------------------------------
 
+# Loop over the year
 targets = []
 vprm_inst.counter =0
 inputs = []
 time_range = pd.date_range(start="{}-01-01".format(cfg['year']),
                            end="{}-01-01".format(cfg['year'] + 1),
                            freq='H')
-lats = []
-lons = []
-for key in site_dict.keys():
-    lats.append(site_dict[key]['lonlat'][1])
-    lons.append(site_dict[key]['lonlat'][0])
+
 for c,t in enumerate(time_range):
     t0 = time.time()
-    # if (row['datetime_utc'].minute != 00):
-    #     continue
     if (t.hour % 1 != 0):
         continue
-    vrbls = vprm_inst.get_gee_variables(t, lat=lats, lon=lons)
+    vrbls = vprm_inst.get_vprm_variables(t, lat=lats, lon=lons)
     if vrbls is None:
         continue
     else:
-        vrbls = np.array(vrbls)
         for key_c, key in enumerate(site_dict.keys()):
-            site_dict[key]['input_data'].append(vrbls[:, key_c])
+            add_arr = []
+            for var in vrbls.keys(): 
+                add_arr.append(vrbls[var][key_c])
+            site_dict[key]['input_data'].append(add_arr)
             site_dict[key]['input_data_timestamps'].append(t)
     print(t, (time.time() - t0))
 

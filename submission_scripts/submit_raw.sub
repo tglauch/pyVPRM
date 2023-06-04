@@ -2,12 +2,12 @@
 
 #SBATCH --partition=shared
 #SBATCH --account=bd1231
-#SBATCH --nodes=1
-#SBATCH --time=2-00:00:00
-#SBATCH --mem=220000
+#SBATCH --time=6:00:00
+#SBATCH --mem=120000
+#SBATCH --cpus-per-task=10
 #SBATCH --output=./slurm_out/slurm-%j.out
 #SBATCH --error=./slurm_out/slurm-%j.err
 
 # Begin of section with executable commands
 
-python /home/b/b309233/software/VPRM_preprocessor/fit_params.py --h {} --v {} --config {}
+python /home/b/b309233/software/VPRM_preprocessor/VPRM_predictions.py   --h {} --v {} --config {}

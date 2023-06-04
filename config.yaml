@@ -2,8 +2,9 @@ year: 2012
 satellite: modis
 sat_image_path: /work/bd1231/tglauch/one_year_modis_europe_new_2012/
 copernicus_path: /work/bd1231/tglauch/copernicus_classification/
-out_path: /work/bd1231/tglauch/VPRM_output_2012_new_sites_new
+out_path: /work/bd1231/tglauch/VPRM_output_modis_new_smearing_lowess/
 fluxnet_path: /work/bd1231/tglauch/data/
+vprm_params_dict: /home/b/b309233/modis.pickle
 hvs:
  - [17,2]
  - [17,3]
