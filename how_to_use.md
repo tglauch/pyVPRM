@@ -10,4 +10,9 @@ For a)
 4. Use the output in the analysis notebook to fit the paramteters and generate plots. See for example ./analysis_notebooks/2012_VPRM_eval.ipynb
 
 For b) 
-  
+1. Prepare a config file (see for example config.cfg)
+2. Run the VPRM_predictions.py code with the config file as argument
+
+For c)
+1. Prepare a config file (see for example config_wrf_prepocessor.yaml)
+2. Run the VPRM_preprocessor.py code with the config file 

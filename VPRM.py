@@ -1,46 +1,36 @@
-import numpy as np
+import warnings
+warnings.filterwarnings("ignore")
 import sys
 import os
 import pathlib
 sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), 'lib'))
+import numpy as np
 from sat_manager import VIIRS, sentinel2, modis,\
                        copernicus_land_cover_map, satellite_data_manager
-import earthpy.plot as ep
-import warnings
-import sys
-import pandas as pd
-warnings.filterwarnings("ignore")
-
 from era5_class_new import ERA5
-import pandas as pdt
-map_function = lambda lon: (lon + 360) if (lon < 0) else lon
-from datetime import datetime
-from datetime import date
-import yaml
-import glob
-import time
-from datetime import timedelta
-from dateutil import parser
 from scipy.ndimage import uniform_filter
-with open("/home/b/b309233/software/VPRM_preprocessor/logins.yaml", "r") as stream:
-    try:
-        logins = yaml.safe_load(stream)
-    except yaml.YAMLError as ex:
-        print(exc)
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from pyproj import Transformer
 import copy
 from joblib import Parallel, delayed
-import scipy.interpolate as si
-import rioxarray as rxr
 import xarray as xr
 import xesmf as xe
 import scipy
 import uuid
 
-def do_lowess_smoothing(array_to_smooth, vclass=None, count=None):
-    if count!=None:
-        print(count)
+def do_lowess_smoothing(array_to_smooth, vclass=None):
+    '''
+        Performs lowess smoothing on a 2-D-array, where the first dimension is the time.
+
+            Parameters:
+                    array_to_smooth (list): The 2-D-array
+                    vclass (list): 1-D list of vegetation classes. Vegetation class 8 (builup) is
+                                   skipped in the smoothing process
+
+            Returns:
+                    The lowess smoothed array
+    '''
+
     ret = []
     for j in range(np.shape(array_to_smooth)[1]):
         if vclass!=None:
@@ -51,7 +41,20 @@ def do_lowess_smoothing(array_to_smooth, vclass=None, count=None):
     return array_to_smooth.T
 
 class vprm: 
+    '''
+    Class for the  Vegetation Photosynthesis and Respiration Model
+    '''
     def __init__(self, land_cover_map=None, verbose=False):
+        '''
+            Initialize a class instance
+
+            Parameters:
+                    land_cover_map (xarray): A pre calculated map with the land cover types
+                    verbose (bool): Set true for additional output when debugging
+
+            Returns:
+                    The lowess smoothed array
+        '''
 
         self.sat_imgs = []
         self.era5_inst = None
@@ -91,6 +94,23 @@ class vprm:
     def to_wrf_output(self, out_grid, weights_for_regridder=None,
                       regridder_save_path=None, driver='xEMSF',
                       n_cpus=60):
+
+        '''
+            Generate output in the format that can be used as an input for WRF 
+
+                Parameters:
+                        out_grid (dict or xarray): Can be either a dictionary with 1D lats and lons
+                                                   or an xarray dataset
+                        weights_for_regridder (str): Weights to be used for regridding to the WRF grid
+                        regridder_save_path (str): Save path when generating a new regridder
+                        driver (str): Either ESMF_RegridWeightGen or xESMF. When setting to ESMF_RegridWeightGen
+                                      the ESMF library is called directly
+                        n_cpus (int): Number of CPUs for the parallelized computation of the weights
+
+                Returns:
+                        Dictionary with a dictinoary of the WRF input arrays
+        '''
+
         src_x = self.sat_imgs.sat_img.coords['x'].values
         src_y = self.sat_imgs.sat_img.coords['y'].values
         X, Y = np.meshgrid(src_x, src_y)
@@ -203,6 +223,24 @@ class vprm:
                     drop_bands=True, 
                     which_evi='evi',
                     max_evi=False):
+        '''
+            Add a new satellite image and calculate EVI and LSWI
+
+                Parameters:
+                        handler (satellite_data_manager): The satellite image
+                        b_nir (str): Name of the near-infrared band
+                        b_red (str): Name of the red band
+                        b_blue (str): Name of the blue band
+                        b_swir (str): Name of the short-wave infrared band
+                        drop_bands (bool): If True drop the raw band information after 
+                                           calculation of EVI and LSWI. Saves memory.
+                        which_evi (str): Either evi or evi2. evi2 does not need a blue band.
+                        max_evi (float): If given, every evi larger than this will be cut.
+
+                Returns:
+                        None
+        '''
+
         evi_params = {'g': 2.5, 'c1': 6., 'c2': 7.5, 'l': 1}
         evi2_params = {'g': 2.5, 'l': 1 , 'c': 2.4}
         if not isinstance(handler, satellite_data_manager):
@@ -234,6 +272,16 @@ class vprm:
         return
     
     def smearing(self, size=(3,3), lonlats=None):
+        '''
+            Performs a spatial smearing
+
+                Parameters:
+                        size (tuple): The extension of the spatial smoothing
+                        lonlats (str): If given the smearing is only performed at the
+                                       given lats and lons
+                Returns:
+                        None
+        '''
         for img in self.sat_imgs:
             if lonlats is None:
                 img.sat_img['evi'][:,:] = uniform_filter(img.sat_img['evi'].values[:,:], size=size, mode='nearest')
@@ -252,6 +300,15 @@ class vprm:
         return
     
     def sort_and_merge_by_timestamp(self):
+        '''
+            Called after adding the satellite images with 'add_sat_img'. Sorts the satellite
+            images by timestamp and merges everything to one satellite_data_manager.
+
+                Parameters:
+
+                Returns:
+                        None
+        '''
         x_time_y = 0
         for h in self.sat_imgs:
             size_dict = dict(h.sat_img.sizes) 
@@ -281,6 +338,17 @@ class vprm:
 
     def add_land_cover_map(self, land_cover_map, var_name='band_1',
                            save_path=None, filter_size=5):
+        '''
+            Add the land cover map. Either use a pre-calculated one or do the calculation on the fly.
+
+                Parameters:
+                        land_cover_map (int): Number of parallel CPUs for the smoothing
+                        var_name (str): Name of the band in the output xarray
+                        save_path (str): Path to save the map. Can be useful for re-using
+                        filter_size (int): Number of pixels from which the land cover type is aggregated.
+                Returns:
+                        None
+        '''
         if isinstance(land_cover_map, str):
             print('Load pre-generated land cover map')
             self.land_cover_type = copernicus_land_cover_map(land_cover_map)
@@ -320,6 +388,17 @@ class vprm:
         return
     
     def calc_min_max_evi_lswi(self):
+        '''
+            Add the land cover map. Either use a pre-calculated one or do the calculation on the fly.
+
+                Parameters:
+                        land_cover_map (int): Number of parallel CPUs for the smoothing
+                        var_name (str): Name of the band in the output xarray
+                        save_path (str): Path to save the map. Can be useful for re-using
+                        filter_size (int): Number of pixels from which the land cover type is aggregated.
+                Returns:
+                        None
+        '''
         self.max_lswi = copy.deepcopy(self.prototype)
         self.min_max_evi = copy.deepcopy(self.prototype)
         shortcut = self.sat_imgs.sat_img
@@ -330,6 +409,16 @@ class vprm:
         return
     
     def lowess(self, n_cpus=1, lonlats=None):
+        '''
+            Performs the lowess smoothing
+
+                Parameters:
+                        n_ncpus (int): Number of parallel CPUs for the smoothing
+                        lonlats (str): If given the smearing is only performed at the
+                                       given lats and lons
+                Returns:
+                        None
+        '''
         if lonlats is None:
             self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'evi': (['time', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['evi'][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
             self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'lswi': (['time', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['lswi'][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
@@ -344,14 +433,20 @@ class vprm:
                 self.sat_imgs.sat_img['lswi'][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['lswi'][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T 
         return
 
-    # def get_vprm_land_class(self, lon=None, lat=None):
-    #     if lon is not None:
-    #         veg_class = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type', as_array=False).values.flatten()
-    #     else:
-    #         veg_class = self.land_cover_type.sat_img['land_cover_type']
-    #     return veg_class
-
     def load_weather_data(self, hour, day, month, year, era_keys):
+        '''
+            Load meteorlocial data from the available (on DKRZ's levante) data storage
+
+                Parameters:
+                        hour (int): hour in UTC
+                        day (int): day in UTC
+                        month (int): month in UTC
+                        year (int): year in UTC
+                        era_keys (list): list of ERA5 variables using the shortNames. 
+                                         See https://confluence.ecmwf.int/display/CKB/ERA5%3A+data+documentation#ERA5:datadocumentation-Parameterlistings
+                Returns:
+                        None
+        '''
         if self.era5_inst is None:
             if self.verbose:
                 print('Init ERA5 Instance')
@@ -367,6 +462,16 @@ class vprm:
         return
     
     def get_t_scale(self, lon=None, lat=None):
+        '''
+            Get VPRM t_scale
+
+                Parameters:
+                        lon (float): longitude
+                        lat (float): latitude
+                Returns:
+                        t_scale array
+        '''
+
         if lon is not None:
             tmin = self.t2m.value_at_lonlat(lon, lat, key='tmin', as_array=False).values.flatten()
             topt = self.t2m.value_at_lonlat(lon, lat, key='topt', as_array=False).values.flatten()
@@ -383,6 +488,16 @@ class vprm:
         return (t, ret)
         
     def get_p_scale(self, lon=None, lat=None):
+        '''
+            Get VPRM p_scale for the current satellite image (see self.counter)
+
+                Parameters:
+                        lon (float): longitude
+                        lat (float): latitude
+                Returns:
+                        p_scale array
+        '''
+
         if lon is not None:
             land_type = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type', as_array=False).values.flatten()
             th = self.min_max_evi.value_at_lonlat(lon, lat, key='th', as_array=False).values.flatten()
@@ -402,6 +517,16 @@ class vprm:
         return self.timestamps[self.counter]
     
     def get_par(self, lon=None, lat=None):
+        '''
+            Get VPRM par
+
+                Parameters:
+                        lon (float): longitude
+                        lat (float): latitude
+                Returns:
+                        par array
+        '''
+
         if lon is not None:
             ret = self.era5_inst.get_data(lonlat=(lon, lat), key='ssrd').values.flatten() / 0.505 / 3600
         else:
@@ -409,6 +534,16 @@ class vprm:
         return ret
     
     def get_w_scale(self, lon=None, lat=None):
+        '''
+            Get VPRM w_scale
+
+                Parameters:
+                        lon (float): longitude
+                        lat (float): latitude
+                Returns:
+                        w_scale array
+        '''
+
         lswi = self.get_lswi(lon, lat)
         if lon is not None:
             max_lswi = self.max_lswi.value_at_lonlat(lon, lat, key='max_lswi', as_array=False).values.flatten()
@@ -417,18 +552,45 @@ class vprm:
         return (1+lswi)/(1+max_lswi)
     
     def get_evi(self, lon=None, lat=None):
+        '''
+            Get EVI for the current satellite image (see self.counter)
+
+                Parameters:
+                        lon (float): longitude
+                        lat (float): latitude
+                Returns:
+                        EVI array
+        '''
+
         if lon is not None:     
             return self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='evi', isel={'time': self.counter}).values.flatten()
         else:
             return self.sat_imgs.sat_img['evi'].isel({'time': self.counter})
     
     def get_lswi(self, lon=None, lat=None):
+        '''
+            Get LSWI for the current satellite image (see self.counter)
+
+                Parameters:
+                        lon (float): longitude
+                        lat (float): latitude
+                Returns:
+                        LSWI array
+        '''
+
         if lon is not None:
             return self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='lswi', isel={'time': self.counter}).values.flatten()
         else:
             return self.sat_imgs.sat_img['lswi'].isel({'time': self.counter})
    
-    def init_meteo(self):
+    def init_temps(self):
+        '''
+            Initialize an xarray with the min, max, and opt temperatures for photosynthesis
+
+                Parameters:
+                Returns:
+                        None
+        '''
         tmin = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 0)
         topt = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 20)
         tmax = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 40)
@@ -448,8 +610,16 @@ class vprm:
 
     def get_vprm_variables(self, datetime_utc, lat=None, lon=None,
                            add_era_variables=[], regridder_weights=None):
+
+        '''
+            Initialize an xarray with the min, max, and opt temperatures for photosynthesis
+
+                Parameters:
+                Returns:
+                        None
+        '''
         if self.t2m is None:
-                self.init_meteo()
+                self.init_temps()
         self.counter = 0
         hour = datetime_utc.hour
         day = datetime_utc.day
@@ -509,6 +679,19 @@ class vprm:
     
     def make_predictions(self, date, res_dict=None, which_flux='NEE',
                          regridder_weights=None):
+        '''
+            Using the VPRM fit parameters make predictions on the entire satellite image.
+
+                Parameters:
+                    date (datetime object): The date for the prediction
+                    res_dict (dict) : Dict with fit parameters ('lamb', 'par0', 'alpha', 'beta') 
+                                      for the different vegetation types.
+                    which_flux (str): Either 'NEE' or 'GPP'
+                    regridder_weights (str): Path to the weights file for regridding from ERA5 
+                                             to the satellite grid
+                Returns:
+                        None
+        '''
         if self.res_dict == None:
             if res_dict is None:
                 print('Need to provide a dictionary with the fit parameters')
@@ -558,8 +741,7 @@ class vprm:
         
 
     def save(self, base_path, lswi_name=None, evi_name=None):
-        if lswi_name is not None:
-            self.lswis.save(os.path.join(base_path, lswi_name))
-        if evi_name is not None:
-            self.evis.save(os.path.join(base_path, evi_name))
+        '''
+            Save the LSWI and EVI sat image. ToDo
+        '''
         return

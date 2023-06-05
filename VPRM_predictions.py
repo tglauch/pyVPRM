@@ -29,6 +29,7 @@ p = argparse.ArgumentParser(
 p.add_argument("--h", type=int)
 p.add_argument("--v", type=int)
 p.add_argument("--config", type=str)
+p.add_argument("--n_cpus", type=int, default=1)
 args = p.parse_args()
 print(args)
 
@@ -61,7 +62,7 @@ for c, i in enumerate(sorted(glob.glob(os.path.join(cfg['sat_image_path'], '*h{:
 
 vprm_inst.sort_and_merge_by_timestamp()
 
-vprm_inst.lowess(n_cpus=10)
+vprm_inst.lowess(n_cpus=args.n_cpus)
 
 vprm_inst.calc_min_max_evi_lswi()
 

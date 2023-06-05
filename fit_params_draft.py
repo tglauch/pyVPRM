@@ -20,6 +20,7 @@ p = argparse.ArgumentParser(
 p.add_argument("--h", type=int)
 p.add_argument("--v", type=int)
 p.add_argument("--config", type=str)
+p.add_argument("--n_cpus", type=int, default=1)
 args = p.parse_args()
 print(args)
 
@@ -73,7 +74,7 @@ vprm_inst.smearing(lonlats=lonlats)
 
 vprm_inst.sort_and_merge_by_timestamp()
 
-vprm_inst.lowess(n_cpus=1, lonlats=lonlats)
+vprm_inst.lowess(n_cpus=args.n_cpus, lonlats=lonlats)
 
 vprm_inst.calc_min_max_evi_lswi()
 
