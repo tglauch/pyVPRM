@@ -2,8 +2,8 @@
 
 #SBATCH --partition=shared
 #SBATCH --account=bd1231
-#SBATCH --time=6:00:00
-#SBATCH --mem=120000
+#SBATCH --time=8:00:00
+#SBATCH --mem=200000
 #SBATCH --cpus-per-task=10
 #SBATCH --output=./slurm_out/slurm-%j.out
 #SBATCH --error=./slurm_out/slurm-%j.err
