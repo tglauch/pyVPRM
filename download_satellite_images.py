@@ -5,17 +5,11 @@ import yaml
 from datetime import date
 import argparse
 
-
-with open("logins.yaml", "r") as stream:
-    try:
-        logins = yaml.safe_load(stream)
-    except yaml.YAMLError as exc:
-        print(exc)
-
 p = argparse.ArgumentParser(
         description = "Commend Line Arguments",
         formatter_class = argparse.RawTextHelpFormatter)
 p.add_argument("--config", type=str)
+p.add_argument("--login_data", type=str)
 args = p.parse_args()
 
 with open(args.config, "r") as stream:
@@ -23,6 +17,14 @@ with open(args.config, "r") as stream:
         cfg  = yaml.safe_load(stream)
     except yaml.YAMLError as exc:
         print(exc)
+
+with open(args.login_data, "r") as stream:
+    try:
+        logins  = yaml.safe_load(stream)
+    except yaml.YAMLError as exc:
+        print(exc)
+
+
 
 if cfg['satellite'] == 'modis':
     for i in cfg['hvs']:

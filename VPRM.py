@@ -44,7 +44,7 @@ class vprm:
     '''
     Class for the  Vegetation Photosynthesis and Respiration Model
     '''
-    def __init__(self, land_cover_map=None, verbose=False):
+    def __init__(self, land_cover_map=None, verbose=False, n_cpus=1):
         '''
             Initialize a class instance
 
@@ -57,6 +57,7 @@ class vprm:
         '''
 
         self.sat_imgs = []
+        self.n_cpus = n_cpus
         self.era5_inst = None
         self.land_cover_map = land_cover_map
         self.verbose = verbose
@@ -92,8 +93,7 @@ class vprm:
     
     
     def to_wrf_output(self, out_grid, weights_for_regridder=None,
-                      regridder_save_path=None, driver='xEMSF',
-                      n_cpus=60):
+                      regridder_save_path=None, driver='xEMSF'):
 
         '''
             Generate output in the format that can be used as an input for WRF 
@@ -105,7 +105,6 @@ class vprm:
                         regridder_save_path (str): Save path when generating a new regridder
                         driver (str): Either ESMF_RegridWeightGen or xESMF. When setting to ESMF_RegridWeightGen
                                       the ESMF library is called directly
-                        n_cpus (int): Number of CPUs for the parallelized computation of the weights
 
                 Returns:
                         Dictionary with a dictinoary of the WRF input arrays
@@ -144,7 +143,7 @@ class vprm:
                 dest_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
                 src_grid.to_netcdf(src_temp_path)
                 ds_out.to_netcdf(dest_temp_path)
-                os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear -r --64bit_offset  --extrap_method nearestd  --no_log'.format(n_cpus, src_temp_path, dest_temp_path, regridder_save_path))
+                os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear -r --64bit_offset  --extrap_method nearestd  --no_log'.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path))
                 os.remove(src_temp_path) 
                 os.remove(dest_temp_path)
                 weights_for_regridder = regridder_save_path
@@ -408,20 +407,19 @@ class vprm:
         self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['y','x'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})  
         return
     
-    def lowess(self, n_cpus=1, lonlats=None):
+    def lowess(self, lonlats=None):
         '''
             Performs the lowess smoothing
 
                 Parameters:
-                        n_ncpus (int): Number of parallel CPUs for the smoothing
                         lonlats (str): If given the smearing is only performed at the
                                        given lats and lons
                 Returns:
                         None
         '''
         if lonlats is None:
-            self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'evi': (['time', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['evi'][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
-            self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'lswi': (['time', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['lswi'][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
+            self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'evi': (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['evi'][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
+            self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'lswi': (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['lswi'][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
         else:
             t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                      self.sat_imgs.sat_img.rio.crs)
@@ -429,8 +427,8 @@ class vprm:
                 x, y = t.transform(ll[0], ll[1])
                 x_ind = np.argmin(np.abs(x - self.sat_imgs.sat_img.coords['x'].values))
                 y_ind = np.argmin(np.abs(y - self.sat_imgs.sat_img.coords['y'].values))
-                self.sat_imgs.sat_img['evi'][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['evi'][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T              
-                self.sat_imgs.sat_img['lswi'][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['lswi'][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T 
+                self.sat_imgs.sat_img['evi'][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['evi'][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T              
+                self.sat_imgs.sat_img['lswi'][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['lswi'][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T 
         return
 
     def load_weather_data(self, hour, day, month, year, era_keys):
@@ -663,7 +661,8 @@ class vprm:
                                year, era_keys=era_keys)
         if (lat is None) & (lon is None):
                 self.era5_inst.regrid(dataset=self.prototype_lat_lon,
-                                      weights_path=regridder_weights)
+                                      weights=regridder_weights,
+                                      n_cpus=self.n_cpus)
         ret_dict = dict()
         ret_dict['evi'] = self.get_evi(lon, lat)
         ret_dict['Ps'] = self.get_p_scale(lon, lat)

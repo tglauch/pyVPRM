@@ -58,7 +58,7 @@ def add_land_cover_map(vprm_inst, land_cover_on_modis_grid=None, copernicus_data
 lons = np.linspace(cfg['lon_min'], cfg['lon_max'] , cfg['n_bins_lon']) 
 lats = np.linspace(cfg['lat_min'], cfg['lat_max'], cfg['n_bins_lat'])
 hvs =  cfg['hvs']:
-vprm_inst = vprm()
+vprm_inst = vprm(n_cpus=args.n_cpus)
 file_collections = np.unique([i.split('.')[1] for i in
                               glob.glob(os.path.join(cfg['sat_image_path'],
                                         '*h{:02d}v{:02d}*.h*'.format(hvs[0][0], hvs[0][1])))])

@@ -109,7 +109,7 @@ for key in site_dict.keys():
 # ----------- Using the new VPRM Processing Code --------------------
 
 
-vprm_inst = vprm()
+vprm_inst = vprm(n_cpus=args.n_cpus)
 
 for c, i in enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*h{:02d}v{:02d}*.h*'.format(h, v)))):
     print(i)

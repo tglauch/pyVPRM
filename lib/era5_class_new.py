@@ -125,9 +125,8 @@ class ERA5:
             ret_dict[key] = self.get_interpolator()
         return ret_dict
 
-    def regrid(self, lats=None, lons=None, dataset=None, n_cpus=120,
-               weights_for_regridder=None, overwrite_regridder=False,
-               weights_path=None):
+    def regrid(self, lats=None, lons=None, dataset=None, n_cpus=1,
+               weights=None, overwrite_regridder=False):
         t_ds_in = xr.Dataset({"lat": (['lat'], sorted(self.ds_in['lat'].values), {"units": "degrees_north"}),
                               "lon": (['lon'], sorted([map_function(i) for i in self.ds_in['lon'].values]),
                                          {"units": "degrees_east"})})
@@ -142,20 +141,21 @@ class ERA5:
                 self.reg_lons = lons
             else:
                 ds_out = dataset
-            if weights_path is not None:
-                weights_for_regridder=weights_path
+            if (weights is not None) & os.path.exists(str(weights)):
+                print('Load weights from {}'.format(weights))
             else:
-                src_temp_path = os.path.join('/work/bd1231/tglauch/tests/{}.nc'.format(str(uuid.uuid4())))
-                dest_temp_path = os.path.join('/work/bd1231/tglauch/tests/{}.nc'.format(str(uuid.uuid4())))
-                regridder_save_path = '/work/bd1231/tglauch/tests/regridder_weights_test.nc'
+                bfolder = os.path.dirname(weights)
+                src_temp_path = os.path.join(bfolder, '{}.nc'.format(str(uuid.uuid4())))
+                dest_temp_path = os.path.join(bfolder , '{}.nc'.format(str(uuid.uuid4())))
                 t_ds_in.to_netcdf(src_temp_path)
                 ds_out.to_netcdf(dest_temp_path)
-                os.system('mpirun -np {}  ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log'.format(n_cpus, src_temp_path, dest_temp_path, regridder_save_path)) # -np {} 
+                cmd = 'mpirun -np {}  ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log'.format(n_cpus, src_temp_path, dest_temp_path, weights)
+                print(cmd)
+                os.system(cmd) # -np {} 
                 os.remove(src_temp_path) 
                 os.remove(dest_temp_path)
-                weights_for_regridder = regridder_save_path
             self.regridder = xe.Regridder(t_ds_in, ds_out,
-                                          "bilinear", weights=weights_for_regridder,
+                                          "bilinear", weights=weights,
                                            reuse_weights=True)
         #self.regridder = xe.Regridder(self.ds_in, ds_out, "bilinear", extrap_method="nearest_s2d")
         self.ds_out = self.regridder(self.ds_out)

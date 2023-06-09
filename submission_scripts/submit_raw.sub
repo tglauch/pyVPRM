@@ -1,13 +1,16 @@
 #!/bin/bash
 
-#SBATCH --partition=shared
+#SBATCH --partition=compute
 #SBATCH --account=bd1231
 #SBATCH --time=8:00:00
-#SBATCH --mem=200000
-#SBATCH --cpus-per-task=10
+#SBATCH --cpus-per-task={}
+#SBATCH --ntasks={}
+#SBATCH --mem=0
+#SBATCH --constraint=512G
 #SBATCH --output=./slurm_out/slurm-%j.out
 #SBATCH --error=./slurm_out/slurm-%j.err
 
 # Begin of section with executable commands
 
-python /home/b/b309233/software/VPRM_preprocessor/VPRM_predictions.py   --h {} --v {} --config {}
+{}
+wait
