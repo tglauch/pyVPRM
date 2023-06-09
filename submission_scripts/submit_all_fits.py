@@ -6,6 +6,7 @@ p = argparse.ArgumentParser(
         description = "Commend Line Arguments",
         formatter_class = argparse.RawTextHelpFormatter)
 p.add_argument("--config", type=str)
+p.add_argument("--script", type=str) # /home/b/b309233/software/VPRM_preprocessor/VPRM_predictions.py
 args = p.parse_args()
 
 with open(args.config, "r") as stream:
@@ -18,14 +19,11 @@ with open(args.config, "r") as stream:
 which_sat = cfg['satellite']
 n= 4 # chunk size
 n_cpus = 124 
-#raw_code = 'srun --exclusive --ntasks=' + str(int(n_cpus / n)) + '  --cpus-per-task=1'  + ' --mem=' + str(int(512/n * 1000)) + 
-raw_code =' python /home/b/b309233/software/VPRM_preprocessor/VPRM_predictions.py --h {} --v {} --config {} --n_cpus ' + str(int(n_cpus/n)) + ' & ' 
+raw_code =' python ' + args.script + ' --h {} --v {} --config {} --n_cpus ' + str(int(n_cpus/n)) + ' & ' 
 
 
 
 for counter, hv_chunk in enumerate([cfg['hvs'][i:i + n] for i in range(0, len(cfg['hvs']), n)]):
-    if counter ==0:
-        continue
     sub_code = ''
 
     for i in hv_chunk:
@@ -41,4 +39,4 @@ for counter, hv_chunk in enumerate([cfg['hvs'][i:i + n] for i in range(0, len(cf
 
     print(sub_info)
     os.system('sbatch submit_temp.sub')
-  #  os.remove('submit_temp.sub')
+    os.remove('submit_temp.sub')
