@@ -131,7 +131,7 @@ vprm_inst.smearing(lonlats=lonlats)
 
 vprm_inst.sort_and_merge_by_timestamp()
 
-vprm_inst.lowess(n_cpus=args.n_cpus, lonlats=lonlats)
+vprm_inst.lowess(lonlats=lonlats)
 
 vprm_inst.calc_min_max_evi_lswi()
 
