@@ -167,7 +167,8 @@ for c,t in enumerate(time_range):
     t0 = time.time()
     if (t.hour % 1 != 0):
         continue
-    vrbls = vprm_inst.get_vprm_variables(t, lat=lats, lon=lons)
+    vrbls = vprm_inst.get_vprm_variables(t, lat=lats, lon=lons,
+                                         add_era_variables=['swvl1']) # Add the soil water level 1. See the ERA5 documentation for more keys
     if vrbls is None:
         continue
     else:
