@@ -63,7 +63,7 @@ site_list = {'grassland': ['AT-Neu', 'CH-Cha', 'CH-Fru', 'CZ-BK2', 'DE-Gri', 'DE
 site_dict = dict()
 variables = ['NEE_CUT_REF', 'NEE_VUT_REF', 'NEE_CUT_REF_QC', 'NEE_VUT_REF_QC',
             'GPP_NT_VUT_REF', 'GPP_NT_CUT_REF', 'GPP_DT_VUT_REF', 'GPP_DT_CUT_REF',
-            'TIMESTAMP_START', 'TIMESTAMP_END']
+            'TIMESTAMP_START', 'TIMESTAMP_END', 'WD', 'WS', 'WS_MAX']
 all_sites = np.concatenate([site_list[i] for i in site_list.keys()])
 
 for s in all_sites:
@@ -79,7 +79,7 @@ for s in all_sites:
         continue
     else:
         print('Load {}'.format(data_files[0]))
-    idata = pd.read_csv(data_files[0], usecols=variables)
+    idata = pd.read_csv(data_files[0], usecols=lambda x: x in variables)
     tzw = tzwhere.tzwhere()
     timezone_str = tzw.tzNameAt(lat, lon) 
     timezone = pytz.timezone(timezone_str)

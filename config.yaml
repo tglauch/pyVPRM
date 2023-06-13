@@ -1,6 +1,6 @@
-year: 2012
+year: 2013
 satellite: modis
-sat_image_path: /work/bd1231/tglauch/one_year_modis_europe_new_2012/
+sat_image_path: /work/bd1231/tglauch/modis_images/2013/
 copernicus_path: /work/bd1231/tglauch/copernicus_classification/
 out_path: /work/bd1231/tglauch/VPRM_output_modis_new_smearing_lowess/
 predictions_path: /work/bd1231/tglauch/gpp_eu_2015/

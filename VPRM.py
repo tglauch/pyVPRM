@@ -502,13 +502,13 @@ class vprm:
             evi = self.get_evi(lon, lat)
             lswi = ( 1 + self.get_lswi(lon, lat) ) / 2
         else:
-            land_type = self.land_cover_type.sat_img['land_cover_type'] 
+            land_type = self.land_cover_type.sat_img['land_cover_type'].values
             lswi = (1 + self.sat_imgs.sat_img['lswi'].isel({'time': self.counter})).values/2
-            th = self.min_max_evi.sat_img['th']
-            evi = self.get_evi()
+            th = self.min_max_evi.sat_img['th'].values
+            evi = self.get_evi().values
         mask1 = evi > th
         mask2 = land_type == 1
-        lswi[(mask1.values) | (mask2.values)] = 1
+        lswi[(mask1) | (mask2)] = 1
         return lswi
     
     def get_current_timestamp(self):
@@ -727,7 +727,10 @@ class vprm:
                 self.res.sat_img = self.res.sat_img.assign({'lamb': (['y','x'], lamb)}) 
                 self.res.sat_img = self.res.sat_img.assign({'par0': (['y','x'], par0)}) 
                 self.res.sat_img = self.res.sat_img.assign({'alpha': (['y','x'], alpha)}) 
-                self.res.sat_img = self.res.sat_img.assign({'beta': (['y','x'], beta)})       
+                self.res.sat_img = self.res.sat_img.assign({'beta': (['y','x'], beta)})
+
+        if not os.path.exists(os.path.dirname(regridder_weights)):
+            os.makedirs(os.path.dirname(regridder_weights))
 
         inputs = self.get_vprm_variables(date, regridder_weights=regridder_weights)
         if inputs is None:

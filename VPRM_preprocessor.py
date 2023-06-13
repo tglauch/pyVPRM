@@ -98,6 +98,9 @@ for c0, f in enumerate(sorted(file_collections)):
        
 vprm_inst.sort_and_merge_by_timestamp()
 
+if not os.path.exists(cfg['out_path']):
+    os.makedirs(cfg['out_path'])
+
 if os.path.exists(os.path.join(cfg['out_path'], 'veg_map_on_modis_grid.nc')):
     add_land_cover_map(vprm_inst,
                        land_cover_on_modis_grid=os.path.join(cfg['out_path'],
