@@ -43,7 +43,9 @@ keys_dict = {'ssrd': [169, 'sf12'],#surface solar radiation downwards(J/m**2)
 
 
 class ERA5:
-    # Only use for iterating. Going back in time is currently not supported!
+    '''
+    Class for using ERA5 data available on Levante's DKRZ cluster.
+    '''
     
     def __init__(self, year, month, day, hour, keys=[]):
         self.file_handlers = dict()
@@ -118,7 +120,6 @@ class ERA5:
             self.ds_out = self.ds_out.reindex(lon=sorted(list(self.ds_out.lon)))
             self.ds_out = self.ds_out.reindex(lat=sorted(list(self.ds_out.lat)))
            
-
     def get_all_interpolators(self, day, hour):
         ret_dict = dict()
         for key in self.keys:
@@ -157,7 +158,6 @@ class ERA5:
             self.regridder = xe.Regridder(t_ds_in, ds_out,
                                           "bilinear", weights=weights,
                                            reuse_weights=True)
-        #self.regridder = xe.Regridder(self.ds_in, ds_out, "bilinear", extrap_method="nearest_s2d")
         self.ds_out = self.regridder(self.ds_out)
         return
             
@@ -168,11 +168,6 @@ class ERA5:
                          copy=True, bounds_error=True)
         return spl2d   
 
-    # def get_data_for_all_keys(self, position, day, hour):
-    #     ret_data = []
-    #     for key in self.keys:
-    #         ret_data.append(self.get_data(position, day, hour, key))
-    #     return ret_data
 
     def select_from_pressure_levels(self, key):
         selection_args = {}

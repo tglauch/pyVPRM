@@ -166,6 +166,11 @@ class vprm:
                 t1 = np.array(self.land_cover_type.sat_img['land_cover_type'] ==i, dtype=float)
                 t1 = regridder(t1)
                 t.sat_img = t.sat_img.assign({str(i): (['lat','lon'], t1)})
+        var_list =  t.sat_img.data_vars
+        t.sat_img = xr.concat([t.sat_img[var] for var in var_list], dim='vprm_classes')
+        t.sat_img = t.sat_img.assign_coords({'vprm_classes': [int(c) for c in list(var_list)]})
+        t.sat_img = t.sat_img.to_dataset(name='vegetation_fraction_map')
+        
         day_of_the_year = [i.timetuple().tm_yday for i in self.timestamps]
         kys = self.sat_imgs.sat_img.time.size
         final_array = []
@@ -176,9 +181,9 @@ class vprm:
                 sub_array.append(regridder(tres.values))
             final_array.append(sub_array)
         ds_t_evi = copy.deepcopy(ds_out)
-        ds_t_evi = ds_t_evi.assign({'evi': (['time', 'vprm_class','lat','lon'], final_array)})
+        ds_t_evi = ds_t_evi.assign({'evi': (['time', 'vprm_classes','lat','lon'], final_array)})
         ds_t_evi = ds_t_evi.assign_coords({"time": day_of_the_year})
-        ds_t_evi = ds_t_evi.assign_coords({"vprm_class": veg_inds})
+        ds_t_evi = ds_t_evi.assign_coords({"vprm_classes": veg_inds})
         final_array = []
         for ky in range(kys):
             sub_array = []
@@ -187,43 +192,44 @@ class vprm:
                 sub_array.append(regridder(tres.values))
             final_array.append(sub_array)
         ds_t_lswi = copy.deepcopy(ds_out)
-        ds_t_lswi = ds_t_lswi.assign({'lswi': (['time', 'vprm_class','lat','lon'], final_array)})
+        ds_t_lswi = ds_t_lswi.assign({'lswi': (['time', 'vprm_classes','lat','lon'], final_array)})
         ds_t_lswi = ds_t_lswi.assign_coords({"time": day_of_the_year})
-        ds_t_lswi = ds_t_lswi.assign_coords({"vprm_class": veg_inds})  
+        ds_t_lswi = ds_t_lswi.assign_coords({"vprm_classes": veg_inds})  
         
         ds_t_max_evi = copy.deepcopy(ds_out)
-        ds_t_max_evi = ds_t_max_evi.assign({'evi_max': (['vprm_class','lat','lon'],
+        ds_t_max_evi = ds_t_max_evi.assign({'evi_max': (['vprm_classes','lat','lon'],
                                                      np.nanmax(ds_t_evi['evi'],axis = 0))})
-        ds_t_max_evi = ds_t_max_evi.assign_coords({"vprm_class": veg_inds})  
+        ds_t_max_evi = ds_t_max_evi.assign_coords({"vprm_classes": veg_inds})  
         
         ds_t_min_evi = copy.deepcopy(ds_out)
-        ds_t_min_evi = ds_t_min_evi.assign({'evi_min': (['vprm_class','lat','lon'],
+        ds_t_min_evi = ds_t_min_evi.assign({'evi_min': (['vprm_classes','lat','lon'],
                                                      np.nanmin(ds_t_evi['evi'],axis = 0))})
-        ds_t_min_evi = ds_t_min_evi.assign_coords({"vprm_class": veg_inds})
+        ds_t_min_evi = ds_t_min_evi.assign_coords({"vprm_classes": veg_inds})
         
         ds_t_max_lswi = copy.deepcopy(ds_out)
-        ds_t_max_lswi = ds_t_max_lswi.assign({'lswi_max': (['vprm_class','lat','lon'],
+        ds_t_max_lswi = ds_t_max_lswi.assign({'lswi_max': (['vprm_classes','lat','lon'],
                                                      np.nanmax(ds_t_lswi['lswi'],axis = 0))})
-        ds_t_max_lswi = ds_t_max_lswi.assign_coords({"vprm_class": veg_inds})  
+        ds_t_max_lswi = ds_t_max_lswi.assign_coords({"vprm_classes": veg_inds})  
         
         ds_t_min_lswi = copy.deepcopy(ds_out)
-        ds_t_min_lswi = ds_t_min_lswi.assign({'lswi_min': (['vprm_class','lat','lon'],
+        ds_t_min_lswi = ds_t_min_lswi.assign({'lswi_min': (['vprm_classes','lat','lon'],
                                                      np.nanmin(ds_t_lswi['lswi'],axis = 0))})
-        ds_t_min_lswi = ds_t_min_lswi.assign_coords({"vprm_class": veg_inds})
+        ds_t_min_lswi = ds_t_min_lswi.assign_coords({"vprm_classes": veg_inds})
 
         ret_dict = {'lswi': ds_t_lswi, 'evi': ds_t_evi, 'veg_fraction': t.sat_img,
                     'lswi_max': ds_t_max_lswi, 'lswi_min': ds_t_min_lswi,
                     'evi_max': ds_t_max_evi, 'evi_min': ds_t_min_evi}
         return ret_dict
+
     
     def add_sat_img(self, handler, b_nir=None,
                     b_red=None, b_blue=None,
                     b_swir=None,
                     drop_bands=True, 
-                    which_evi='evi',
+                    which_evi=None,
                     max_evi=False):
         '''
-            Add a new satellite image and calculate EVI and LSWI
+            Add a new satellite image and calculate EVI and LSWI if desired
 
                 Parameters:
                         handler (satellite_data_manager): The satellite image
@@ -244,9 +250,16 @@ class vprm:
         evi2_params = {'g': 2.5, 'l': 1 , 'c': 2.4}
         if not isinstance(handler, satellite_data_manager):
             print('Satellite image needs to be an object of the sattelite_data_manager class')
-        else:  
-            handler.sat_img = handler.sat_img.reindex(y=sorted(list(handler.sat_img.y)))
-            handler.sat_img = handler.sat_img.reindex(x=sorted(list(handler.sat_img.x)))
+            return  
+        handler.sat_img = handler.sat_img.reindex(y=sorted(list(handler.sat_img.y)))
+        handler.sat_img = handler.sat_img.reindex(x=sorted(list(handler.sat_img.x)))
+        
+        if isinstance(drop_bands, list):
+            drop_keys = drop_bands
+        else:
+            drop_keys = list(handler.sat_img.keys())
+            
+        if which_evi in ['evi', 'evi2']:
             nir = handler.sat_img[b_nir] 
             red = handler.sat_img[b_red]  
             swir = handler.sat_img[b_swir] 
@@ -255,36 +268,39 @@ class vprm:
                 temp_evi = (evi_params['g'] * ( nir - red)  / (nir + evi_params['c1'] * red - evi_params['c2'] * blue + evi_params['l'])).values
             elif which_evi=='evi2':
                 temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l'])).values 
-            else:
-                print('which_evi whould be either evi or evi2')
-        temp_lswi = ((nir -  swir) / (nir + swir)).values
-        if max_evi is not False:
-            temp_evi[temp_evi>max_evi] = max_evi
-            temp_evi[~np.isfinite(temp_evi)] = max_evi
-        drop_keys = list(handler.sat_img.keys())
-        handler.sat_img = handler.sat_img.assign({'evi': (['y','x'], temp_evi)})
-        handler.sat_img = handler.sat_img.assign({'lswi': (['y','x'], temp_lswi)}) 
+            temp_lswi = ((nir -  swir) / (nir + swir)).values
+            if max_evi is not False:
+                temp_evi[temp_evi>max_evi] = max_evi
+                temp_evi[~np.isfinite(temp_evi)] = max_evi
+            handler.sat_img = handler.sat_img.assign({'evi': (['y','x'], temp_evi)})
+            handler.sat_img = handler.sat_img.assign({'lswi': (['y','x'], temp_lswi)}) 
         if drop_bands:
                 handler.sat_img = handler.sat_img.drop(drop_keys)
         self.sat_imgs.append(handler)  
         self.timestamps.append(handler.get_recording_time())
         return
+
     
-    def smearing(self, size=(3,3), lonlats=None):
+    def smearing(self, size=(3,3), lonlats=None, keys=None):
         '''
-            Performs a spatial smearing
+            Performs a spatial smearing on the list of pre-loaded satellite images
 
                 Parameters:
                         size (tuple): The extension of the spatial smoothing
                         lonlats (str): If given the smearing is only performed at the
                                        given lats and lons
+                        keys (list): keys for the smoothign of the satellite images
                 Returns:
                         None
         '''
+        
+        if keys is None:
+            keys = list(self.sat_imgs[0].sat_img.data_vars)
+            
         for img in self.sat_imgs:
             if lonlats is None:
-                img.sat_img['evi'][:,:] = uniform_filter(img.sat_img['evi'].values[:,:], size=size, mode='nearest')
-                img.sat_img['lswi'][:,:] = uniform_filter(img.sat_img['lswi'].values[:,:], size=size, mode='nearest')
+                for key in keys:
+                    img.sat_img[key][:,:] = uniform_filter(img.sat_img[key].values[:,:], size=size, mode='nearest')
             else:
                 t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                          img.sat_img.rio.crs)
@@ -292,11 +308,13 @@ class vprm:
                     x, y = t.transform(ll[0], ll[1])
                     x_ind = np.argmin(np.abs(x - img.sat_img.coords['x'].values))
                     y_ind = np.argmin(np.abs(y - img.sat_img.coords['y'].values))
-                    img.sat_img['evi'][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] =  uniform_filter(img.sat_img['evi'][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10],
-                                                                                               size=size, mode='nearest')
-                    img.sat_img['lswi'][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] =  uniform_filter(img.sat_img['lswi'][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10],
-                                                                                                size=size, mode='nearest')
+                    for key in keys:
+                        img.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = \
+                            uniform_filter(img.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10],
+                                           size=size, mode='nearest')
+
         return
+
     
     def sort_and_merge_by_timestamp(self):
         '''
@@ -335,6 +353,7 @@ class vprm:
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time": day_of_the_year})
         return
 
+    
     def add_land_cover_map(self, land_cover_map, var_name='band_1',
                            save_path=None, filter_size=5):
         '''
@@ -407,7 +426,7 @@ class vprm:
         self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['y','x'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})  
         return
     
-    def lowess(self, lonlats=None):
+    def lowess(self, lonlats=None, keys=None):
         '''
             Performs the lowess smoothing
 
@@ -417,9 +436,14 @@ class vprm:
                 Returns:
                         None
         '''
+        
+        if keys is None:
+            keys = list(self.sat_imgs.sat_img.data_vars)
+            
         if lonlats is None:
-            self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'evi': (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['evi'][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
-            self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'lswi': (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['lswi'][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
+            for key in keys:
+                self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
+                self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
         else:
             t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                      self.sat_imgs.sat_img.rio.crs)
@@ -427,8 +451,9 @@ class vprm:
                 x, y = t.transform(ll[0], ll[1])
                 x_ind = np.argmin(np.abs(x - self.sat_imgs.sat_img.coords['x'].values))
                 y_ind = np.argmin(np.abs(y - self.sat_imgs.sat_img.coords['y'].values))
-                self.sat_imgs.sat_img['evi'][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['evi'][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T              
-                self.sat_imgs.sat_img['lswi'][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img['lswi'][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T 
+                for key in keys:
+                    self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T              
+                    self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T 
         return
 
     def load_weather_data(self, hour, day, month, year, era_keys):
@@ -564,6 +589,24 @@ class vprm:
             return self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='evi', isel={'time': self.counter}).values.flatten()
         else:
             return self.sat_imgs.sat_img['evi'].isel({'time': self.counter})
+        
+
+    def get_sat_img_values_from_key(self, key, lon=None, lat=None):
+        '''
+            Get EVI for the current satellite image (see self.counter)
+
+                Parameters:
+                        lon (float): longitude
+                        lat (float): latitude
+                Returns:
+                        EVI array
+        '''
+
+        if lon is not None:     
+            return self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key=key, isel={'time': self.counter}).values.flatten()
+        else:
+            return self.sat_imgs.sat_img[key].isel({'time': self.counter})
+    
     
     def get_lswi(self, lon=None, lat=None):
         '''
@@ -606,24 +649,7 @@ class vprm:
         self.t2m.sat_img = self.t2m.sat_img.assign({'tmax': (['y','x'], tmax)}) 
         return
 
-    def get_vprm_variables(self, datetime_utc, lat=None, lon=None,
-                           add_era_variables=[], regridder_weights=None):
-
-        '''
-            Initialize an xarray with the min, max, and opt temperatures for photosynthesis
-
-                Parameters:
-                Returns:
-                        None
-        '''
-        if self.t2m is None:
-                self.init_temps()
-        self.counter = 0
-        hour = datetime_utc.hour
-        day = datetime_utc.day
-        month = datetime_utc.month
-        year = datetime_utc.year
-
+    def _set_sat_img_counter(self, datetime_utc):
         if (datetime_utc - self.get_current_timestamp()).days > 4:
             while True:
                 self.counter += 1
@@ -641,8 +667,92 @@ class vprm:
                 if self.counter <= 0:
                     print('No data before {}'.format(datetime_utc))
                     self.counter = 0
-                    return None    
+                    return None  
+        return
 
+    def get_neural_network_variables(self, datetime_utc, lat=None, lon=None,
+                                     era_variables=['ssrd', 't2m'], regridder_weights=None,
+                                     sat_img_keys=None):
+
+        '''
+            Get the variables for an neural network based vegetation model
+
+                Parameters:
+                    datetime_utc (datetime): The time of interest
+                    lat (float): A latitude (optional)
+                    lon (float): A longitude (optional)
+                    era_variables (list): ERA5 variables (optional)
+                    regridder_weights (str): Path to the pre-computed weights for the ERA5 regridder (optional)
+                    sat_img_keys (str): List of data_vars from the satellite images to be used (optional)
+                Returns:
+                        None
+        '''
+        
+        self.counter = 0
+        hour = datetime_utc.hour
+        day = datetime_utc.day
+        month = datetime_utc.month
+        year = datetime_utc.year
+        self._set_sat_img_counter(datetime_utc)
+        if sat_img_keys is None:
+            sat_img_keys = list(self.sat_imgs.sat_img.data_vars)
+            
+        if self.prototype_lat_lon is None:
+            src_x = self.prototype.sat_img.coords['x'].values
+            src_y = self.prototype.sat_img.coords['y'].values
+            X, Y = np.meshgrid(src_x, src_y)
+            t = Transformer.from_crs(self.prototype.sat_img.rio.crs,
+                                    '+proj=longlat +datum=WGS84')
+            x_long, y_lat = t.transform(X, Y)
+            self.prototype_lat_lon = xr.Dataset({"lon": (["y", "x"], x_long ,
+                                 {"units": "degrees_east"}),
+                                  "lat": (["y", "x"], y_lat,
+                                 {"units": "degrees_north"})})
+            self.prototype_lat_lon = self.prototype_lat_lon.set_coords(['lon', 'lat'])
+        self.load_weather_data(hour, day, month,
+                               year, era_keys=era_variables)
+        if (lat is None) & (lon is None):
+                self.era5_inst.regrid(dataset=self.prototype_lat_lon,
+                                      weights=regridder_weights,
+                                      n_cpus=self.n_cpus)
+        ret_dict = dict()
+        for key in  sat_img_keys:
+            ret_dict[key] =  self.get_sat_img_values_from_key(key,
+                                                              lon=lon, lat=lat)
+        for key in era_variables:
+            if lat is None:
+                ret_dict[key] = self.era5_inst.get_data(key=key)
+            else:
+                ret_dict[key] = self.era5_inst.get_data(lonlat=(lon, lat),
+                                                        key=key).values.flatten()
+        return ret_dict           
+    
+    
+    def get_vprm_variables(self, datetime_utc, lat=None, lon=None,
+                           add_era_variables=[], regridder_weights=None):
+
+        '''
+            Get the variables for the Vegetation Photosynthesis and Respiration Model
+
+                Parameters:
+                    datetime_utc (datetime): The time of interest
+                    lat (float): A latitude (optional)
+                    lon (float): A longitude (optional)
+                    add_era_variables (list): Additional era variables for modifications of the VPRM
+                    regridder_weights (str): Path to the pre-computed weights for the ERA5 regridder
+                Returns:
+                        None
+        '''
+        
+        if self.t2m is None:
+                self.init_temps()
+        self.counter = 0
+        hour = datetime_utc.hour
+        day = datetime_utc.day
+        month = datetime_utc.month
+        year = datetime_utc.year
+        self._set_sat_img_counter(datetime_utc)
+        
         era_keys = ['ssrd', 't2m']
         era_keys.extend(add_era_variables)
         if self.prototype_lat_lon is None:
@@ -676,8 +786,8 @@ class vprm:
                 ret_dict[i] = self.era5_inst.get_data(lonlat=(lon, lat), key=i).values.flatten()
         return ret_dict       
     
-    def make_predictions(self, date, res_dict=None, which_flux='NEE',
-                         regridder_weights=None):
+    def make_vprm_predictions(self, date, res_dict=None, which_flux='NEE',
+                              regridder_weights=None):
         '''
             Using the VPRM fit parameters make predictions on the entire satellite image.
 

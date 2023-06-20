@@ -4,7 +4,8 @@ import pathlib
 sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), 'lib'))
 from sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
-from VPRM import vprm 
+from VPRM import vprm
+import yaml
 import glob
 import time
 import numpy as np
@@ -14,8 +15,6 @@ import argparse
 p = argparse.ArgumentParser(
         description = "Commend Line Arguments",
         formatter_class = argparse.RawTextHelpFormatter)
-p.add_argument("--h", type=int)
-p.add_argument("--v", type=int)
 p.add_argument("--config", type=str)
 p.add_argument("--n_cpus", type=int, default=1)
 args = p.parse_args()
@@ -57,13 +56,15 @@ def add_land_cover_map(vprm_inst, land_cover_on_modis_grid=None, copernicus_data
     
 lons = np.linspace(cfg['lon_min'], cfg['lon_max'] , cfg['n_bins_lon']) 
 lats = np.linspace(cfg['lat_min'], cfg['lat_max'], cfg['n_bins_lat'])
-hvs =  cfg['hvs']:
+hvs =  cfg['hvs']
 vprm_inst = vprm(n_cpus=args.n_cpus)
 file_collections = np.unique([i.split('.')[1] for i in
                               glob.glob(os.path.join(cfg['sat_image_path'],
                                         '*h{:02d}v{:02d}*.h*'.format(hvs[0][0], hvs[0][1])))])
 for c0, f in enumerate(sorted(file_collections)):
     print(c0)
+    if c0>2:
+        continue
     handlers = []
     if cfg['satellite'] == 'modis':
         for c, i in sorted(enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*{}*.h*'.format(f))))):
@@ -112,7 +113,7 @@ else:
                                               'veg_map_on_modis_grid.nc'))
  
 
-vprm_inst.lowess(n_cpus=arg.n_cpus)
+vprm_inst.lowess()
 
 out_grid = dict()
 out_grid['lons'] = lons
@@ -120,7 +121,7 @@ out_grid['lats'] = lats
 if os.path.exists(os.path.join(cfg['out_path'], 'regridder.nc')):
     wrf_op = vprm_inst.to_wrf_output(out_grid, weights_for_regridder=os.path.join(cfg['out_path'], 'regridder.nc'))
 else:
-    wrf_op = vprm_inst.to_wrf_output(out_grid, driver = 'ESMF_RegridWeightGen', n_cpus=120, 
+    wrf_op = vprm_inst.to_wrf_output(out_grid, driver = 'ESMF_RegridWeightGen', 
                                      regridder_save_path=os.path.join(cfg['out_path'], 'regridder.nc'))
 
 

@@ -1,4 +1,4 @@
-from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
+#from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
 from datetime import date
 import time
 from shapely.geometry import Point, Polygon, box

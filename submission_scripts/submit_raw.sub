@@ -11,6 +11,7 @@
 #SBATCH --error=./slurm_out/slurm-%j.err
 
 # Begin of section with executable commands
+module load python3/2022.01-gcc-11.2.0
 
 {}
 wait
