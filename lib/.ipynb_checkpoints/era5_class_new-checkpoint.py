@@ -85,8 +85,9 @@ class ERA5:
                 self.ds_in = self.ds_in.set_coords(['lon', 'lat'])
 
     def change_date(self, hour, day, month, year):
-        # Shift dates by one hour due to strange ERA5 convention. This is terrible!
-        sf = datetime.datetime(year, month, day, hour) + datetime.timedelta(hours=1)
+        # Caution: The date as argument corresponds to the END of the ERA5 integration time.
+        
+        sf = datetime.datetime(year, month, day, hour)# + datetime.timedelta(hours=1)
         day = sf.day
         month = sf.month
         year = sf.year

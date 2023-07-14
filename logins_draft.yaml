@@ -1,0 +1,10 @@
+modis:
+    - 'username'
+    - 'pwd'
+sentinel:
+    - 'username'
+    - 'pwd'
+viirs:
+    - 'username'
+    - 'pwd' 
+

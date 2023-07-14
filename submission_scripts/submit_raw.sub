@@ -1,14 +1,14 @@
 #!/bin/bash
 
-#SBATCH --partition=compute
+#SBATCH --partition={}
 #SBATCH --account=bd1231
 #SBATCH --time=8:00:00
 #SBATCH --cpus-per-task={}
 #SBATCH --ntasks={}
-#SBATCH --mem=0
-#SBATCH --constraint=512G
+#SBATCH --mem={}
 #SBATCH --output=./slurm_out/slurm-%j.out
 #SBATCH --error=./slurm_out/slurm-%j.err
+{}
 
 # Begin of section with executable commands
 module load python3/2022.01-gcc-11.2.0

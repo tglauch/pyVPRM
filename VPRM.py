@@ -220,7 +220,6 @@ class vprm:
                     'lswi_max': ds_t_max_lswi, 'lswi_min': ds_t_min_lswi,
                     'evi_max': ds_t_max_evi, 'evi_min': ds_t_min_evi}
         return ret_dict
-
     
     def add_sat_img(self, handler, b_nir=None,
                     b_red=None, b_blue=None,
@@ -521,20 +520,19 @@ class vprm:
                         p_scale array
         '''
 
+        lswi = self.get_lswi(lon, lat)
+        evi = self.get_evi(lon, lat)
+        p_scale = ( 1 + lswi ) / 2
         if lon is not None:
             land_type = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type', as_array=False).values.flatten()
             th = self.min_max_evi.value_at_lonlat(lon, lat, key='th', as_array=False).values.flatten()
-            evi = self.get_evi(lon, lat)
-            lswi = ( 1 + self.get_lswi(lon, lat) ) / 2
         else:
             land_type = self.land_cover_type.sat_img['land_cover_type'].values
-            lswi = (1 + self.sat_imgs.sat_img['lswi'].isel({'time': self.counter})).values/2
             th = self.min_max_evi.sat_img['th'].values
-            evi = self.get_evi().values
         mask1 = evi > th
         mask2 = land_type == 1
-        lswi[(mask1) | (mask2)] = 1
-        return lswi
+        p_scale[(mask1) | (mask2)] = 1
+        return p_scale 
     
     def get_current_timestamp(self):
         return self.timestamps[self.counter]
@@ -588,10 +586,11 @@ class vprm:
         if lon is not None:     
             return self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='evi', isel={'time': self.counter}).values.flatten()
         else:
-            return self.sat_imgs.sat_img['evi'].isel({'time': self.counter})
+            return self.sat_imgs.sat_img['evi'].isel({'time': self.counter}).values
         
 
-    def get_sat_img_values_from_key(self, key, lon=None, lat=None):
+    def get_sat_img_values_from_key(self, key, lon=None, lat=None,
+                                    counter_range=None):
         '''
             Get EVI for the current satellite image (see self.counter)
 
@@ -601,13 +600,42 @@ class vprm:
                 Returns:
                         EVI array
         '''
-
-        if lon is not None:     
-            return self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key=key, isel={'time': self.counter}).values.flatten()
+        
+        if counter_range is None:
+            select_dict = {'time': self.counter}
         else:
-            return self.sat_imgs.sat_img[key].isel({'time': self.counter})
+            select_dict = {'time': counter_range}
+            
+        if lon is not None:     
+            return self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key=key, isel=select_dict).values.flatten()
+        else:
+            return self.sat_imgs.sat_img[key].isel(select_dict)
+        return
     
-    
+    def get_sat_img_values_for_all_keys(self, lon=None, lat=None,
+                                        counter_range=None):
+        '''
+            Get EVI for the current satellite image (see self.counter)
+
+                Parameters:
+                        lon (float): longitude
+                        lat (float): latitude
+                Returns:
+                        EVI array
+        '''
+        
+        if counter_range is None:
+            select_dict = {'time': self.counter}
+        else:
+            select_dict = {'time': counter_range}
+            
+        if lon is not None:     
+            return self.sat_imgs.value_at_lonlat(lon, lat, as_array=True, isel=select_dict)
+        else:
+            return self.sat_imgs.sat_img.isel(select_dict)
+        
+        return
+
     def get_lswi(self, lon=None, lat=None):
         '''
             Get LSWI for the current satellite image (see self.counter)
@@ -622,7 +650,7 @@ class vprm:
         if lon is not None:
             return self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='lswi', isel={'time': self.counter}).values.flatten()
         else:
-            return self.sat_imgs.sat_img['lswi'].isel({'time': self.counter})
+            return self.sat_imgs.sat_img['lswi'].isel({'time': self.counter}).values
    
     def init_temps(self):
         '''
@@ -716,15 +744,23 @@ class vprm:
                                       weights=regridder_weights,
                                       n_cpus=self.n_cpus)
         ret_dict = dict()
-        for key in  sat_img_keys:
-            ret_dict[key] =  self.get_sat_img_values_from_key(key,
-                                                              lon=lon, lat=lat)
+        sat_inds = np.concatenate([np.arange(self.counter-8, self.counter-2, 3),
+                                   np.arange(self.counter-2, self.counter+1)])
+        for_ret_dict = self.get_sat_img_values_for_all_keys(counter_range=sat_inds,
+                                                            lon=lon, lat=lat)
+        for i, key in enumerate(sat_img_keys):
+            ret_dict[key] =  for_ret_dict[i]
         for key in era_variables:
             if lat is None:
                 ret_dict[key] = self.era5_inst.get_data(key=key)
             else:
                 ret_dict[key] = self.era5_inst.get_data(lonlat=(lon, lat),
                                                         key=key).values.flatten()
+        if lon is not None:
+            land_type = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type', as_array=False).values.flatten()
+        else:
+            land_type = self.land_cover_type.sat_img['land_cover_type'].values
+        ret_dict['land_cover_type'] = land_type
         return ret_dict           
     
     
