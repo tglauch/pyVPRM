@@ -1,4 +1,8 @@
-#from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
+from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
+import pathlib
+import sys
+import os
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
 from datetime import date
 import time
 from shapely.geometry import Point, Polygon, box
@@ -9,7 +13,6 @@ from fancy_plot import *
 import matplotlib
 import earthpy.plot as ep
 import zipfile
-import os
 import glob
 from pyproj import Transformer
 import geopandas as gpd
@@ -58,13 +61,6 @@ def make_cmap(vmin, vmax, nbins, cmap_name='Reds'):
     return cmap, norm
 
 
-with open("/home/b/b309233/software/VPRM_preprocessor/logins.yaml", "r") as stream:
-    try:
-        logins = yaml.safe_load(stream)
-    except yaml.YAMLError as exc:
-        print(exc)
-        
-        
 class satellite_data_manager:
     # Base class for all satellite images
     

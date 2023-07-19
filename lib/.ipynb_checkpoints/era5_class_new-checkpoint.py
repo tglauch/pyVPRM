@@ -115,11 +115,14 @@ class ERA5:
             self.hour = hour
             for key in self.keys:
                 data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][hour+1].values)
+            t0 = time.time()
             self.ds_out = copy.deepcopy(self.ds_in)
             self.ds_out = self.ds_out.assign(data_dict)
             self.ds_out['lon']= [map_function(i) for i in self.ds_out['lon'].values]
             self.ds_out = self.ds_out.reindex(lon=sorted(list(self.ds_out.lon)))
             self.ds_out = self.ds_out.reindex(lat=sorted(list(self.ds_out.lat)))
+            t1 = time.time()
+            print('Time to create new data array {}'.format(t1 - t0))
            
     def get_all_interpolators(self, day, hour):
         ret_dict = dict()
@@ -129,20 +132,23 @@ class ERA5:
 
     def regrid(self, lats=None, lons=None, dataset=None, n_cpus=1,
                weights=None, overwrite_regridder=False):
-        t_ds_in = xr.Dataset({"lat": (['lat'], sorted(self.ds_in['lat'].values), {"units": "degrees_north"}),
-                              "lon": (['lon'], sorted([map_function(i) for i in self.ds_in['lon'].values]),
-                                         {"units": "degrees_east"})})
-        t_ds_in = t_ds_in.set_coords(['lon', 'lat'])
+
         if (self.regridder is None) | (overwrite_regridder):
+            t_ds_in = xr.Dataset({"lat": (['lat'], sorted(self.ds_in['lat'].values), {"units": "degrees_north"}),
+                                  "lon": (['lon'], sorted([map_function(i) for i in self.ds_in['lon'].values]),
+                                             {"units": "degrees_east"})})
+            t_ds_in = t_ds_in.set_coords(['lon', 'lat'])
             print('Create Regridder')
+            
             if ((lats is not None) and (lons is not None)):
-                ds_out = xr.Dataset({"lat": (["lat"], lats, {"units": "degrees_north"}),
+                t_ds_out = xr.Dataset({"lat": (["lat"], lats, {"units": "degrees_north"}),
                                      "lon": (["lon"],lons, {"units": "degrees_east"})})
-                ds_out = ds_out.set_coords(['lon', 'lat'])
+                t_ds_out = t_ds_out.set_coords(['lon', 'lat'])
                 self.reg_lats = lats
                 self.reg_lons = lons
             else:
-                ds_out = dataset
+                t_ds_out = dataset
+                
             if (weights is not None) & os.path.exists(str(weights)):
                 print('Load weights from {}'.format(weights))
             else:
@@ -150,13 +156,13 @@ class ERA5:
                 src_temp_path = os.path.join(bfolder, '{}.nc'.format(str(uuid.uuid4())))
                 dest_temp_path = os.path.join(bfolder , '{}.nc'.format(str(uuid.uuid4())))
                 t_ds_in.to_netcdf(src_temp_path)
-                ds_out.to_netcdf(dest_temp_path)
+                t_ds_out.to_netcdf(dest_temp_path)
                 cmd = 'mpirun -np {}  ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log'.format(n_cpus, src_temp_path, dest_temp_path, weights)
                 print(cmd)
                 os.system(cmd) # -np {} 
                 os.remove(src_temp_path) 
                 os.remove(dest_temp_path)
-            self.regridder = xe.Regridder(t_ds_in, ds_out,
+            self.regridder = xe.Regridder(t_ds_in, t_ds_out,
                                           "bilinear", weights=weights,
                                            reuse_weights=True)
         self.ds_out = self.regridder(self.ds_out)

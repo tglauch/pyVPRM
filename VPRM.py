@@ -3,11 +3,11 @@ warnings.filterwarnings("ignore")
 import sys
 import os
 import pathlib
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), 'lib'))
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
 import numpy as np
-from sat_manager import VIIRS, sentinel2, modis,\
-                       copernicus_land_cover_map, satellite_data_manager
-from era5_class_new import ERA5
+from lib.sat_manager import VIIRS, sentinel2, modis,\
+                            copernicus_land_cover_map, satellite_data_manager
+from lib.era5_class_new import ERA5
 from scipy.ndimage import uniform_filter
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from pyproj import Transformer
@@ -17,6 +17,7 @@ import xarray as xr
 import xesmf as xe
 import scipy
 import uuid
+import time
 
 def do_lowess_smoothing(array_to_smooth, vclass=None):
     '''
@@ -375,7 +376,7 @@ class vprm:
             self.land_cover_type.sat_img = self.land_cover_type.sat_img.rename({list(self.land_cover_type.sat_img.keys())[0]: 'land_cover_type'})
  
         else:
-            print('Aggregating land cover map on vprm land cover types and projecting on sat image grids. This step may take a lot of time and memory')
+            print('Aggregating land cover map on vprm land cover types and projecting on sat image grids. This step takes time and memory')
             land_cover_map.reproject(proj=self.prototype.sat_img.rio.crs.to_proj4())
             for key in self.map_copernicus_to_vprm_class.keys():
                 land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_copernicus_to_vprm_class[key]
@@ -803,13 +804,20 @@ class vprm:
                                   "lat": (["y", "x"], y_lat,
                                  {"units": "degrees_north"})})
             self.prototype_lat_lon = self.prototype_lat_lon.set_coords(['lon', 'lat'])
+        t0 = time.time()
         self.load_weather_data(hour, day, month,
                                year, era_keys=era_keys)
+        t1 = time.time()
+        print('Time for loading ERA data : {}'.format(t1-t0))
         if (lat is None) & (lon is None):
+                t0 = time.time()
                 self.era5_inst.regrid(dataset=self.prototype_lat_lon,
                                       weights=regridder_weights,
                                       n_cpus=self.n_cpus)
+                t1 = time.time()
+                print('Time for regridding {}'.format(t1-t0))
         ret_dict = dict()
+        t0=time.time()
         ret_dict['evi'] = self.get_evi(lon, lat)
         ret_dict['Ps'] = self.get_p_scale(lon, lat)
         ret_dict['par'] = self.get_par(lon, lat)
@@ -817,6 +825,8 @@ class vprm:
         ret_dict['Ts'] = Ts_all[1]
         ret_dict['Ws'] = self.get_w_scale(lon, lat)
         ret_dict['t'] = Ts_all[0]
+        t1=time.time()
+        print('Time to get vprm parameters {}'.format(t1-t0))
         if add_era_variables!=[]:
             for i in add_era_variables:
                 ret_dict[i] = self.era5_inst.get_data(lonlat=(lon, lat), key=i).values.flatten()
@@ -837,6 +847,7 @@ class vprm:
                 Returns:
                         None
         '''
+        
         if self.res_dict == None:
             if res_dict is None:
                 print('Need to provide a dictionary with the fit parameters')
@@ -879,17 +890,19 @@ class vprm:
             os.makedirs(os.path.dirname(regridder_weights))
 
         inputs = self.get_vprm_variables(date, regridder_weights=regridder_weights)
+        
         if inputs is None:
             return None
-        if which_flux == 'GPP':
-            ret_res = (self.res.sat_img['lamb'].values * inputs['Ps'] * inputs['Ws'] * inputs['Ts']) * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.res.sat_img['par0'].values)
-        else:
-            ret_res = -(self.res.sat_img['lamb'].values * inputs['Ps'] * inputs['Ws'] * inputs['Ts']) * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.res.sat_img['par0'].values) + self.res.sat_img['alpha'].values * inputs['t'] + self.res.sat_img['beta'].values
+        
+        ret_res = dict()
+        gpp = (self.res.sat_img['lamb'].values * inputs['Ps'] * inputs['Ws'] * inputs['Ts']) * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.res.sat_img['par0'].values)
+        ret_res['gpp'] = gpp
+        ret_res['nee'] = -gpp + self.res.sat_img['alpha'].values * inputs['t'] + self.res.sat_img['beta'].values
         return ret_res
         
 
     def save(self, base_path, lswi_name=None, evi_name=None):
         '''
-            Save the LSWI and EVI sat image. ToDo
+            Save the LSWI and EVI satellite image. ToDo
         '''
         return

@@ -1,7 +1,7 @@
 import sys
 import os
 import pathlib
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), 'lib'))
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
 from sat_manager import VIIRS, sentinel2, modis, copernicus_land_cover_map, satellite_data_manager
 from VPRM import vprm 
 import warnings
@@ -148,6 +148,7 @@ for c, i in enumerate(glob.glob(os.path.join(cfg['sat_image_path'], str(this_yea
                           b_blue='no_blue_sensor', b_swir='SurfReflect_I3',
                           which_evi='evi2',
                           drop_bands=True)
+
 vprm_inst.smearing(lonlats=lonlats_smearing)
 
 vprm_inst.sort_and_merge_by_timestamp()

@@ -3,6 +3,8 @@ a) get the variables needed to fit a VPRM model for a given set of flux tower da
 b) Use the fit parameters in a to evaluate fluxes over time
 c) Prepare the input for further usage in weather forecast systems like WRF
 
+For all applications you need to download the required land type maps from the Copernicus webpage here: https://lcviewer.vito.be/download, as well as the satellite images.
+
 For a)
 1. Prepare a config file (see for example config.cfg) and set your login data for https://urs.earthdata.nasa.gov/ in the logins.yaml 
 2. Download the Satellite data from MODIS or VIIRS using 'download_satellite_images.py'. For example: python download_satellite_images.py --config ./config.yaml

@@ -2,9 +2,10 @@
 import sys
 import os
 import pathlib
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), 'lib'))
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
+#sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
 import yaml 
-from sat_manager import VIIRS, sentinel2, modis, earthdata,\
+from lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
 from VPRM import vprm 
 
@@ -21,7 +22,7 @@ import rasterio
 import pandas as pd
 import pickle
 import argparse
-from functions import lat_lon_to_modis
+from lib.functions import lat_lon_to_modis
 import calendar
 from datetime import datetime, timedelta
 
@@ -60,6 +61,9 @@ with open(args.config, "r") as stream:
 
 vprm_inst = vprm(n_cpus=args.n_cpus)
 for c, i in enumerate(sorted(glob.glob(os.path.join(cfg['sat_image_path'], str(args.year),  '*h{:02d}v{:02d}*.h*'.format(h, v))))):
+    print(i)
+    if c>2:
+        continue
     if cfg['satellite'] == 'modis':
         handler = modis(sat_image_path=i)
         handler.load()
@@ -72,12 +76,12 @@ for c, i in enumerate(sorted(glob.glob(os.path.join(cfg['sat_image_path'], str(a
         handler.load()
         vprm_inst.add_sat_img(handler, b_nir='SurfReflect_I2', b_red='SurfReflect_I1',
                               b_blue='no_blue_sensor', b_swir='SurfReflect_I3',
-                              which_evi='evi2',
+                              which_evi='evi2', max_evi=1,
                               drop_bands=True)
 
 vprm_inst.sort_and_merge_by_timestamp()
 
-vprm_inst.lowess()
+#vprm_inst.lowess()
 
 vprm_inst.calc_min_max_evi_lswi()
 
@@ -109,7 +113,7 @@ regridder_weights = os.path.join(cfg['predictions_path'],
                                  'regridder_weights_{}_{}.nc'.format(h,v))
 
 if args.hourly:
-    for i in np.arange(1,days_in_year+1,1):
+    for i in np.arange(1, days_in_year+1, 1):
         time_range=get_hourly_time_range(int(args.year), i)
         preds = []
         ts = []
@@ -128,26 +132,42 @@ if args.hourly:
         preds.to_netcdf(os.path.join(cfg['predictions_path'],
                                      'h{:02d}v{:02d}_{:03d}.h5'.format(h, v, i)))
 else:
+
     ts = []
-    preds = []
+    preds_gpp = []
+    preds_nee = []
+
     for w in np.arange(1,53, 1):
         ts.append(w)
+        t_gpp_preds = []
+        t_nee_preds = []
         for i in np.arange((w-1) * 7 + 1, w * 7 + 1, 1):
             time_range=get_hourly_time_range(int(args.year), i)
-            t_preds = []
             for t in time_range[:]:
                 t0=time.time()
                 print(t)
                 pred = vprm_inst.make_vprm_predictions(t, res_dict=res_dict, which_flux='GPP',
                                                        regridder_weights=regridder_weights)
                 if pred is None:
+                    print('GPP/NEE predictions are 0. Continue')
                     continue
-                t_preds.append(pred)
+                t_gpp_preds.append(pred['gpp'])
+                t_nee_preds.append(pred['nee'])
                 print(time.time()-t0)
-        t_preds = xr.concat(t_preds, 'time')
-        preds.append(t_preds.sum(dim='time'))
-    preds = xr.concat(preds, 'time')
-    preds = preds.assign_coords({'time': ts})
-    preds.to_netcdf(os.path.join(cfg['predictions_path'],
-                                 'h{:02d}v{:02d}_{}.h5'.format(h, v, args.year)))
+
+        t_gpp_preds = xr.concat(t_gpp_preds, 'time')
+        preds_gpp.append(t_gpp_preds.sum(dim='time'))
+
+        t_nee_preds = xr.concat(t_nee_preds, 'time')
+        preds_nee.append(t_nee_preds.sum(dim='time'))
+
+    preds_gpp = xr.concat(preds_gpp, 'time')
+    preds_gpp = preds_gpp.assign_coords({'time': ts})
+    preds_gpp.to_netcdf(os.path.join(cfg['predictions_path'],
+                                 'gpp_h{:02d}v{:02d}_{}.h5'.format(h, v, args.year)))
+
+    preds_nee = xr.concat(preds_nee, 'time')
+    preds_nee = preds_nee.assign_coords({'time': ts})
+    preds_nee.to_netcdf(os.path.join(cfg['predictions_path'],
+                                 'nee_h{:02d}v{:02d}_{}.h5'.format(h, v, args.year)))
             

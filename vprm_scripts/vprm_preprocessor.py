@@ -1,7 +1,7 @@
 import sys
 import os
 import pathlib
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), 'lib'))
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
 from sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
 from VPRM import vprm

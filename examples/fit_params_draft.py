@@ -1,5 +1,7 @@
 import sys
 import os
+import pathlib
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
 from sat_manager import VIIRS, modis, copernicus_land_cover_map
 from VPRM import vprm 
 import warnings
