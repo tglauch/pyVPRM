@@ -196,20 +196,21 @@ class satellite_data_manager:
         # plot the normalized difference vegetation index
         
         data = self.sat_img
-        NDVI =(data[band2].values - data[band1].values)/(data[band2].values + data[band1].values)
-        mask = (NDVI < -1) | (NDVI >1) | (np.isnan(NDVI))
-        NDVI[mask] = -1
+        NDVI =(data[band2] - data[band1])/(data[band2] + data[band1])
+        # mask = (NDVI < -1) | (NDVI >1) | (np.isnan(NDVI))
+        #NDVI[mask] = -1
         NDVI_map, NDVI_norm = make_cmap(-0.2, 1, n_colors,
                                         ['white', 'green'])
         NDVI_map.set_under('white') 
         fig, ax = newfig(figsize, ratio=1.0)
         if vmin is None:
             vmin = 1- (1/n_colors)/2
-        ep.plot_bands(NDVI, ax=ax, cmap=NDVI_map,
+        ep.plot_bands(NDVI.values, ax=ax, cmap=NDVI_map,
                       extent=self.ext, vmin=vmin, vmax=vmax)
         if save is not None:
             fig.savefig(save, dpi=500)
         fig.show()
+        return NDVI
    
     def add_tile(self, new_tiles, reproject=False):
         # merge tiles together using the projection of the current satellite image

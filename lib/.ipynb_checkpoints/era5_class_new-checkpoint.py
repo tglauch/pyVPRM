@@ -11,7 +11,8 @@ import xesmf as xe
 import uuid
 import datetime
 
-map_function = lambda lon: (lon - 360) if (lon > 180) else lon
+#map_function = lambda lon: (lon - 360) if (lon > 180) else lon
+map_function = lambda lon: (lon + 360) if (lon < 0) else lon
 
 
 bpaths = {'sf00': '/pool/data/ERA5/E5/sf/an/1H', # '/work/bk1099/data/sf00_1H'i,
@@ -53,8 +54,9 @@ class ERA5:
         self.month = -1
         self.day = -1
         self.hour = -1
+        self.in_era5_grid = True
         self.regridder = None
-        self.ds_in = None
+        self.ds_in_t = None
         self.reg_lats = []
         self.reg_lons = []
         if len(keys) == 0:
@@ -78,11 +80,11 @@ class ERA5:
             self.file_handlers[key] = t_dict
             if not 'sf' in keys_dict[key][1]:
                 self.select_from_pressure_levels(key)
-            if self.ds_in is None:
+            if self.ds_in_t is None:
                 lats, lons = t_dict['current'][1].latlons() 
-                self.ds_in = xr.Dataset({"lat": (['lat'], lats[:,0], {"units": "degrees_north"}),
-                                         "lon": (['lon'], lons[0], {"units": "degrees_east"})})
-                self.ds_in = self.ds_in.set_coords(['lon', 'lat'])
+                self.ds_in_t = xr.Dataset({"lat": (['lat'], lats[:,0], {"units": "degrees_north"}),
+                                           "lon": (['lon'], lons[0], {"units": "degrees_east"})})
+                self.ds_in_t = self.ds_in_t.set_coords(['lon', 'lat'])
 
     def change_date(self, hour, day, month, year):
         # Caution: The date as argument corresponds to the END of the ERA5 integration time.
@@ -115,14 +117,16 @@ class ERA5:
             self.hour = hour
             for key in self.keys:
                 data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][hour+1].values)
-            t0 = time.time()
-            self.ds_out = copy.deepcopy(self.ds_in)
+            self.ds_out = copy.deepcopy(self.ds_in_t)
             self.ds_out = self.ds_out.assign(data_dict)
-            self.ds_out['lon']= [map_function(i) for i in self.ds_out['lon'].values]
-            self.ds_out = self.ds_out.reindex(lon=sorted(list(self.ds_out.lon)))
-            self.ds_out = self.ds_out.reindex(lat=sorted(list(self.ds_out.lat)))
-            t1 = time.time()
-            print('Time to create new data array {}'.format(t1 - t0))
+            # self.ds_out['lon']= [map_function(i) for i in self.ds_out['lon'].values]
+            self.in_era5_grid = True
+
+            # t0 = time.time()
+            # self.ds_out = self.ds_out.reindex(lon=sorted(list(self.ds_out.lon)))
+            # self.ds_out = self.ds_out.reindex(lat=sorted(list(self.ds_out.lat)))
+            # t1 = time.time()
+
            
     def get_all_interpolators(self, day, hour):
         ret_dict = dict()
@@ -134,11 +138,10 @@ class ERA5:
                weights=None, overwrite_regridder=False):
 
         if (self.regridder is None) | (overwrite_regridder):
-            t_ds_in = xr.Dataset({"lat": (['lat'], sorted(self.ds_in['lat'].values), {"units": "degrees_north"}),
-                                  "lon": (['lon'], sorted([map_function(i) for i in self.ds_in['lon'].values]),
-                                             {"units": "degrees_east"})})
-            t_ds_in = t_ds_in.set_coords(['lon', 'lat'])
-            print('Create Regridder')
+            # t_ds_in = xr.Dataset({"lat": (['lat'], self.ds_in['lat'].values, {"units": "degrees_north"}),
+            #                       "lon": (['lon'], self.ds_in['lon'].values, {"units": "degrees_east"})})
+            # t_ds_in = t_ds_in.set_coords(['lon', 'lat'])
+            # print('Create Regridder')
             
             if ((lats is not None) and (lons is not None)):
                 t_ds_out = xr.Dataset({"lat": (["lat"], lats, {"units": "degrees_north"}),
@@ -155,25 +158,27 @@ class ERA5:
                 bfolder = os.path.dirname(weights)
                 src_temp_path = os.path.join(bfolder, '{}.nc'.format(str(uuid.uuid4())))
                 dest_temp_path = os.path.join(bfolder , '{}.nc'.format(str(uuid.uuid4())))
-                t_ds_in.to_netcdf(src_temp_path)
+                self.ds_in_t.to_netcdf(src_temp_path)
                 t_ds_out.to_netcdf(dest_temp_path)
                 cmd = 'mpirun -np {}  ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log'.format(n_cpus, src_temp_path, dest_temp_path, weights)
                 print(cmd)
                 os.system(cmd) # -np {} 
                 os.remove(src_temp_path) 
                 os.remove(dest_temp_path)
-            self.regridder = xe.Regridder(t_ds_in, t_ds_out,
+                
+            self.regridder = xe.Regridder(self.ds_in_t, t_ds_out,
                                           "bilinear", weights=weights,
                                            reuse_weights=True)
         self.ds_out = self.regridder(self.ds_out)
+        self.in_era5_grid = False
         return
             
-    def get_interpolators(self, key):
-        spl2d = interp2d(self.ds_out['lon'].values,
-                         self.ds_out['lon'].values,
-                         self.ds_out[key].values, kind='linear',
-                         copy=True, bounds_error=True)
-        return spl2d   
+    # def get_interpolators(self, key):
+    #     spl2d = interp2d(self.ds_out['lon'].values,
+    #                      self.ds_out['lat'].values,
+    #                      self.ds_out[key].values, kind='linear',
+    #                      copy=True, bounds_error=True)
+    #     return spl2d   
 
 
     def select_from_pressure_levels(self, key):
@@ -199,12 +204,18 @@ class ERA5:
         if lonlat is None:
             return tmp
         else:
-            if isinstance(lonlat[0], list) | isinstance(lonlat[0], np.ndarray):
-                return tmp.interp(lon=('z', lonlat[0]),
+            lon = lonlat[0]
+            if isinstance(lon, list) | isinstance(lon, np.ndarray):
+                if self.in_era5_grid:
+                    lon = [map_function(i) for i in lon]
+                return tmp.interp(lon=('z', lon),
                                   lat=('z', lonlat[1]),
                                   method='linear')
             else:
-                return tmp.interp(lon=lonlat[0],
+                lon = lonlat[0]
+                if self.in_era5_grid:
+                    lon = map_function(lon)
+                return tmp.interp(lon=lon,
                                   lat=lonlat[1])                                            
 
 

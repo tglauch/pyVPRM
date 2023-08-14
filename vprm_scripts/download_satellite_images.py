@@ -1,11 +1,11 @@
 import sys
 import pathlib
+import os
 sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
 from sat_manager import VIIRS, sentinel2, modis
 import yaml 
 from datetime import date
 import argparse
-import os
 import shutil
 
 p = argparse.ArgumentParser(

@@ -17,15 +17,13 @@ with open(args.config, "r") as stream:
 
 
 which_sat = cfg['satellite']
-n= 4 # chunk size
+n= 8 # chunk size
 n_cpus = 124 
 raw_code =' python ' + args.script + ' --year {} --h {} --v {} --config {} --n_cpus ' + str(int(n_cpus/n)) + ' & ' 
 
 
-for year in [2012]:# cfg['years']:
+for year in [2000, 2012, 2020]:# cfg['years']:
     for counter, hv_chunk in enumerate([cfg['hvs'][i:i + n] for i in range(0, len(cfg['hvs']), n)]):
-        if counter > 0:
-            continue
         sub_code = ''
 
         for i in hv_chunk:

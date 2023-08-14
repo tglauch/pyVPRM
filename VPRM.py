@@ -7,7 +7,7 @@ sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
 import numpy as np
 from lib.sat_manager import VIIRS, sentinel2, modis,\
                             copernicus_land_cover_map, satellite_data_manager
-from lib.era5_class_new import ERA5
+from lib.era5_class import ERA5
 from scipy.ndimage import uniform_filter
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from pyproj import Transformer
@@ -552,7 +552,7 @@ class vprm:
         if lon is not None:
             ret = self.era5_inst.get_data(lonlat=(lon, lat), key='ssrd').values.flatten() / 0.505 / 3600
         else:
-            ret = self.era5_inst.get_data(key='ssrd')/ 0.505 / 3600
+            ret = self.era5_inst.get_data(key='ssrd') / 0.505 / 3600
         return ret
     
     def get_w_scale(self, lon=None, lat=None):
@@ -804,20 +804,13 @@ class vprm:
                                   "lat": (["y", "x"], y_lat,
                                  {"units": "degrees_north"})})
             self.prototype_lat_lon = self.prototype_lat_lon.set_coords(['lon', 'lat'])
-        t0 = time.time()
         self.load_weather_data(hour, day, month,
                                year, era_keys=era_keys)
-        t1 = time.time()
-        print('Time for loading ERA data : {}'.format(t1-t0))
         if (lat is None) & (lon is None):
-                t0 = time.time()
                 self.era5_inst.regrid(dataset=self.prototype_lat_lon,
                                       weights=regridder_weights,
                                       n_cpus=self.n_cpus)
-                t1 = time.time()
-                print('Time for regridding {}'.format(t1-t0))
         ret_dict = dict()
-        t0=time.time()
         ret_dict['evi'] = self.get_evi(lon, lat)
         ret_dict['Ps'] = self.get_p_scale(lon, lat)
         ret_dict['par'] = self.get_par(lon, lat)
@@ -825,14 +818,15 @@ class vprm:
         ret_dict['Ts'] = Ts_all[1]
         ret_dict['Ws'] = self.get_w_scale(lon, lat)
         ret_dict['t'] = Ts_all[0]
-        t1=time.time()
-        print('Time to get vprm parameters {}'.format(t1-t0))
         if add_era_variables!=[]:
             for i in add_era_variables:
-                ret_dict[i] = self.era5_inst.get_data(lonlat=(lon, lat), key=i).values.flatten()
+                if lon is not None:
+                    ret_dict[i] = self.era5_inst.get_data(lonlat=(lon, lat), key=i).values.flatten()
+                else:
+                    ret_dict[i] = self.era5_inst.get_data(key=i).values.flatten()
         return ret_dict       
     
-    def make_vprm_predictions(self, date, res_dict=None, which_flux='NEE',
+    def make_vprm_predictions(self, date, res_dict=None,
                               regridder_weights=None):
         '''
             Using the VPRM fit parameters make predictions on the entire satellite image.
@@ -841,7 +835,6 @@ class vprm:
                     date (datetime object): The date for the prediction
                     res_dict (dict) : Dict with fit parameters ('lamb', 'par0', 'alpha', 'beta') 
                                       for the different vegetation types.
-                    which_flux (str): Either 'NEE' or 'GPP'
                     regridder_weights (str): Path to the weights file for regridding from ERA5 
                                              to the satellite grid
                 Returns:

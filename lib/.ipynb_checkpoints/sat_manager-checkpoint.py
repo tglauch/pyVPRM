@@ -1,4 +1,8 @@
-#from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
+from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
+import pathlib
+import sys
+import os
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
 from datetime import date
 import time
 from shapely.geometry import Point, Polygon, box
@@ -9,7 +13,6 @@ from fancy_plot import *
 import matplotlib
 import earthpy.plot as ep
 import zipfile
-import os
 import glob
 from pyproj import Transformer
 import geopandas as gpd
@@ -58,13 +61,6 @@ def make_cmap(vmin, vmax, nbins, cmap_name='Reds'):
     return cmap, norm
 
 
-with open("/home/b/b309233/software/VPRM_preprocessor/logins.yaml", "r") as stream:
-    try:
-        logins = yaml.safe_load(stream)
-    except yaml.YAMLError as exc:
-        print(exc)
-        
-        
 class satellite_data_manager:
     # Base class for all satellite images
     
@@ -200,20 +196,21 @@ class satellite_data_manager:
         # plot the normalized difference vegetation index
         
         data = self.sat_img
-        NDVI =(data[band2].values - data[band1].values)/(data[band2].values + data[band1].values)
-        mask = (NDVI < -1) | (NDVI >1) | (np.isnan(NDVI))
-        NDVI[mask] = -1
+        NDVI =(data[band2] - data[band1])/(data[band2] + data[band1])
+        # mask = (NDVI < -1) | (NDVI >1) | (np.isnan(NDVI))
+        #NDVI[mask] = -1
         NDVI_map, NDVI_norm = make_cmap(-0.2, 1, n_colors,
                                         ['white', 'green'])
         NDVI_map.set_under('white') 
         fig, ax = newfig(figsize, ratio=1.0)
         if vmin is None:
             vmin = 1- (1/n_colors)/2
-        ep.plot_bands(NDVI, ax=ax, cmap=NDVI_map,
+        ep.plot_bands(NDVI.values, ax=ax, cmap=NDVI_map,
                       extent=self.ext, vmin=vmin, vmax=vmax)
         if save is not None:
             fig.savefig(save, dpi=500)
         fig.show()
+        return NDVI
    
     def add_tile(self, new_tiles, reproject=False):
         # merge tiles together using the projection of the current satellite image
