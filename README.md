@@ -2,7 +2,10 @@
 
 `pyVPRM` is a software package to run calculations with the Vegetation Photosynthesis and Respriation Model. In addition to the 'classical' implementation it also provides 1.) an interface for different satellite data products 2.) an updated vegetation map handling and 3.) an API for using neural-network-based approaches.
 
-ower data b) Use the fit parameters in a to evaluate fluxes over time c) Prepare the input for further usage in weather forecast systems like WRF
+This code is able to run a VPRM processing for different tasks:
+a) get the variables needed to fit an analytical or neural-network based VPRM model for a given set of flux tower data
+b) Use the fit parameters in a) to estimate fluxes over time and space
+c) Prepare the input for further usage in weather forecast systems like WRF
 
 For all applications you need to download the required land type maps from the Copernicus webpage here: https://lcviewer.vito.be/download, as well as the satellite images.
 
