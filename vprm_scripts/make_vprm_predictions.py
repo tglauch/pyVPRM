@@ -134,7 +134,7 @@ else:
     ts = []
     preds_gpp = []
     preds_nee = []
-
+    
     for w in np.arange(1, 53, 1): 
         ts.append(w)
         t_gpp_preds = []

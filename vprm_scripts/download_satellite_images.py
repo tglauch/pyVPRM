@@ -1,6 +1,7 @@
 import sys
 import pathlib
 import os
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
 sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
 from sat_manager import VIIRS, sentinel2, modis
 import yaml 

@@ -1,13 +1,14 @@
 import sys
 import os
 import pathlib
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
-from sat_manager import VIIRS, sentinel2, modis, copernicus_land_cover_map, satellite_data_manager
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
+#sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
+from lib.sat_manager import VIIRS, sentinel2, modis, copernicus_land_cover_map, satellite_data_manager
 from VPRM import vprm 
 import warnings
 import pandas as pd
 warnings.filterwarnings("ignore")
-from era5_class_new import ERA5
+from era5_class import ERA5
 from pyproj import Proj
 import yaml
 import glob
@@ -55,7 +56,7 @@ print(outfile)
 
 
 #Prepare Fluxnet Dataset
-site_info = pd.read_pickle('/home/b/b309233/software/CO2KI/VPRM/fluxnet_sites.pkl')
+site_info = pd.read_pickle('/home/b/b309233/software/VPRM_preprocessor/fluxnet_info/fluxnet_sites.pkl')
 
 site_list = {'grassland': ['AT-Neu', 'CH-Cha', 'CH-Fru', 'CZ-BK2', 'DE-Gri', 'DE-RuR', 'IT-MBo', 'IT-Tor'],
              'mixed_forests': ['BE-Bra', 'BE-Vie', 'CH-Lae'],
@@ -109,7 +110,7 @@ lats = []
 lons = []
 lonlats = []
 lonlats_smearing = []
-measurement_heights = pd.read_csv('/home/b/b309233/software/VPRM_preprocessor/site_infos.txt',
+measurement_heights = pd.read_csv('/home/b/b309233/software/VPRM_preprocessor/fluxnet_info/site_infos.txt',
                         delimiter=' ')
 for key in site_dict.keys():
     lonlats.append((site_dict[key]['lonlat'][0], site_dict[key]['lonlat'][1]))

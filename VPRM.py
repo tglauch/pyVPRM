@@ -239,6 +239,7 @@ class vprm:
                         b_swir (str): Name of the short-wave infrared band
                         drop_bands (bool): If True drop the raw band information after 
                                            calculation of EVI and LSWI. Saves memory.
+                                           Can also be a list of keys to drop.
                         which_evi (str): Either evi or evi2. evi2 does not need a blue band.
                         max_evi (float): If given, every evi larger than this will be cut.
 
@@ -261,7 +262,7 @@ class vprm:
             
         if which_evi in ['evi', 'evi2']:
             nir = handler.sat_img[b_nir] 
-            red = handler.sat_img[b_red]  
+            red = handler.sat_img[b_red]
             swir = handler.sat_img[b_swir] 
             if which_evi=='evi':
                 blue = handler.sat_img[b_blue] 
@@ -475,8 +476,8 @@ class vprm:
                 print('Init ERA5 Instance')
             self.era5_inst = ERA5(year, month, day, hour, 
                                   keys=era_keys) 
-        self.era5_inst.change_date(hour=hour, day=day,
-                                   month=month, year=year)
+        self.era5_inst.change_date(year=year, month=month,
+                                   day=day, hour=hour)
         self.hour = hour
         self.day = day
         self.year = year
@@ -525,8 +526,8 @@ class vprm:
         evi = self.get_evi(lon, lat)
         p_scale = ( 1 + lswi ) / 2
         if lon is not None:
-            land_type = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type', as_array=False).values.flatten()
-            th = self.min_max_evi.value_at_lonlat(lon, lat, key='th', as_array=False).values.flatten()
+            land_type = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type', interp_method='nearest', as_array=False).values.flatten()
+            th = self.min_max_evi.value_at_lonlat(lon, lat, key='th', interp_method='nearest', as_array=False).values.flatten()
         else:
             land_type = self.land_cover_type.sat_img['land_cover_type'].values
             th = self.min_max_evi.sat_img['th'].values
@@ -745,12 +746,12 @@ class vprm:
                                       weights=regridder_weights,
                                       n_cpus=self.n_cpus)
         ret_dict = dict()
-        sat_inds = np.concatenate([np.arange(self.counter-8, self.counter-2, 3),
-                                   np.arange(self.counter-2, self.counter+1)])
-        for_ret_dict = self.get_sat_img_values_for_all_keys(counter_range=sat_inds,
+        # sat_inds = np.concatenate([np.arange(self.counter-8, self.counter-2, 3),
+        #                            np.arange(self.counter-2, self.counter+1)])
+        for_ret_dict = self.get_sat_img_values_for_all_keys(counter_range=self.counter,
                                                             lon=lon, lat=lat)
         for i, key in enumerate(sat_img_keys):
-            ret_dict[key] =  for_ret_dict[i]
+            ret_dict[key] = for_ret_dict[key]
         for key in era_variables:
             if lat is None:
                 ret_dict[key] = self.era5_inst.get_data(key=key)
@@ -758,10 +759,15 @@ class vprm:
                 ret_dict[key] = self.era5_inst.get_data(lonlat=(lon, lat),
                                                         key=key).values.flatten()
         if lon is not None:
-            land_type = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type', as_array=False).values.flatten()
+            land_type = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type',
+                                                             interp_method='nearest', as_array=False).values.flatten()
         else:
             land_type = self.land_cover_type.sat_img['land_cover_type'].values
+        land_type[(land_type != 1) & (land_type != 2) & (land_type != 3) & \
+                  (land_type != 4) & (land_type != 6) & (land_type != 7)] = 0
+        land_type[~np.isfinite(land_type)] = 0 
         ret_dict['land_cover_type'] = land_type
+        print(np.unique(ret_dict['land_cover_type']))
         return ret_dict           
     
     

@@ -71,9 +71,22 @@ class satellite_data_manager:
         self.t = None
         return
     
-    def value_at_lonlat(self, lon, lat, as_array=True, key=None, isel={}):
-        # get the value of the satellite image at a 
-        #certain lon and lat
+    def value_at_lonlat(self, lon, lat, as_array=True, key=None,
+                        isel={}, interp_method='linear'):
+        '''
+            Get the value at a specific latitude (lat) and longitude (lon)
+
+                Parameters:
+                        lon(float) : longitude
+                        lat(float) : latitude
+                        as_array (bool): If true, return numpy array
+                        key (str): Only get values for a specific key. All keys if None
+                        interp_method (str): which method to use for interpolating. 'linear' by default.
+                                             For nearest neighbour set to 'nearest'.
+
+                Returns:
+                        None
+        '''
         
         if self.t is None:
             self.t = Transformer.from_crs('+proj=longlat +datum=WGS84',
@@ -82,16 +95,18 @@ class satellite_data_manager:
         #ret = self.sat_img.sel(x=x_a, y=y_a, method="nearest")
         if key is not None:
             if isinstance(x_a, list):
-                ret = self.sat_img[key].isel(isel).interp(x=('z', x_a), y=('z', y_a), method='linear')
+                ret = self.sat_img[key].isel(isel).interp(x=('z', x_a), y=('z', y_a),
+                                                          method=interp_method)
             else:
                 ret = self.sat_img[key].isel(isel).interp(x=x_a, y=y_a,
-                                          method="linear")
+                                          method=interp_method)
         else:
             if isinstance(x_a, list) | isinstance(x_a, np.ndarray) :
-                ret = self.sat_img.isel(isel).interp(x=('z', x_a), y=('z', y_a), method='linear')
+                ret = self.sat_img.isel(isel).interp(x=('z', x_a), y=('z', y_a),
+                                                     method=interp_method)
             else:
                 ret = self.sat_img.isel(isel).interp(x=x_a, y=y_a,
-                                          method="linear")
+                                          method=interp_method)
         if as_array:
             return ret.to_array().values
         else:

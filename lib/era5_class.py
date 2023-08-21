@@ -15,10 +15,10 @@ import datetime
 map_function = lambda lon: (lon + 360) if (lon < 0) else lon
 
 
-bpaths = {'sf00': '/pool/data/ERA5/E5/sf/an/1H', # '/work/bk1099/data/sf00_1H'i,
-          'sf12': '/pool/data/ERA5/E5/sf/fc/1H', #'/work/bk1099/data/sf12_1H',
-          'pl00': '/pool/data/ERA5/E5/pl/an/1H', #'/work/bk1099/data/pl00_1H'i,
-          'ml00': '/pool/data/ERA5/E5/ml/an/1H'} #'/work/bk1099/data/ml00_1H/'}
+bpaths = {'sf00': '/pool/data/ERA5/E5/sf/an/{}', # '/work/bk1099/data/sf00_1H'i,
+          'sf12': '/pool/data/ERA5/E5/sf/fc/{}', #'/work/bk1099/data/sf12_1H',
+          'pl00': '/pool/data/ERA5/E5/pl/an/{}', #'/work/bk1099/data/pl00_1H'i,
+          'ml00': '/pool/data/ERA5/E5/ml/an/{}'} #'/work/bk1099/data/ml00_1H/'}
 
 # Check documentation under 
 # https://confluence.ecmwf.int/display/CKB/ERA5%3A+data+documentation#ERA5:datadocumentation-Spatialgrid
@@ -29,13 +29,13 @@ keys_dict = {'ssrd': [169, 'sf12'],#surface solar radiation downwards(J/m**2)
              'sp': [134, 'sf00'], # surface pressure
              'tcc': [164, 'sf00'],  #total cloud cover
              'stl1': [139, 'sf00'], # soil temperature level1
-#             'stl2': [170, 'E5sf00'], # soil temperature level2
+             'stl2': [170, 'sf00'], # soil temperature level2
              'stl3': [183, 'sf00'],# soil temperature level3
              'swvl1': [39, 'sf00'],# soil water level 1
              'swvl2': [40, 'sf00'],# soil water level 2
              'swvl3': [41, 'sf00'],# soil water level 3
              'swvl4': [42, 'sf00'],# soil water level 3             
-#             'tp': [228, 'sf12'], #total precipitation over given time
+             'tp': [228, 'sf12'], #total precipitation over given time
 #             'ssr': [176, 'sf12'], #net surface solar radiation (J/m**2)
 #             'str': [177, 'sf12'],#net surface thermal radiation (J/m**2)
              'src': [198, 'sf00'],
@@ -48,12 +48,18 @@ class ERA5:
     Class for using ERA5 data available on Levante's DKRZ cluster.
     '''
     
-    def __init__(self, year, month, day, hour, keys=[]):
+    def __init__(self, year, month, day=None, hour=None, keys=[], timesteps='hourly'):
+        if timesteps == 'hourly':
+            self.add_time_str = '1H'
+        elif timesteps == 'daily':
+            self.add_time_str = '1D'
+        elif timesteps == 'monthly':
+            self.add_time_str = '1M'  
         self.file_handlers = dict()
-        self.year = -1
-        self.month = -1
-        self.day = -1
-        self.hour = -1
+        self.year = None
+        self.month = None
+        self.day = None
+        self.hour = None
         self.in_era5_grid = True
         self.regridder = None
         self.ds_in_t = None
@@ -63,16 +69,24 @@ class ERA5:
             self.keys = keys_dict.keys()
         else:
             self.keys = keys
-        self.change_date(hour, day, month, year)
+        self.change_date(year, month, day, hour)
         
     def _init_data_for_day(self):
+      
         file_dict = dict()
         for c, key in enumerate(self.keys):
             t_dict = dict()
-            bpath = bpaths[keys_dict[key][1]]
+            bpath = bpaths[keys_dict[key][1]].format(self.add_time_str)
             e_id = keys_dict[key][0]
-            fname = os.path.join(bpath, '{:03d}/E5{}_1H_{}-{:02d}-{:02d}_{:03d}.grb'.format(e_id,keys_dict[key][1],
-                                                                                  self.year, self.month, self.day, e_id))
+            if self.add_time_str == '1H':
+                fname = os.path.join(bpath, '{:03d}/E5{}_1H_{}-{:02d}-{:02d}_{:03d}.grb'.format(e_id,keys_dict[key][1],
+                                                                                      self.year, self.month, self.day, e_id))
+            elif self.add_time_str == '1D':
+                fname = os.path.join(bpath, '{:03d}/E5{}_1D_{}-{:02d}_{:03d}.grb'.format(e_id,keys_dict[key][1],
+                                                                                      self.year, self.month, e_id))
+            elif self.add_time_str == '1M':
+                fname = os.path.join(bpath, '{:03d}/E5{}_1M_{}_{:03d}.grb'.format(e_id,keys_dict[key][1],
+                                                                                      self.year, e_id))                
             t_dict['current'] = pygrib.open(fname)
             t_dict['current_name'] = fname
             t_dict['current_ind'] = 0
@@ -86,14 +100,14 @@ class ERA5:
                                            "lon": (['lon'], lons[0], {"units": "degrees_east"})})
                 self.ds_in_t = self.ds_in_t.set_coords(['lon', 'lat'])
 
-    def change_date(self, hour, day, month, year):
+    def change_date(self, year=None, month=None, day=None, hour=None):
         # Caution: The date as argument corresponds to the END of the ERA5 integration time.
-        
-        sf = datetime.datetime(year, month, day, hour)# + datetime.timedelta(hours=1)
-        day = sf.day
-        month = sf.month
-        year = sf.year
-        hour = int(sf.hour)
+
+        #sf = datetime.datetime(year, month, use_day, use_hour)# + datetime.timedelta(hours=1)
+        # day = sf.day
+        # month = sf.month
+        # year = sf.year
+        # hour = int(sf.hour)
         
         new_date=False
         
@@ -112,11 +126,23 @@ class ERA5:
         if new_date:
             self._init_data_for_day()
 
-        if new_date or (hour != self.hour):
+        if (hour != self.hour):
+            self.hour = hour
+            new_date = True
+            
+        if new_date:
             data_dict = dict()
             self.hour = hour
-            for key in self.keys:
-                data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][hour+1].values)
+            if self.add_time_str == '1H':
+                for key in self.keys:
+                    data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][int(self.hour+1)].values)
+            elif self.add_time_str == '1D':
+                for key in self.keys:
+                    data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][self.day].values)
+            elif self.add_time_str == '1M':
+                for key in self.keys:
+                    data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][self.month].values)
+                
             self.ds_out = copy.deepcopy(self.ds_in_t)
             self.ds_out = self.ds_out.assign(data_dict)
             # self.ds_out['lon']= [map_function(i) for i in self.ds_out['lon'].values]

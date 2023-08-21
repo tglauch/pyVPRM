@@ -29,7 +29,7 @@ keys_dict = {'ssrd': [169, 'sf12'],#surface solar radiation downwards(J/m**2)
              'sp': [134, 'sf00'], # surface pressure
              'tcc': [164, 'sf00'],  #total cloud cover
              'stl1': [139, 'sf00'], # soil temperature level1
-#             'stl2': [170, 'E5sf00'], # soil temperature level2
+             'stl2': [170, 'sf00'], # soil temperature level2
              'stl3': [183, 'sf00'],# soil temperature level3
              'swvl1': [39, 'sf00'],# soil water level 1
              'swvl2': [40, 'sf00'],# soil water level 2

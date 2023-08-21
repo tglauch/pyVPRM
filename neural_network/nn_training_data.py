@@ -1,13 +1,14 @@
 import sys
 import os
 import pathlib
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), 'lib'))
-from sat_manager import VIIRS, sentinel2, modis, copernicus_land_cover_map, satellite_data_manager
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
+#sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
+from lib.sat_manager import VIIRS, sentinel2, modis, copernicus_land_cover_map, satellite_data_manager
 from VPRM import vprm 
 import warnings
 import pandas as pd
 warnings.filterwarnings("ignore")
-from era5_class_new import ERA5
+from era5_class import ERA5
 from pyproj import Proj
 import yaml
 import glob
@@ -51,8 +52,6 @@ else:
 
 outfile = os.path.join(cfg['out_path'], 'h{}v{}_{}_nn.pickle'.format(h, v, this_year))
 print(outfile)
-
-
 
 #Prepare Fluxnet Dataset
 site_info = pd.read_pickle('/home/b/b309233/software/CO2KI/VPRM/fluxnet_sites.pkl')
@@ -103,6 +102,7 @@ for s in all_sites:
                     'fluxnet_data': idata, 'input_data_timestamps': [] }
 
 if len(site_dict.keys()) == 0 :
+    print('No Sites in h {} v {}'.format(h, v))
     exit()
 
 lats = []
@@ -118,18 +118,21 @@ for key in site_dict.keys():
 
 vprm_inst = vprm(n_cpus=args.n_cpus)
 
-sat_image_files = np.concatenate([glob.glob(os.path.join(cfg['sat_image_path'], str(this_year - 1), '*h{:02d}v{:02d}*.h*'.format(h, v))),
-                                  glob.glob(os.path.join(cfg['sat_image_path'], str(this_year), '*h{:02d}v{:02d}*.h*'.format(h, v)))])
+#sat_image_files = np.concatenate([glob.glob(os.path.join(cfg['sat_image_path'], str(this_year - 1), '*h{:02d}v{:02d}*.h*'.format(h, v))),
+#                                  glob.glob(os.path.join(cfg['sat_image_path'], str(this_year), '*h{:02d}v{:02d}*.h*'.format(h, v)))])
+
+sat_image_files = sorted(glob.glob(os.path.join(cfg['sat_image_path'], str(this_year), '*h{:02d}v{:02d}*.h*'.format(h, v))))
 
 for c, i in enumerate(sat_image_files):
     print(i)
     if cfg['satellite'] == 'modis':
         handler = modis(sat_image_path=i)
         handler.load()
+        vprm_inst.add_sat_img(handler, drop_bands=['500m'])
     else:
         handler = VIIRS(sat_image_path=i)
         handler.load()
-    vprm_inst.add_sat_img(handler, drop_bands=False)
+        vprm_inst.add_sat_img(handler)
 
 vprm_inst.smearing(lonlats=lonlats)
 
@@ -169,7 +172,9 @@ time_range = pd.date_range(start="{}-01-01".format(this_year),
 for c,t in enumerate(time_range):
     t0 = time.time()
     vrbls = vprm_inst.get_neural_network_variables(t, lat=lats, lon=lons,
-                                                   era_variables=['ssrd', 't2m', 'swvl1', 'swvl2', 'e', 'stl1']) # Add the soil water level 1. See the ERA5 documentation for more keys
+                                                   era_variables=['ssrd', 't2m', 'swvl1',
+                                                                  'swvl2', 'e',
+                                                                  'stl1', 'stl2'])
     if vrbls is None:
         continue
     else:

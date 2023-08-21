@@ -1,6 +1,7 @@
 import sys
 import os
 import pathlib
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
 sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
 from sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
@@ -61,10 +62,9 @@ vprm_inst = vprm(n_cpus=args.n_cpus)
 file_collections = np.unique([i.split('.')[1] for i in
                               glob.glob(os.path.join(cfg['sat_image_path'],
                                         '*h{:02d}v{:02d}*.h*'.format(hvs[0][0], hvs[0][1])))])
+
+#Load the data
 for c0, f in enumerate(sorted(file_collections)):
-    print(c0)
-    if c0>2:
-        continue
     handlers = []
     if cfg['satellite'] == 'modis':
         for c, i in sorted(enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*{}*.h*'.format(f))))):
@@ -97,8 +97,11 @@ for c0, f in enumerate(sorted(file_collections)):
                               which_evi='evi2',
                               drop_bands=True) 
        
+# Sort and merge satellite images
 vprm_inst.sort_and_merge_by_timestamp()
 
+
+# Add the land cover map
 if not os.path.exists(cfg['out_path']):
     os.makedirs(cfg['out_path'])
 
@@ -112,9 +115,10 @@ else:
                        save_path=os.path.join(cfg['out_path'],
                                               'veg_map_on_modis_grid.nc'))
  
-
+# Apply lowess smoothing
 vprm_inst.lowess()
 
+# Regrid to WRF Grid defined in out_grid 
 out_grid = dict()
 out_grid['lons'] = lons
 out_grid['lats'] = lats
@@ -125,6 +129,7 @@ else:
                                      regridder_save_path=os.path.join(cfg['out_path'], 'regridder.nc'))
 
 
+# Save to NetCDF files
 file_base = 'VPRM_input_'
 filename_dict = {'lswi': 'LSWI', 'evi': 'EVI', 'veg_fraction': 'VEG_FRA',
                  'lswi_max': 'LSWI_MAX', 'lswi_min': 'LSWI_MIN', 
