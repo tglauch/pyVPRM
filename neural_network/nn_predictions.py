@@ -138,13 +138,14 @@ if args.hourly:
                 data_arr.append(np.array(vrbls[var]))
             data_arr = np.array(data_arr).T
             data_arr = data_arr.reshape(2400 * 2400, 15)
-            batch_size = 6000000
+            batch_size = 1200000
             t2 = time.time()
             print('Prepare Data {}'.format(t2-t1))
             predgen = foo.CustomDataGen(data_arr, batch_size, shuffle=False)
             t3= time.time()
             print('Init Generator {}'.format(t3-t2))
-            pred = model.predict(predgen, predgen.n//batch_size + 1)[0].flatten()
+            pred = model.predict(predgen, predgen.n//batch_size + 1,
+                                 workers=1, use_multiprocessing=False)[0].flatten()
             t4= time.time()
             print('Make prediction {}'.format(t4-t3))
             pred = pred.reshape(2400, 2400)

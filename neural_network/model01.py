@@ -53,8 +53,9 @@ class CustomDataGen(keras.utils.Sequence):
     
     def __get_data(self, batch_inds):
         # Generates data containing batch_size samples
-        inp1 = np.concatenate([self.inputs[batch_inds, 0:7],
+        inp1 = np.concatenate([self.inputs[batch_inds, 0:7], 
                                to_categorical(self.inputs[batch_inds, -1],num_classes=8)], axis=1)
+       # inp1 = self.inputs[batch_inds, 0:7]
         inp2 = np.array(self.inputs[batch_inds,7:-1])
         # print(np.shape(inp1))
         X_batch =  [inp1, inp2]
@@ -70,8 +71,11 @@ class CustomDataGen(keras.utils.Sequence):
         else:
             batch_inds = self.inds[index * self.batch_size : (index + 1) * self.batch_size]
         X, y = self.__get_data(batch_inds)
-     #   sw = self.sample_weights[batch_inds]        
-        return X, y
+     #   sw = self.sample_weights[batch_inds]
+        if y is None:
+            return X
+        else:
+            return X, y
     
     def __len__(self):
         return self.n // self.batch_size + 1 
@@ -119,7 +123,7 @@ def dense_block(feat_maps_out, prev):
 
 def init_model(nlayers=10, nneurons=16):
     input_b1 = keras.layers.Input(
-        shape=(15,))
+        shape=(15,)) 
     z1 = keras.layers.Dense(nneurons)(input_b1)
     for i in range(nlayers):
         z1 = Dense_Residual(nneurons, nneurons, z1)

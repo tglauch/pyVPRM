@@ -4,10 +4,6 @@ import pathlib
 sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
 from sat_manager import VIIRS, modis, copernicus_land_cover_map
 from VPRM import vprm 
-import warnings
-warnings.filterwarnings("ignore")
-from era5_class_new import ERA5
-map_function = lambda lon: (lon + 360) if (lon < 0) else lon
 import yaml
 import glob
 import time
@@ -43,7 +39,7 @@ outfile = os.path.join(cfg['out_path'], 'h{}v{}_{}.pickle'.format(h, v, cfg['yea
 print(outfile)
 
 
-### ToDo: Provide (code for) a list of lats and lons
+### ToDo: Provide a list of lats and lons for the data extraction, i.e. the flux tower positions
 lats = []
 lons = []
 
@@ -72,30 +68,17 @@ for c, i in enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*h{:02d}v{:
                           which_evi='evi2',
                           drop_bands=True)
 
-vprm_inst.smearing(lonlats=lonlats)
+# Uncomment if you want to do a spatial smearing with size=(3,3). Otherwise give size manually.
+#vprm_inst.smearing(lonlats=lonlats)
 
+# Sort the satellite images by time and merge internally for easier computations
 vprm_inst.sort_and_merge_by_timestamp()
 
+# Run lowess smoothing
 vprm_inst.lowess(lonlats=lonlats)
 
+# Calculate necessary parameters for the vprm calculation
 vprm_inst.calc_min_max_evi_lswi()
-
-lcm = None
-for c in glob.glob(os.path.join(cfg['copernicus_path'], '*')):
-    thandler = copernicus_land_cover_map(c)
-    thandler.load()
-    bounds = vprm_inst.prototype.sat_img.rio.transform_bounds(thandler.sat_img.rio.crs)
-    dj = rasterio.coords.disjoint_bounds(bounds, thandler.sat_img.rio.bounds())
-    if dj:
-        print('Do not add {}'.format(c))
-        continue
-    if lcm is None:
-        lcm=copernicus_land_cover_map(c)
-        lcm.load()
-    else:
-        lcm.add_tile(thandler)
-vprm_inst.add_land_cover_map(lcm)
-
 
 # ------------------------------------------------------------------
 

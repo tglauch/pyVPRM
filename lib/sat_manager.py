@@ -77,8 +77,8 @@ class satellite_data_manager:
             Get the value at a specific latitude (lat) and longitude (lon)
 
                 Parameters:
-                        lon(float) : longitude
-                        lat(float) : latitude
+                        lon(float or list of floats) : longitude
+                        lat(float or list of floats) : latitude
                         as_array (bool): If true, return numpy array
                         key (str): Only get values for a specific key. All keys if None
                         interp_method (str): which method to use for interpolating. 'linear' by default.
@@ -111,6 +111,15 @@ class satellite_data_manager:
             return ret.to_array().values
         else:
             return ret
+        
+    def reduce_along_lat_lon(self, lon, lat, interp_method='linear', new_dim_name='z'):
+        if self.t is None:
+            self.t = Transformer.from_crs('+proj=longlat +datum=WGS84',
+                                           self.sat_img.rio.crs)
+        x_a, y_a = self.t.transform(lon, lat)
+        self.sat_img = self.sat_img.interp(x=(new_dim_name, x_a), y=(new_dim_name, y_a),
+                                           method=interp_method)
+        return
     
     def load(self, proj=None, **kwargs):
         # loading using the individual loading functions 
@@ -168,7 +177,6 @@ class satellite_data_manager:
                                 figsize=(12,9))
         if np.ndim(axs) == 0 :
             axs = np.array([[axs]])
-        # print(axs)
         for i in range(len(axs)):
             for j in range(len(axs[i])):
                 c = sqrt_sh * i + j
@@ -347,9 +355,6 @@ class earthdata(satellite_data_manager):
         if rmv_downloads:
             shutil.rmtree(dest)
         print('Done...')
-        # except Exception as e:
-        #     print('Data could not be downloaded')
-        #     print(e)
         return
     
     def _to_standard_format(self):
@@ -376,25 +381,38 @@ class modis(earthdata):
     #Class to download and load MODIS data
     
     
-    def __init__(self, datapath=None, sat_image_path=None):
+    def __init__(self, datapath=None, sat_image_path=None, product='MOD09A1.061'):
 
         super().__init__(datapath, sat_image_path)
-        self.use_keys = ['sur_refl_b01', 'sur_refl_b02',
-                         'sur_refl_b03', 'sur_refl_b04',
-                         'sur_refl_b05', 'sur_refl_b06',
-                         'sur_refl_b07', 'sur_refl_qc_500m']
+        if product == 'MOD09A1.061':
+            self.use_keys = ['sur_refl_b01', 'sur_refl_b02',
+                             'sur_refl_b03', 'sur_refl_b04',
+                             'sur_refl_b05', 'sur_refl_b06',
+                             'sur_refl_b07', 'sur_refl_qc_500m',
+                             'sur_refl_day_of_year']
+        else:
+            self.use_keys = None
         self.load_kwargs = {'variable': self.use_keys}
         self.sat = 'MODIS'
-        self.product = 'MOD09A1.006'
+        self.product = product
         self.path = "MOLT"
 
     def individual_loading(self):
-        self.sat_img = rxr.open_rasterio(self.sat_image_path, 
-                                 masked=True, cache=False).squeeze()
+        if ('MOD09GA' in self.product) or ('MOD21' in self.product):
+            self.sat_img = rxr.open_rasterio(self.sat_image_path, 
+                                     masked=True, cache=False)[1].squeeze()
+        else:
+            self.sat_img = rxr.open_rasterio(self.sat_image_path, 
+                                     masked=True, cache=False).squeeze()
+        if self.use_keys is None:
+            self.use_keys = list(self.sat_img.keys())
         self.sat_img = self.sat_img[self.use_keys]
         rename_dict = dict()
         for i in self.use_keys:
-            rename_dict[i] = i.split('_')[-1].replace('b', 'B')
+            if ('sur_refl' in i) & ('_b' in i):
+                rename_dict[i] = i.replace('_1', '').split('_')[-1].replace('b', 'B')
+            else:
+                rename_dict[i] = i
         self.sat_img = self.sat_img.rename(rename_dict)
         self.keys = np.array(list(self.sat_img.data_vars))
         for key in self.keys:
@@ -407,6 +425,7 @@ class modis(earthdata):
     
     def get_cloud_coverage(self):
         print('PERCENTCLOUDY', self.meta_data['PERCENTCLOUDY'])
+        return self.meta_data['PERCENTCLOUDY']
         
     def get_recording_time(self):
         date0 = datetime.strptime(self.meta_data['RANGEBEGINNINGDATE'] + 'T' + self.meta_data['RANGEBEGINNINGTIME'] + 'Z',
@@ -468,7 +487,6 @@ class VIIRS(earthdata):
                     PARAMETER["false_northing",0], \
                     UNIT["Meter",1]]'
         
-        # print(west, north)
         rename_dict = dict()
         for i in self.keys:
             rename_dict[i] = i.split('Data_Fields_')[1]
@@ -481,7 +499,6 @@ class VIIRS(earthdata):
             self.sat_img[k] = self.sat_img[k] * sf
 
         transform = Affine(self.pixel_size, 0, west, 0, -self.pixel_size, north)
-        # print(transform)
         coords = affine_to_coords(transform, self.sat_img.rio.width, self.sat_img.rio.height)
         self.sat_img.coords["x"] = coords["x"]
         self.sat_img.coords["y"] = coords["y"]
@@ -495,6 +512,7 @@ class VIIRS(earthdata):
     
     def get_cloud_coverage(self):
         print('PercentCloudy', self.meta_data['PercentCloudy'])
+        return self.meta_data['PercentCloudy']
         
     
     def get_recording_time(self):    

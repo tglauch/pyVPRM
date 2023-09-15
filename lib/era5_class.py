@@ -138,10 +138,10 @@ class ERA5:
                     data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][int(self.hour+1)].values)
             elif self.add_time_str == '1D':
                 for key in self.keys:
-                    data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][self.day].values)
+                    data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][int(self.day)].values)
             elif self.add_time_str == '1M':
                 for key in self.keys:
-                    data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][self.month].values)
+                    data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][int(self.month)].values)
                 
             self.ds_out = copy.deepcopy(self.ds_in_t)
             self.ds_out = self.ds_out.assign(data_dict)

@@ -94,39 +94,44 @@ for s in all_sites:
     dt = parser.parse('200001010000') # pick a date that is definitely standard time and not DST /// old: datetime.datetime.now()
     datetime_u = []
     for i, row in idata.iterrows():
-        datetime_u.append(parser.parse(str(int(row['TIMESTAMP_START'])))  -  timezone.utcoffset(dt))
-    years = [t.year for t in datetime_u]
+        datetime_u.append(parser.parse(str(int(row['TIMESTAMP_END'])))  -  timezone.utcoffset(dt))
+    datetime_u = np.array(datetime_u)
+    years = np.array([t.year for t in datetime_u])
     if this_year not in years:
         print('No data for {}'.format(this_year))
         continue
+    mask = (years == this_year)
     idata['datetime_utc'] = datetime_u
     site_dict[s] = {'lonlat': (lon, lat), 'input_data': [],
-                    'fluxnet_data': idata, 'input_data_timestamps': [] }
-
+                    'fluxnet_data': idata[mask], 'input_data_timestamps': [] }
+    
+lonlats = []
+for key in site_dict.keys():
+    lonlats.append((site_dict[key]['lonlat'][0], site_dict[key]['lonlat'][1]))
+    
 if len(site_dict.keys()) == 0 :
     exit()
 
-lats = []
-lons = []
-lonlats = []
-lonlats_smearing = []
-measurement_heights = pd.read_csv('/home/b/b309233/software/VPRM_preprocessor/fluxnet_info/site_infos.txt',
-                        delimiter=' ')
-for key in site_dict.keys():
-    lonlats.append((site_dict[key]['lonlat'][0], site_dict[key]['lonlat'][1]))
-    try:
-        mh = float(measurement_heights.loc[measurement_heights['Site_name']==key]['measurement_height'].values)
-        ch = float(measurement_heights.loc[measurement_heights['Site_name']==key]['canopy_height'].values)
-        if (mh - ch)>12.5:
-            lonlats_smearing.append((site_dict[key]['lonlat'][0], site_dict[key]['lonlat'][1]))
-    except:
-        pass
-    lats.append(site_dict[key]['lonlat'][1])
-    lons.append(site_dict[key]['lonlat'][0])
+# lats = []
+# lons = []
+# lonlats = []
+# lonlats_smearing = []
+# measurement_heights = pd.read_csv('/home/b/b309233/software/VPRM_preprocessor/fluxnet_info/site_infos.txt',
+#                         delimiter=' ')
+# for key in site_dict.keys():
+#     lonlats.append((site_dict[key]['lonlat'][0], site_dict[key]['lonlat'][1]))
+#     try:
+#         mh = float(measurement_heights.loc[measurement_heights['Site_name']==key]['measurement_height'].values)
+#         ch = float(measurement_heights.loc[measurement_heights['Site_name']==key]['canopy_height'].values)
+#         if (mh - ch)>12.5:
+#             lonlats_smearing.append((site_dict[key]['lonlat'][0], site_dict[key]['lonlat'][1]))
+#     except:
+#         pass
+#     lats.append(site_dict[key]['lonlat'][1])
+#     lons.append(site_dict[key]['lonlat'][0])
 
-print(lonlats)
-
-print(lonlats_smearing)
+# print(lonlats)
+# print(lonlats_smearing)
 
 # ----------- Using the new VPRM Processing Code --------------------
 
@@ -150,7 +155,7 @@ for c, i in enumerate(glob.glob(os.path.join(cfg['sat_image_path'], str(this_yea
                           which_evi='evi2',
                           drop_bands=True)
 
-vprm_inst.smearing(lonlats=lonlats_smearing)
+vprm_inst.smearing(lonlats=lonlats)
 
 vprm_inst.sort_and_merge_by_timestamp()
 
@@ -188,8 +193,7 @@ time_range = pd.date_range(start="{}-01-01".format(this_year),
 
 for c,t in enumerate(time_range):
     t0 = time.time()
-    vrbls = vprm_inst.get_vprm_variables(t, lat=lats, lon=lons,
-                                         add_era_variables=['swvl1']) # Add the soil water level 1. See the ERA5 documentation for more keys
+    vrbls = vprm_inst.get_vprm_variables(t, lat=lats, lon=lons) # Add the soil water level 1. See the ERA5 documentation for more keys
     if vrbls is None:
         continue
     else:
