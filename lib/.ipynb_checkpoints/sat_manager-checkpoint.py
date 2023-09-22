@@ -396,7 +396,30 @@ class modis(earthdata):
         self.sat = 'MODIS'
         self.product = product
         self.path = "MOLT"
+        self.resolution = None
+        
+        
+    def mask_lq_bands(self, bands):
+        
+        binary_repr_vec = np.vectorize(np.binary_repr)
+        t = binary_repr_vec(self.sat_img['sur_refl_qc_500m'].values)[0]
+        masks = dict()
+        for band in bands:
+            masks[int(band.split('B')[1])] = np.full(np.shape(self.sat_img), '0000')
 
+        for i in range(np.shape(self.sat_img)[0]):
+            for j in range(np.shape(self.sat_img)[1]):
+                for mask_int in masks.keys():
+                    masks[mask_int][i][j] = t[i][j][(mask_int-1)*4+2 : (mask_int)*4+2]
+                    
+        for mask_int in masks.keys():
+            masks[mask_int] = (masks[mask_int] != '0000')
+            self.sat_img['B{}'.format(mask_int)][masks[mask_int]] = np.nan
+        return
+
+    def get_resolution(self):
+        return self.sat_img.rio.resolution()
+        
     def individual_loading(self):
         if ('MOD09GA' in self.product) or ('MOD21' in self.product):
             self.sat_img = rxr.open_rasterio(self.sat_image_path, 
@@ -576,6 +599,10 @@ class copernicus_land_cover_map(satellite_data_manager):
         super().__init__()   
         self.load_kwargs = {}
         self.sat_image_path = sat_image_path
+        self.resolution = 92.2256325412261
+        
+    def get_resolution(self):
+        return self.resolution
         
     def individual_loading(self):
         try: 

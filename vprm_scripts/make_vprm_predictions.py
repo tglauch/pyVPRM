@@ -113,22 +113,37 @@ regridder_weights = os.path.join(cfg['predictions_path'],
 if args.hourly:
     for i in np.arange(1, days_in_year+1, 1):
         time_range=get_hourly_time_range(int(args.year), i)
-        preds = []
+        preds_gpp = []
+        preds_nee = []
         ts = []
         for t in time_range[:]:
             t0=time.time()
             print(t)
-            pred = vprm_inst.make_vprm_predictions(t, res_dict=res_dict,
+            pred = vprm_inst.make_vprm_predictions(t, fit_params_dict=res_dict,
                                                    regridder_weights=regridder_weights)
             if pred is None:
                 continue
-            preds.append(pred)
+            preds_gpp.append(pred['gpp'])
+            preds_nee.append(pred['nee'])
             ts.append(t)
             print(time.time()-t0)
-        preds = xr.concat(preds, 'time')
-        preds = preds.assign_coords({'time': ts})
-        preds.to_netcdf(os.path.join(cfg['predictions_path'],
-                                     'h{:02d}v{:02d}_{:03d}.h5'.format(h, v, i)))
+
+        preds_gpp = xr.concat(preds_gpp, 'time')
+        preds_gpp = preds_gpp.assign_coords({'time': ts})
+        outpath = os.path.join(cfg['predictions_path'],
+                               'gpp_h{:02d}v{:02d}_{:03d}.h5'.format(h, v, i))
+        if os.path.exists(outpath):
+            os.remove(outpath)
+        preds_gpp.to_netcdf(outpath)
+        
+        preds_nee = xr.concat(preds_nee, 'time')
+        preds_nee = preds_nee.assign_coords({'time': ts})
+        outpath = os.path.join(cfg['predictions_path'],
+                               'nee_h{:02d}v{:02d}_{:03d}.h5'.format(h, v, i))
+        if os.path.exists(outpath):
+            os.remove(outpath)
+        preds_nee.to_netcdf(outpath)
+
 else:
 
     ts = []

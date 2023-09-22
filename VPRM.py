@@ -31,7 +31,7 @@ def correct_time_list(array):
         array[inds[i]:inds[i+1]] += (i+1) * 365.25
     return array
 
-def do_lowess_smoothing(array_to_smooth, timestamps=None, vclass=None):
+def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=None):
     '''
         Performs lowess smoothing on a 2-D-array, where the first dimension is the time.
 
@@ -48,23 +48,32 @@ def do_lowess_smoothing(array_to_smooth, timestamps=None, vclass=None):
 
     if array_to_smooth.ndim == 1:
         if timestamps is None:
-            t_timestamp = range(len(array_to_smooth))
+            t_timestamp = np.arange(len(array_to_smooth))
         else:
             t_timestamp = correct_time_list(timestamps)
-        ret = lowess(array_to_smooth, t_timestamp,
-                     is_sorted=True, frac=0.2, it=1, return_sorted=False)
+        mask = np.isfinite(array_to_smooth)
+        if xvals is None:
+            xvals = t_timestamp[mask]
+        ret = lowess(array_to_smooth[mask], t_timestamp[mask],
+                     is_sorted=True, frac=0.2, it=1,
+                     xvals=xvals,
+                     return_sorted=False)
         return ret
     else:
         for j in range(np.shape(array_to_smooth)[1]):
             if timestamps is None:
-                t_timestamp = range(len(array_to_smooth[:, j]))
+                t_timestamp = np.arange(len(array_to_smooth[:, j]))
             else:
                 t_timestamp = correct_time_list(timestamps[:, j])
             if vclass!=None:
                 if vclass[j] == 8: # skip arrays with land type class 8 
                     continue
-            array_to_smooth[:, j] = lowess(array_to_smooth[:, j], t_timestamp,
-                         is_sorted=True, frac=0.2, it=1, return_sorted=False)
+            mask = np.isfinite(array_to_smooth[:, j])
+            if xvals is None:
+                xvals = t_timestamp[mask]
+            array_to_smooth[:, j] = lowess(array_to_smooth[:, j][mask], t_timestamp[mask],
+                                           is_sorted=True, frac=0.2, it=1, xvals=xvals,
+                                           return_sorted=False)
         return array_to_smooth.T
 
 class vprm: 
@@ -95,6 +104,8 @@ class vprm:
         self.ret_dict = dict()
         self.verbose = verbose
         self.counter = 0
+        self.fit_params_dict = None
+        self.res = None
         
         self.new = True
         self.timestamps = []
@@ -121,9 +132,9 @@ class vprm:
 
         self.map_copernicus_to_vprm_class = {0: 8, 111: 1, 113: 2,
                                              112:1 , 114:2, 115:3,
-                                             116:3, 121:5, 123:5,
-                                             122 : 5, 124 : 5,
-                                             125 : 5, 126: 5, 
+                                             116:3, 121:1, 123:2,
+                                             122 : 1, 124 : 2,
+                                             125 : 3, 126: 3, 
                                              20: 4, 30: 7, 90: 7,
                                              100: 7, 60: 8,
                                              40: 6, 50: 8,
@@ -266,7 +277,8 @@ class vprm:
                     drop_bands=True, 
                     which_evi=None,
                     max_evi=False,
-                    timestamp_key=None):
+                    timestamp_key=None,
+                    smearing=False):
         '''
             Add a new satellite image and calculate EVI and LSWI if desired
 
@@ -322,13 +334,13 @@ class vprm:
         if timestamp_key is not None:
             handler.sat_img = handler.sat_img.rename({timestamp_key: 'timestamps'})
         if self.sites is not None:
-            handler = self.smearing(sat_img=handler, lonlats=self.lonlats,
-                                    keys=['evi', 'lswi'])
+            if smearing:
+                handler = self.smearing(sat_img=handler, lonlats=self.lonlats,
+                                        keys=['evi', 'lswi'])
             handler.reduce_along_lat_lon(lon=[i[0] for i in self.lonlats],
                                          lat=[i[1] for i in self.lonlats],
                                          new_dim_name='site_names', 
                                          interp_method='nearest')
-            
             handler.sat_img = handler.sat_img.assign_coords({'site_names': [i.get_site_name() for i in self.sites]})
         self.sat_imgs.append(handler)  
         self.timestamps.append(handler.get_recording_time())
@@ -423,7 +435,7 @@ class vprm:
 
     
     def add_land_cover_map(self, land_cover_map, var_name='band_1',
-                           save_path=None, filter_size=5):
+                           save_path=None, filter_size=None):
         '''
             Add the land cover map. Either use a pre-calculated one or do the calculation on the fly.
 
@@ -444,7 +456,7 @@ class vprm:
             self.land_cover_type.sat_img = self.land_cover_type.sat_img.rename({list(self.land_cover_type.sat_img.keys())[0]: 'land_cover_type'})
  
         else:
-            print('Aggregating land cover map on vprm land cover types and projecting on sat image grids. This step takes time and memory')
+            print('Generating satellite data compatible land cover map')
             land_cover_map.reproject(proj=self.prototype.sat_img.rio.crs.to_proj4())
             for key in self.map_copernicus_to_vprm_class.keys():
                 land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_copernicus_to_vprm_class[key]
@@ -452,21 +464,24 @@ class vprm:
             count_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values))
             veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
                                   for i in self.map_copernicus_to_vprm_class.keys()])
-            if filter_size is not None:
-                for i in veg_inds:
-                    mask = np.array(land_cover_map.sat_img[var_name].values == i, dtype=float)
-                    ta  = scipy.ndimage.uniform_filter(mask, size=(filter_size, filter_size)) * 25
-                    f_array[ta>count_array] = i 
-                    count_array[ta>count_array] = ta[ta>count_array]
-                f_array[f_array==0]=np.nan
-                land_cover_map.sat_img[var_name].values = f_array
-                del ta
-                del count_array
-                del f_array
-                del mask
+            if filter_size is None:
+                filter_size = int(np.ceil(self.sat_imgs.sat_img.rio.resolution()[0]/land_cover_map.get_resolution()))
+                print('Filter size {}:'.format(filter_size))
+            for i in veg_inds:
+                mask = np.array(land_cover_map.sat_img[var_name].values == i, dtype=float)
+                ta  = scipy.ndimage.uniform_filter(mask, size=(filter_size, filter_size)) * 25
+                f_array[ta>count_array] = i 
+                count_array[ta>count_array] = ta[ta>count_array]
+            f_array[f_array==0]=np.nan
+            land_cover_map.sat_img[var_name].values = f_array
+            del ta
+            del count_array
+            del f_array
+            del mask
             land_cover_map.sat_img = land_cover_map.sat_img.reindex(y=sorted(list(land_cover_map.sat_img.y)))
             land_cover_map.sat_img = land_cover_map.sat_img.reindex(x=sorted(list(land_cover_map.sat_img.x)))
             t =  land_cover_map.sat_img.sel(x=self.xs, y=self.ys, method="nearest").to_array().values[0]
+#            t =  land_cover_map.sat_img.sel(x=self.x_long, y=self.y_lat, method="nearest").to_array().values[0]
             self.land_cover_type = copy.deepcopy(self.prototype)
             self.land_cover_type.sat_img = self.land_cover_type.sat_img.assign({'land_cover_type': (['y','x'], t)}) 
             if save_path is not None:
@@ -515,7 +530,7 @@ class vprm:
             if 'timestamps' in keys:
                 keys.remove('timestamps')
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img.sel(site_names=i)['timestamps'].values) for i in self.sat_imgs.sat_img.site_names.values]).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img.sel(site_names=i)['timestamps'].values, xvals=self.sat_imgs.sat_img['time']) for i in self.sat_imgs.sat_img.site_names.values]).T)})
             else:
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values) for i in self.sat_imgs.sat_img.site_names.values]).T)})
@@ -525,7 +540,7 @@ class vprm:
             if 'timestamps' in keys:
                 keys.remove('timestamps')
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=self.sat_imgs.sat_img['time']) for i, x_coord in enumerate(self.xs))).T)})
             else:
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values) for i, x_coord in enumerate(self.xs))).T)})
@@ -540,7 +555,7 @@ class vprm:
                     x_ind = np.argmin(np.abs(x - self.sat_imgs.sat_img.coords['x'].values))
                     y_ind = np.argmin(np.abs(y - self.sat_imgs.sat_img.coords['y'].values))
                     for key in keys:
-                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,y_ind-10:y_ind+10, x_ind+i].values) for i in np.arange(-10, 10, 1))).T    
+                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,y_ind-10:y_ind+10, x_ind+i].values, xvals=self.sat_imgs.sat_img['time']) for i in np.arange(-10, 10, 1))).T    
             else:
                 for ll in lonlats:
                     x, y = t.transform(ll[0], ll[1])
@@ -819,7 +834,7 @@ class vprm:
                 self.counter += 1
                 if self.counter >= (len(self.timestamps) - 1):
                     print('No data after {}'.format(datetime_utc))
-                    self.counter = len(self.timestamps) -1 
+                    self.counter = len(self.timestamps) - 1 
                     return False
                 if np.abs((datetime_utc - self.get_current_timestamp()).days)<=4:
                     self.new = True
@@ -955,44 +970,43 @@ class vprm:
         era_keys = ['ssrd', 't2m']       
         era_keys.extend(add_era_variables)
             
-        for dt_counter, dt in enumerate(datetime_utc):
-            if (self.t2m is None):
-                    self.init_temps()
-            self.counter = 0
-            hour = dt_counter.hour
-            day = dt_counter.day
-            month = dt_counter.month
-            year = dt_counter.year
+        if (self.t2m is None):
+                self.init_temps()
+        self.counter = 0
+        hour = datetime_utc.hour
+        day = datetime_utc.day
+        month = datetime_utc.month
+        year = datetime_utc.year
 
-            img_status = self._set_sat_img_counter(dt_counter)
-            if img_status is False:
-                return None
-            
-            if (lat != self.buffer['cur_lat']) | (lon != self.buffer['cur_lon']):
-                self.new = True # Change in lat lon needs new query from satellite images
-                self.buffer['cur_lat'] = lat
-                self.buffer['cur_lon'] = lon 
+        img_status = self._set_sat_img_counter(datetime_utc)
+        if img_status is False:
+            return None
 
-            if len(era_keys) > 0:
-                if self.prototype_lat_lon is None:
-                    src_x = self.prototype.sat_img.coords['x'].values
-                    src_y = self.prototype.sat_img.coords['y'].values
-                    X, Y = np.meshgrid(src_x, src_y)
-                    t = Transformer.from_crs(self.prototype.sat_img.rio.crs,
-                                            '+proj=longlat +datum=WGS84')
-                    x_long, y_lat = t.transform(X, Y)
-                    self.prototype_lat_lon = xr.Dataset({"lon": (["y", "x"], x_long ,
-                                         {"units": "degrees_east"}),
-                                          "lat": (["y", "x"], y_lat,
-                                         {"units": "degrees_north"})})
-                    self.prototype_lat_lon = self.prototype_lat_lon.set_coords(['lon', 'lat'])
-                self.load_weather_data(hour, day, month,
-                                       year, era_keys=era_keys)
-                if (lat is None) & (lon is None):
-                        self.era5_inst.regrid(dataset=self.prototype_lat_lon,
-                                              weights=regridder_weights,
-                                              n_cpus=self.n_cpus)
-                        
+        if (lat != self.buffer['cur_lat']) | (lon != self.buffer['cur_lon']):
+            self.new = True # Change in lat lon needs new query from satellite images
+            self.buffer['cur_lat'] = lat
+            self.buffer['cur_lon'] = lon 
+
+        if len(era_keys) > 0:
+            if self.prototype_lat_lon is None:
+                src_x = self.prototype.sat_img.coords['x'].values
+                src_y = self.prototype.sat_img.coords['y'].values
+                X, Y = np.meshgrid(src_x, src_y)
+                t = Transformer.from_crs(self.prototype.sat_img.rio.crs,
+                                        '+proj=longlat +datum=WGS84')
+                x_long, y_lat = t.transform(X, Y)
+                self.prototype_lat_lon = xr.Dataset({"lon": (["y", "x"], x_long ,
+                                     {"units": "degrees_east"}),
+                                      "lat": (["y", "x"], y_lat,
+                                     {"units": "degrees_north"})})
+                self.prototype_lat_lon = self.prototype_lat_lon.set_coords(['lon', 'lat'])
+            self.load_weather_data(hour, day, month,
+                                   year, era_keys=era_keys)
+            if (lat is None) & (lon is None):
+                    self.era5_inst.regrid(dataset=self.prototype_lat_lon,
+                                          weights=regridder_weights,
+                                          n_cpus=self.n_cpus)
+
         ret_dict = dict()
         ret_dict['evi'] = self.get_evi(lon, lat)
         ret_dict['Ps'] = self.get_p_scale(lon, lat)
@@ -1009,7 +1023,7 @@ class vprm:
                     ret_dict[i] = self.era5_inst.get_data(key=i).values.flatten()
         return ret_dict  
     
-    def make_vprm_predictions(self, date, res_dict=None,
+    def make_vprm_predictions(self, date, fit_params_dict=None,
                               regridder_weights=None,
                               no_flux_veg_types=[0, 5, 8]):
         '''
@@ -1017,7 +1031,7 @@ class vprm:
 
                 Parameters:
                     date (datetime object): The date for the prediction
-                    res_dict (dict) : Dict with fit parameters ('lamb', 'par0', 'alpha', 'beta') 
+                    fit_params_dict (dict) : Dict with fit parameters ('lamb', 'par0', 'alpha', 'beta') 
                                       for the different vegetation types.
                     regridder_weights (str): Path to the weights file for regridding from ERA5 
                                              to the satellite grid
@@ -1027,15 +1041,14 @@ class vprm:
                         None
         '''
         
-        if self.res_dict == None:
-            if res_dict is None:
+        if self.res == None:
+            if fit_params_dict is None:
                 print('Need to provide a dictionary with the fit parameters')
                 return 
             else:
                 for i in no_flux_veg_types:
-                    res_dict[i] = {'lamb': 0, 'par0': 0,
+                    fit_params_dict [i] = {'lamb': 0, 'par0': 0,
                                    'alpha': 0, 'beta': 0}
-                self.res_dict = res_dict
                 self.res = copy.deepcopy(self.land_cover_type) 
                 keys = list(self.land_cover_type.sat_img.keys())
                 self.res.sat_img = self.res.sat_img.drop(keys) 
@@ -1047,10 +1060,10 @@ class vprm:
                         if np.isnan(t[i,j]):
                             lamb[i,j], par0[i,j], alpha[i,j], beta[i,j] = np.nan, np.nan, np.nan, np.nan
                         else:
-                            lamb[i,j] = res_dict[int(t[i,j])]['lamb']
-                            par0[i,j] = res_dict[int(t[i,j])]['par0']
-                            alpha[i,j] = res_dict[int(t[i,j])]['alpha']
-                            beta[i,j] = res_dict[int(t[i,j])]['beta']
+                            lamb[i,j] = fit_params_dict[int(t[i,j])]['lamb']
+                            par0[i,j] = fit_params_dict[int(t[i,j])]['par0']
+                            alpha[i,j] = fit_params_dict[int(t[i,j])]['alpha']
+                            beta[i,j] = fit_params_dict[int(t[i,j])]['beta']
                 self.res.sat_img = self.res.sat_img.assign({'lamb': (['y','x'], lamb)}) 
                 self.res.sat_img = self.res.sat_img.assign({'par0': (['y','x'], par0)}) 
                 self.res.sat_img = self.res.sat_img.assign({'alpha': (['y','x'], alpha)}) 
@@ -1113,19 +1126,21 @@ class vprm:
             data_for_fit = pd.concat(data_for_fit)
 
             best_mse = np.inf    
-            for i in range(20):
+            for i in range(100):
                 func = lambda x, a, b: a * x['t2m'] + b
                 fit_respiration = curve_fit(func, data_for_fit, data_for_fit['respiration'], maxfev=5000,
-                                            p0=[0, np.random.uniform(-1,1)]) 
+                                            p0=[np.random.uniform(-0.5, 0.5),
+                                                np.random.uniform(-0.5, 0.5)]) 
                 mse = np.mean((func(data_for_fit, fit_respiration[0][0], fit_respiration[0][1]) - data_for_fit['respiration'])**2)
                 if mse < best_mse:
                     best_mse = mse
                     best_fit_params = fit_respiration
-                best_fit_params_dict[key] = {'respiration': best_fit_params[0]}
+                best_fit_params_dict[key] = {'alpha': best_fit_params[0][0],
+                                             'beta': best_fit_params[0][1]}
 
             #GPP
             best_mse = np.inf
-            for i in range(20):  
+            for i in range(100):  
                 func = lambda x, lamb, par0: (lamb * data_for_fit['Ws'] * data_for_fit['Ts'] * data_for_fit['Ps']) * data_for_fit['evi'] * data_for_fit['par'] / (1 + data_for_fit['par']/par0) 
                 fit_gpp = curve_fit(func,
                                     data_for_fit, data_for_fit['gpp'], maxfev=5000,
@@ -1134,6 +1149,8 @@ class vprm:
                 if mse < best_mse:
                     best_mse = mse
                     best_fit_params = fit_gpp 
-                best_fit_params_dict[key]['gpp'] =  best_fit_params[0]
+                best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
+                best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
+
 
         return best_fit_params_dict

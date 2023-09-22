@@ -6,7 +6,8 @@ p = argparse.ArgumentParser(
         description = "Commend Line Arguments",
         formatter_class = argparse.RawTextHelpFormatter)
 p.add_argument("--config", type=str)
-p.add_argument("--script", type=str) # /home/b/b309233/software/VPRM_preprocessor/VPRM_predictions.py
+p.add_argument("--script", type=str) 
+p.add_argument("--hourly", action='store_true', default=False)  # /home/b/b309233/software/VPRM_preprocessor/VPRM_predictions.py
 #/home/b/b309233/software/VPRM_preprocessor/neural_network/nn_training_data.py 
 args = p.parse_args()
 
@@ -18,13 +19,21 @@ with open(args.config, "r") as stream:
 
 
 which_sat = cfg['satellite']
-n= 6 # chunk size
-n_cpus = 124 
-raw_code =' python ' + args.script + ' --year {} --h {} --v {} --config {} --n_cpus ' + str(int(n_cpus/n)) + ' & ' 
+n= 1 # chunk size
+n_cpus = 124
+if args.hourly:
+    add_str = ' --hourly '
+else:
+    add_str = ''
+raw_code =' python ' + args.script + ' --year {} --h {} --v {} --config {} --n_cpus ' + str(int(n_cpus/n)) + add_str + ' & ' 
 
 
-for year in [2012, 2013, 2014]:# cfg['years']:
+for i, year in enumerate(cfg['years']):
+    if i>0:
+        continue
     for counter, hv_chunk in enumerate([cfg['hvs'][i:i + n] for i in range(0, len(cfg['hvs']), n)]):
+        if counter>0:
+            continue
         sub_code = ''
 
         for i in hv_chunk:
