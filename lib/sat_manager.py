@@ -33,6 +33,7 @@ from lxml import etree
 from datetime import datetime
 from rasterio.warp import calculate_default_transform
 import h5py
+from dateutil import parser
 
 def geodesic_point_buffer(lat, lon, km):
     buf = Point(0, 0).buffer(km * 1000)  # distance in metres
@@ -398,23 +399,29 @@ class modis(earthdata):
         self.path = "MOLT"
         self.resolution = None
         
+    def start_date(self):
+        return parser.parse(self.sat_img.attrs['GRANULEBEGINNINGDATETIME'].split(',')[0]).replace(tzinfo=None)
         
-    def mask_lq_bands(self, bands):
+    def stop_date(self):
+        return parser.parse(self.sat_img.attrs['GRANULEENDINGDATETIME'].split(',')[-1]).replace(tzinfo=None)
         
+    def mask_bad_pixels(self, bands=None):
+        if bands is None:
+            bands=self.bands
         binary_repr_vec = np.vectorize(np.binary_repr)
-        t = binary_repr_vec(self.sat_img['sur_refl_qc_500m'].values)[0]
+        t = binary_repr_vec(np.array(self.sat_img['sur_refl_qc_500m'].values, dtype=int))
         masks = dict()
         for band in bands:
-            masks[int(band.split('B')[1])] = np.full(np.shape(self.sat_img), '0000')
+            masks[int(band.split('B')[1])] = np.full(np.shape(self.sat_img[band]), '0000')
 
-        for i in range(np.shape(self.sat_img)[0]):
-            for j in range(np.shape(self.sat_img)[1]):
+        for i in range(np.shape(t)[0]):
+            for j in range(np.shape(t)[1]):
                 for mask_int in masks.keys():
                     masks[mask_int][i][j] = t[i][j][(mask_int-1)*4+2 : (mask_int)*4+2]
                     
         for mask_int in masks.keys():
             masks[mask_int] = (masks[mask_int] != '0000')
-            self.sat_img['B{}'.format(mask_int)][masks[mask_int]] = np.nan
+            self.sat_img['B{:02d}'.format(mask_int)].values[masks[mask_int]] = np.nan
         return
 
     def get_resolution(self):
@@ -431,12 +438,15 @@ class modis(earthdata):
             self.use_keys = list(self.sat_img.keys())
         self.sat_img = self.sat_img[self.use_keys]
         rename_dict = dict()
+        bands = []
         for i in self.use_keys:
             if ('sur_refl' in i) & ('_b' in i):
                 rename_dict[i] = i.replace('_1', '').split('_')[-1].replace('b', 'B')
+                bands.append(rename_dict[i])
             else:
                 rename_dict[i] = i
         self.sat_img = self.sat_img.rename(rename_dict)
+        self.bands = bands
         self.keys = np.array(list(self.sat_img.data_vars))
         for key in self.keys:
             self.sat_img[key] = self.sat_img[key] * self.sat_img[key].scale_factor
