@@ -2,8 +2,7 @@ import sys
 import os
 import pathlib
 sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
-from sat_manager import VIIRS, sentinel2, modis, earthdata,\
+from lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
 from VPRM import vprm
 import yaml
@@ -65,9 +64,12 @@ file_collections = np.unique([i.split('.')[1] for i in
 
 #Load the data
 for c0, f in enumerate(sorted(file_collections)):
+    if c0>2:
+        continue
     handlers = []
     if cfg['satellite'] == 'modis':
         for c, i in sorted(enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*{}*.h*'.format(f))))):
+            print(i)
             if c == 0:
                 handler = modis(sat_image_path=i)
                 handler.load()
@@ -90,7 +92,8 @@ for c0, f in enumerate(sorted(file_collections)):
     if cfg['satellite'] == 'modis':
         vprm_inst.add_sat_img(handler, b_nir='B02', b_red='B01',
                               b_blue='B03', b_swir='B06',
-                             drop_bands=True) 
+                              drop_bands=True,
+                              timestamp_key='sur_refl_day_of_year',) 
     elif cfg['satellite'] == 'viirs':
         vprm_inst.add_sat_img(handler, b_nir='SurfReflect_I2', b_red='SurfReflect_I1',
                               b_blue='no_blue_sensor', b_swir='SurfReflect_I3',
@@ -116,7 +119,7 @@ else:
                                               'veg_map_on_modis_grid.nc'))
  
 # Apply lowess smoothing
-vprm_inst.lowess()
+#vprm_inst.lowess(gap_filled=True, frac=0.2, it=3)
 
 # Regrid to WRF Grid defined in out_grid 
 out_grid = dict()

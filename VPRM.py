@@ -26,19 +26,36 @@ from multiprocessing import Process
 
 def adjust_timestamps(sat_img, start_date, stop_date, timestamp0):
     start_day = start_date.timetuple().tm_yday
-    stop_day = stop_date.timetuple().tm_yday
-    print(np.shape(sat_img['timestamps']))
-    for i in range(np.shape(sat_img['timestamps'])[0]):
-        for j in range(np.shape(sat_img['timestamps'])[1]):
-            this_ts = sat_img['timestamps'][i][j]
+    stop_day = stop_date.timetuple().tm_yday    
+    if sat_img['timestamps'].ndim == 1:
+        for i in range(np.shape(sat_img['timestamps'])[0]):
+            this_ts = sat_img['timestamps'][i]
             if np.abs(this_ts - start_day) < np.abs(this_ts - stop_day):
-                sat_img['timestamps'][i][j] = ((start_date + datetime.timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
+                sat_img['timestamps'][i] = ((start_date + datetime.timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
             else:
-                sat_img['timestamps'][i][j] = ((stop_date - datetime.timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days
+                sat_img['timestamps'][i] = ((stop_date - datetime.timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days    
+    else:
+        for this_ts in np.unique(sat_img['timestamps'].values): # this_ts is the day of the year
+            if np.isnan(this_ts):
+                this_ts = start_day
+            if np.abs(this_ts - start_day) < np.abs(this_ts - stop_day):
+                sat_img['timestamps'].values[sat_img['timestamps'].values==this_ts] = ((start_date + datetime.timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
+            else:
+                sat_img['timestamps'].values[sat_img['timestamps'].values==this_ts] = ((stop_date - datetime.timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days
+            
+        
+#         for i in range(np.shape(sat_img['timestamps'])[0]):
+#             for j in range(np.shape(sat_img['timestamps'])[1]):
+#                 this_ts = sat_img['timestamps'][i][j]
+#                 if np.abs(this_ts - start_day) < np.abs(this_ts - stop_day):
+#                     sat_img['timestamps'][i][j] = ((start_date + datetime.timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
+#                 else:
+#                     sat_img['timestamps'][i][j] = ((stop_date - datetime.timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days
     return
 
 
-def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=None):
+def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=None,
+                        frac=0.25, it=3):
     '''
         Performs lowess smoothing on a 2-D-array, where the first dimension is the time.
 
@@ -59,10 +76,11 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=Non
         else:
             t_timestamp = timestamps
         mask = np.isfinite(array_to_smooth)
+        print(t_timestamp, array_to_smooth)
         if xvals is None:
             xvals = t_timestamp[mask]
         ret = lowess(array_to_smooth[mask], t_timestamp[mask],
-                     is_sorted=True, frac=0.2, it=1,
+                     is_sorted=True, frac=frac, it=it,
                      xvals=xvals,
                      return_sorted=False)
         return ret
@@ -79,7 +97,7 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=Non
             if xvals is None:
                 xvals = t_timestamp
             array_to_smooth[:, j] = lowess(array_to_smooth[:, j][mask], t_timestamp[mask],
-                                           is_sorted=True, frac=0.2, it=1, xvals=xvals,
+                                           is_sorted=True, frac=frac, it=it, xvals=xvals,
                                            return_sorted=False)
         return array_to_smooth.T
 
@@ -316,12 +334,6 @@ class vprm:
             return  
         handler.sat_img = handler.sat_img.reindex(y=sorted(list(handler.sat_img.y)))
         handler.sat_img = handler.sat_img.reindex(x=sorted(list(handler.sat_img.x)))
-        if isinstance(drop_bands, list):
-            drop_keys = drop_bands
-        else:
-            drop_keys = list(handler.sat_img.keys())
-        if timestamp_key is not None:
-            drop_keys.remove(timestamp_key)
         if which_evi in ['evi', 'evi2']:
             nir = handler.sat_img[b_nir] 
             red = handler.sat_img[b_red]
@@ -337,8 +349,6 @@ class vprm:
                 temp_evi[~np.isfinite(temp_evi)] = max_evi
             handler.sat_img = handler.sat_img.assign({'evi': (['y','x'], temp_evi)})
             handler.sat_img = handler.sat_img.assign({'lswi': (['y','x'], temp_lswi)}) 
-        if drop_bands:
-                handler.sat_img = handler.sat_img.drop(drop_keys)
         if timestamp_key is not None:
             handler.sat_img = handler.sat_img.rename({timestamp_key: 'timestamps'})
         if self.sites is not None:
@@ -351,11 +361,20 @@ class vprm:
                                          interp_method='nearest')
             handler.sat_img = handler.sat_img.assign_coords({'site_names': [i.get_site_name() for i in self.sites]})
         if mask_bad_pixels:
-            if which_evi is None:
+            bands_to_mask = []
+            for btm in [b_nir, b_red, b_blue, b_swir]:
+                if btm is not None:
+                      bands_to_mask.append(btm)
+            if bands_to_mask == []:   
                 handler.mask_bad_pixels()
             else:
-                handler.mask_bad_pixels(['evi', 'lswi'])
-            
+                handler.mask_bad_pixels(bands_to_mask)                
+        if drop_bands:
+            if isinstance(drop_bands, list):
+                drop_keys = drop_bands
+                handler.sat_img = handler.sat_img.drop(drop_keys)
+            else:
+                handler.drop_bands()
         self.sat_imgs.append(handler)  
         self.timestamps.append(handler.get_recording_time())
         return
@@ -448,18 +467,14 @@ class vprm:
         print('Loaded data from {} to {}'.format(self.timestamp_start, self.timestamp_end))
         day_steps = [i.days for i in (self.timestamps - self.timestamp_start)]
         if 'timestamps' in list(self.sat_imgs[0].sat_img.keys()):
-            procs = []
             for sat_img_handler in self.sat_imgs:
-                start_date = sat_img_handler.start_date()
-                stop_date = sat_img_handler.stop_date()
-                proc=Process(target=adjust_timestamps, args=(sat_img_handler.sat_img, start_date, stop_date, self.timestamp_start))
-                procs.append(proc)
-            for proc in procs:
-                proc.start()
-            for proc in procs:
-                proc.join()
+                adjust_timestamps(sat_img_handler.sat_img, sat_img_handler.start_date(),
+                                  sat_img_handler.stop_date(), self.timestamp_start)
+            # else:
+            #     Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(adjust_timestamps)(sat_img_handler.sat_img, sat_img_handler.start_date(), sat_img_handler.stop_date(), self.timestamp_start) for sat_img_handler in self.sat_imgs)
         self.sat_imgs = satellite_data_manager(sat_img = xr.concat([i.sat_img for i in np.array(self.sat_imgs)[sort_inds]], 'time'))
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time": day_steps})
+        self.time_key = 'time'
         return
 
     
@@ -540,7 +555,7 @@ class vprm:
             self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['site_names'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})              
         return
     
-    def lowess(self, lonlats=None, keys=None):
+    def lowess(self, lonlats=None, keys=None, gap_filled=False, frac=0.25, it=3):
         '''
             Performs the lowess smoothing
 
@@ -553,26 +568,32 @@ class vprm:
         
         if keys is None:
             keys = list(self.sat_imgs.sat_img.data_vars)
-        xvals = np.arange(self.tot_num_days)       
-        if self.sites is not None:
-            
+        if gap_filled:
+            xvals = np.arange(self.tot_num_days)    
+        else:
+            xvals = self.sat_imgs.sat_img['time']
+        for k in keys:
+            if (not 'B' in k) & (not 'evi' in k) &\
+               (not 'lswi' in k) & (not 'timestamps' in k):
+                keys.remove(k)
+        if self.sites is not None:         
             if 'timestamps' in keys:
                 keys.remove('timestamps')
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img.sel(site_names=i)['timestamps'].values, xvals=xvals) for i in self.sat_imgs.sat_img.site_names.values]).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img.sel(site_names=i)['timestamps'].values, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})
             else:
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.timestamps, xvals=xvals) for i in self.sat_imgs.sat_img.site_names.values]).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.timestamps, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})
 
             
         elif lonlats is None:
             if 'timestamps' in keys:
                 keys.remove('timestamps')
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
             else:
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.timestamps, xvals=xvals) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.timestamps, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
                 
         else:
             t = Transformer.from_crs('+proj=longlat +datum=WGS84',
@@ -584,15 +605,16 @@ class vprm:
                     x_ind = np.argmin(np.abs(x - self.sat_imgs.sat_img.coords['x'].values))
                     y_ind = np.argmin(np.abs(y - self.sat_imgs.sat_img.coords['y'].values))
                     for key in keys:
-                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,y_ind-10:y_ind+10, x_ind+i].values, xvals=xvals) for i in np.arange(-10, 10, 1))).T    
+                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,y_ind-10:y_ind+10, x_ind+i].values, xvals=xvals, frac=frac, it=it) for i in np.arange(-10, 10, 1))).T    
             else:
                 for ll in lonlats:
                     x, y = t.transform(ll[0], ll[1])
                     x_ind = np.argmin(np.abs(x - self.sat_imgs.sat_img.coords['x'].values))
                     y_ind = np.argmin(np.abs(y - self.sat_imgs.sat_img.coords['y'].values))
                     for key in keys:
-                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.timestamps, xvals=xvals) for i in np.arange(-10, 10, 1))).T 
-        self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time": xvals})        
+                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.timestamps, xvals=xvals, frac=frac, it=it) for i in np.arange(-10, 10, 1))).T 
+        self.time_key = 'time_gap_filled'
+        self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({'time_gap_filled': xvals})        
         return
 
     def load_weather_data(self, hour, day, month, year, era_keys):
@@ -751,11 +773,11 @@ class vprm:
         if (self.new is False) & ('evi' in self.buffer.keys()):
             return self.buffer['evi']
         if site_name is not None:
-            self.buffer['evi'] =  float(self.sat_imgs.sat_img.sel(site_names=site_name).isel({'time':self.counter})['evi'].values)
+            self.buffer['evi'] =  float(self.sat_imgs.sat_img.sel(site_names=site_name).isel({self.time_key :self.counter})['evi'].values)
         elif lon is not None:
-            self.buffer['evi'] = self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='evi', isel={'time': self.counter}).values.flatten()
+            self.buffer['evi'] = self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='evi', isel={self.time_key : self.counter}).values.flatten()
         else:
-            self.buffer['evi'] = self.sat_imgs.sat_img['evi'].isel({'time': self.counter}).values
+            self.buffer['evi'] = self.sat_imgs.sat_img['evi'].isel({self.time_key : self.counter}).values
         return self.buffer['evi']
         
 
@@ -774,9 +796,9 @@ class vprm:
         if self.new is False:
             return self.buffer[key]
         if counter_range is None:
-            select_dict = {'time': self.counter}
+            select_dict = {self.time_key : self.counter}
         else:
-            select_dict = {'time': counter_range}
+            select_dict = {self.time_key : counter_range}
         
         if lon is not None:     
             self.buffer[key] = self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key=key, isel=select_dict).values.flatten()
@@ -800,9 +822,9 @@ class vprm:
             return self.buffer['all_sat_keys']
         
         if counter_range is None:
-            select_dict = {'time': self.counter}
+            select_dict = {self.time_key: self.counter}
         else:
-            select_dict = {'time': counter_range}
+            select_dict = {self.time_key: counter_range}
             
         if lon is not None:     
             self.buffer['all_sat_keys'] = self.sat_imgs.value_at_lonlat(lon, lat, as_array=True, isel=select_dict)
@@ -824,11 +846,11 @@ class vprm:
         if (self.new is False) & ('lswi' in self.buffer.keys()):
             return self.buffer['lswi']
         if site_name is not None:
-            self.buffer['lswi'] =  float(self.sat_imgs.sat_img.sel(site_names=site_name).isel({'time':self.counter})['lswi'].values)
+            self.buffer['lswi'] =  float(self.sat_imgs.sat_img.sel(site_names=site_name).isel({self.time_key:self.counter})['lswi'].values)
         elif lon is not None:
-            self.buffer['lswi'] =  self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='lswi', isel={'time': self.counter}).values.flatten()
+            self.buffer['lswi'] =  self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='lswi', isel={self.time_key: self.counter}).values.flatten()
         else:
-            self.buffer['lswi'] = self.sat_imgs.sat_img['lswi'].isel({'time': self.counter}).values
+            self.buffer['lswi'] = self.sat_imgs.sat_img['lswi'].isel({self.time_key: self.counter}).values
         return self.buffer['lswi']
    
     def init_temps(self):
@@ -860,33 +882,19 @@ class vprm:
 
     def _set_sat_img_counter(self, datetime_utc):
         counter_new = (datetime_utc - self.timestamp_start).days
-        if counter_new != self.counter
+        counter_new = np.argmin(np.abs(self.sat_imgs.sat_img[self.time_key].values - counter_new))
+        if (counter_new < 0) | (counter_new >= len(self.sat_imgs.sat_img[self.time_key])-1):
+            print('No data for {}'.format(datetime_utc))
+            self.counter = 0
+            return False
+        elif counter_new != self.counter:
+            self.new = True
             self.counter = counter_new
-        if (datetime_utc - self.get_current_timestamp()).days >= 4:
-            while True:
-                self.counter += 1
-                if self.counter >= (len(self.timestamps) - 1):
-                    print('No data after {}'.format(datetime_utc))
-                    self.counter = len(self.timestamps) - 1 
-                    return False
-                if np.abs((datetime_utc - self.get_current_timestamp()).days)<=4:
-                    self.new = True
-                    return
-        elif (self.get_current_timestamp() - datetime_utc).days >= 4:
-            while True:
-                self.counter -= 1
-                if self.counter < 0:
-                    print('No data before {}'.format(datetime_utc))
-                    self.counter = 0
-                    return False # No satellite image available for given date
-                if np.abs((datetime_utc - self.get_current_timestamp()).days)<4:
-                    self.new=True
-                    return
+            return
         else:
             self.new = False
             return # Still same satellite image
             
-
     def get_neural_network_variables(self, datetime_utc, lat=None, lon=None,
                                      era_variables=['ssrd', 't2m'], regridder_weights=None,
                                      sat_img_keys=None):

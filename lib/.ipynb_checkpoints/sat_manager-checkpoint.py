@@ -408,24 +408,37 @@ class modis(earthdata):
     def mask_bad_pixels(self, bands=None):
         if bands is None:
             bands=self.bands
-        binary_repr_vec = np.vectorize(np.binary_repr)
-        t = binary_repr_vec(np.array(self.sat_img['sur_refl_qc_500m'].values, dtype=int))
+         
+        band_nums = [int(band.split('B')[1]) for band in bands]
         masks = dict()
-        for band in bands:
-            masks[int(band.split('B')[1])] = np.full(np.shape(self.sat_img[band]), '0000')
 
-        for i in range(np.shape(t)[0]):
-            for j in range(np.shape(t)[1]):
-                for mask_int in masks.keys():
-                    masks[mask_int][i][j] = t[i][j][(mask_int-1)*4+2 : (mask_int)*4+2]
-                    
+        for b in band_nums:
+
+            start_bit = (b - 1) * 4 + 2 # Bit 4
+            end_bit = b * 4 + 1 # Bit 8 (inclusive)
+
+            # Calculate the number of bits to extract
+            num_bits_to_extract = end_bit - start_bit + 1
+
+            # Create an integer bitmask with the desired bits set to 1
+            bit_mask = (1 << num_bits_to_extract) - 1
+
+            # Use a bitwise AND operation to extract the specified bits
+            self.sat_img['sur_refl_qc_500m'].values[np.isnan(self.sat_img['sur_refl_qc_500m'].values)] = int('1'*31,2)
+            masks[b] = (np.array(self.sat_img['sur_refl_qc_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit 
+
         for mask_int in masks.keys():
-            masks[mask_int] = (masks[mask_int] != '0000')
+            masks[mask_int] = (masks[mask_int] != int('0000', 2)) #& (masks[mask_int] != '0111')  &\
+                             # (masks[mask_int] != '1000') & (masks[mask_int] != '1010') &\
+                             # (masks[mask_int] != '1100')
             self.sat_img['B{:02d}'.format(mask_int)].values[masks[mask_int]] = np.nan
         return
 
     def get_resolution(self):
         return self.sat_img.rio.resolution()
+    
+    def drop_bands(self):
+        self.sat_img = self.sat_img.drop(self.bands)
         
     def individual_loading(self):
         if ('MOD09GA' in self.product) or ('MOD21' in self.product):
@@ -594,7 +607,7 @@ class proba_v(satellite_data_manager):
         self.sat_img = rxr.open_rasterio(self.sat_image_path, 
                                  masked=True, cache=False)   
         self.keys = np.array(list(self.sat_img.data_vars))
-        handler.sat_img.rio.write_crs(handler.sat_img.attrs['MAP_PROJECTION_WKT'],
+        self.sat_img.rio.write_crs(self.sat_img.attrs['MAP_PROJECTION_WKT'],
                               inplace=True)
         
     def get_recording_time(self):

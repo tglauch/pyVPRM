@@ -68,7 +68,10 @@ for c, i in enumerate(sorted(glob.glob(os.path.join(cfg['sat_image_path'], str(a
         vprm_inst.add_sat_img(handler, b_nir='B02', b_red='B01',
                               b_blue='B03', b_swir='B06',
                               which_evi='evi', max_evi=1,
-                              drop_bands=True)
+                              drop_bands=True,
+                              timestamp_key='sur_refl_day_of_year',
+                              gap_filled=True,
+                              mask_bad_pixels=True)
     else:
         handler = VIIRS(sat_image_path=i)
         handler.load()

@@ -85,7 +85,8 @@ class fluxnet(flux_tower_data):
             self.vars = variables = ['NEE_CUT_REF', 'NEE_VUT_REF', 'NEE_CUT_REF_QC', 'NEE_VUT_REF_QC',
                                     'GPP_NT_VUT_REF', 'GPP_NT_CUT_REF', 'GPP_DT_VUT_REF', 'GPP_DT_CUT_REF',
                                     'TIMESTAMP_START', 'TIMESTAMP_END', 'WD', 'WS', 
-                                    'SW_IN_F', 'TA_F', 'USTAR', 'RECO_NT_VUT_REF', 'RECO_DT_VUT_REF']
+                                    'SW_IN_F', 'TA_F', 'USTAR', 'RECO_NT_VUT_REF', 'RECO_DT_VUT_REF',
+                                     'TA_F_QC', 'SW_IN_F_QC']
         else:
             self.vars = use_vars
         
@@ -136,7 +137,8 @@ class icos(flux_tower_data):
             self.vars = variables = ['NEE_CUT_REF', 'NEE_VUT_REF', 'NEE_CUT_REF_QC', 'NEE_VUT_REF_QC',
                                     'GPP_NT_VUT_REF', 'GPP_NT_CUT_REF', 'GPP_DT_VUT_REF', 'GPP_DT_CUT_REF',
                                     'TIMESTAMP_START', 'TIMESTAMP_END', 'WD', 'WS', 
-                                    'SW_IN_F', 'TA_F', 'USTAR', 'RECO_NT_VUT_REF', 'RECO_DT_VUT_REF']
+                                    'SW_IN_F', 'TA_F', 'USTAR', 'RECO_NT_VUT_REF', 'RECO_DT_VUT_REF',
+                                     'TA_F_QC', 'SW_IN_F_QC']
         else:
             self.vars = use_vars
             
