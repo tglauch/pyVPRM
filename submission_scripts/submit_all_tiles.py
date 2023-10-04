@@ -29,11 +29,7 @@ raw_code =' python ' + args.script + ' --year {} --h {} --v {} --config {} --n_c
 
 
 for i, year in enumerate(cfg['years']):
-    if i>0:
-        continue
     for counter, hv_chunk in enumerate([cfg['hvs'][i:i + n] for i in range(0, len(cfg['hvs']), n)]):
-        if counter>0:
-            continue
         sub_code = ''
 
         for i in hv_chunk:

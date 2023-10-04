@@ -16,10 +16,12 @@ p = argparse.ArgumentParser(
         description = "Commend Line Arguments",
         formatter_class = argparse.RawTextHelpFormatter)
 p.add_argument("--config", type=str)
+p.add_argument("--year", type=int)
 p.add_argument("--n_cpus", type=int, default=1)
 args = p.parse_args()
 print(args)
 
+this_year = str(args.year)
 with open(args.config, "r") as stream:
     try:
         cfg  = yaml.safe_load(stream)
@@ -46,35 +48,40 @@ def add_land_cover_map(vprm_inst, land_cover_on_modis_grid=None, copernicus_data
             if i == 0:
                 handler_lt = copernicus_land_cover_map(c)
                 handler_lt.load()
+                handler.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
             else:
                 lcm=copernicus_land_cover_map(c)
                 lcm.load()
+                lcm.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
                 tiles_to_add.append(lcm)
         handler_lt.add_tile(tiles_to_add, reproject=False)
         vprm_inst.add_land_cover_map(handler_lt, save_path=save_path)
         return
     
-lons = np.linspace(cfg['lon_min'], cfg['lon_max'] , cfg['n_bins_lon']) 
-lats = np.linspace(cfg['lat_min'], cfg['lat_max'], cfg['n_bins_lat'])
+
 hvs =  cfg['hvs']
 vprm_inst = vprm(n_cpus=args.n_cpus)
 file_collections = np.unique([i.split('.')[1] for i in
-                              glob.glob(os.path.join(cfg['sat_image_path'],
+                              glob.glob(os.path.join(cfg['sat_image_path'], this_year,
                                         '*h{:02d}v{:02d}*.h*'.format(hvs[0][0], hvs[0][1])))])
 
+print(hvs)
 #Load the data
 for c0, f in enumerate(sorted(file_collections)):
-    if c0>2:
+    if c0>3:
         continue
     handlers = []
     if cfg['satellite'] == 'modis':
-        for c, i in sorted(enumerate(glob.glob(os.path.join(cfg['sat_image_path'], '*{}*.h*'.format(f))))):
-            print(i)
+        for c, i in enumerate(hvs):
+            print(i[0], i[1])
+            fpath = glob.glob(os.path.join(cfg['sat_image_path'], this_year,
+                                           '*{}*h{:02d}v{:02d}*.h*'.format(f, i[0], i[1])))[0]
+            print(fpath)
             if c == 0:
-                handler = modis(sat_image_path=i)
+                handler = modis(sat_image_path=fpath)
                 handler.load()
             else:
-                handler2 = modis(sat_image_path=i)
+                handler2 = modis(sat_image_path=fpath)
                 handler2.load()
                 handlers.append(handler2)
     elif cfg['satellite'] == 'viirs':
@@ -89,45 +96,62 @@ for c0, f in enumerate(sorted(file_collections)):
     else:
         print('Set the satellite in the cfg either to modis or viirs.')
     handler.add_tile(handlers, reproject=False)
+
     if cfg['satellite'] == 'modis':
         vprm_inst.add_sat_img(handler, b_nir='B02', b_red='B01',
                               b_blue='B03', b_swir='B06',
+                              which_evi='evi',
                               drop_bands=True,
                               timestamp_key='sur_refl_day_of_year',) 
     elif cfg['satellite'] == 'viirs':
         vprm_inst.add_sat_img(handler, b_nir='SurfReflect_I2', b_red='SurfReflect_I1',
                               b_blue='no_blue_sensor', b_swir='SurfReflect_I3',
                               which_evi='evi2',
-                              drop_bands=True) 
-       
+                              drop_bands=True)
+
+           
 # Sort and merge satellite images
 vprm_inst.sort_and_merge_by_timestamp()
-
 
 # Add the land cover map
 if not os.path.exists(cfg['out_path']):
     os.makedirs(cfg['out_path'])
 
 if os.path.exists(os.path.join(cfg['out_path'], 'veg_map_on_modis_grid.nc')):
+    print('Load land cover map')
     add_land_cover_map(vprm_inst,
                        land_cover_on_modis_grid=os.path.join(cfg['out_path'],
                                                              'veg_map_on_modis_grid.nc'))
-else:    
+else:   
+    print('Generate land cover map')
     add_land_cover_map(vprm_inst,
                        copernicus_data_path=cfg['copernicus_path'],
                        save_path=os.path.join(cfg['out_path'],
                                               'veg_map_on_modis_grid.nc'))
  
 # Apply lowess smoothing
-#vprm_inst.lowess(gap_filled=True, frac=0.2, it=3)
+#vprm_inst.lowess(gap_filled=False, frac=0.2, it=3) #0.2
+
+vprm_inst.clip_values('evi', 0, 1)
+vprm_inst.clip_values('lswi',-1, 1)
 
 # Regrid to WRF Grid defined in out_grid 
+lons = np.linspace(cfg['lon_min'], cfg['lon_max'] , cfg['n_bins_lon']) 
+lats = np.linspace(cfg['lat_min'], cfg['lat_max'], cfg['n_bins_lat'])
 out_grid = dict()
 out_grid['lons'] = lons
 out_grid['lats'] = lats
+t = xr.open_dataset('/work/bd1231/tglauch/santiago/geo_em.d01.nc')
+out_grid = xr.Dataset({"lon": (["y", "x"], t['XLONG_M'].values.squeeze(),
+                      {"units": "degrees_east"}),
+                      "lat": (["y", "x"], t['XLAT_M'].values.squeeze(),
+                      {"units": "degrees_north"})})
+out_grid  = out_grid.set_coords(['lon', 'lat'])
 if os.path.exists(os.path.join(cfg['out_path'], 'regridder.nc')):
+    print('Use existing regridder')
     wrf_op = vprm_inst.to_wrf_output(out_grid, weights_for_regridder=os.path.join(cfg['out_path'], 'regridder.nc'))
 else:
+    print('Create regridder')
     wrf_op = vprm_inst.to_wrf_output(out_grid, driver = 'ESMF_RegridWeightGen', 
                                      regridder_save_path=os.path.join(cfg['out_path'], 'regridder.nc'))
 
@@ -138,4 +162,4 @@ filename_dict = {'lswi': 'LSWI', 'evi': 'EVI', 'veg_fraction': 'VEG_FRA',
                  'lswi_max': 'LSWI_MAX', 'lswi_min': 'LSWI_MIN', 
                  'evi_max': 'EVI_MAX', 'evi_min': 'EVI_MIN'} 
 for key in wrf_op.keys():
-    wrf_op[key].to_netcdf(os.path.join(cfg['out_path'],file_base + filename_dict[key] +'_{}.nc'.format(cfg['year'])))
+    wrf_op[key].to_netcdf(os.path.join(cfg['out_path'],file_base + filename_dict[key] +'_{}.nc'.format(this_year)))

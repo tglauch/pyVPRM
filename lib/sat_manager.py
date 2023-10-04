@@ -390,7 +390,7 @@ class modis(earthdata):
                              'sur_refl_b03', 'sur_refl_b04',
                              'sur_refl_b05', 'sur_refl_b06',
                              'sur_refl_b07', 'sur_refl_qc_500m',
-                             'sur_refl_day_of_year']
+                             'sur_refl_day_of_year', 'sur_refl_state_500m']
         else:
             self.use_keys = None
         self.load_kwargs = {'variable': self.use_keys}
@@ -414,17 +414,11 @@ class modis(earthdata):
 
         for b in band_nums:
 
-            start_bit = (b - 1) * 4 + 2 # Bit 4
-            end_bit = b * 4 + 1 # Bit 8 (inclusive)
-
-            # Calculate the number of bits to extract
+            start_bit = (b - 1) * 4 + 2 # Start Bit 
+            end_bit = b * 4 + 1 # End Bit  (inclusive)
             num_bits_to_extract = end_bit - start_bit + 1
-
-            # Create an integer bitmask with the desired bits set to 1
             bit_mask = (1 << num_bits_to_extract) - 1
-
-            # Use a bitwise AND operation to extract the specified bits
-            self.sat_img['sur_refl_qc_500m'].values[np.isnan(self.sat_img['sur_refl_qc_500m'].values)] = int('1'*31,2)
+            self.sat_img['sur_refl_qc_500m'].values[np.isnan(self.sat_img['sur_refl_qc_500m'].values)] = int('1' * 31,2)
             masks[b] = (np.array(self.sat_img['sur_refl_qc_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit 
 
         for mask_int in masks.keys():
@@ -432,6 +426,21 @@ class modis(earthdata):
                              # (masks[mask_int] != '1000') & (masks[mask_int] != '1010') &\
                              # (masks[mask_int] != '1100')
             self.sat_img['B{:02d}'.format(mask_int)].values[masks[mask_int]] = np.nan
+        return
+
+    def mask_clouds(self, bands=None):
+        if bands is None:
+            bands=self.bands
+         
+        band_nums = [int(band.split('B')[1]) for band in bands]
+        start_bit = 0 # Start Bit 
+        end_bit = 1 # End Bit  (inclusive)
+        num_bits_to_extract = end_bit - start_bit + 1
+        bit_mask = (1 << num_bits_to_extract) - 1
+        self.sat_img['sur_refl_state_500m'].values[np.isnan(self.sat_img['sur_refl_state_500m'].values)] = int('1' * 16,2)
+        mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit   
+        for b in band_nums:
+            self.sat_img['B{:02d}'.format(b)].values[mask != int('00', 2)] = np.nan
         return
 
     def get_resolution(self):

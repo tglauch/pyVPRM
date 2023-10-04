@@ -85,21 +85,27 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=Non
                      return_sorted=False)
         return ret
     else:
+        if xvals is not None:
+            ret_array = np.zeros((len(xvals),
+                                  np.shape(array_to_smooth)[1]))
+        else:
+            ret_array = np.zeros((len(array_to_smooth[:, 0]),
+                                  np.shape(array_to_smooth)[1]))
         for j in range(np.shape(array_to_smooth)[1]):
             if timestamps is None:
                 t_timestamp = np.arange(len(array_to_smooth[:, j]))
             else:
                 t_timestamp = timestamps[:, j]
-            if vclass!=None:
-                if vclass[j] == 8: # skip arrays with land type class 8 
-                    continue
+            # if vclass!=None:
+            #     if vclass[j] == 8: # skip arrays with land type class 8 
+            #         continue
             mask = np.isfinite(array_to_smooth[:, j])
             if xvals is None:
                 xvals = t_timestamp
-            array_to_smooth[:, j] = lowess(array_to_smooth[:, j][mask], t_timestamp[mask],
-                                           is_sorted=True, frac=frac, it=it, xvals=xvals,
-                                           return_sorted=False)
-        return array_to_smooth.T
+            ret_array[:, j] = lowess(array_to_smooth[:, j][mask], t_timestamp[mask],
+                                     is_sorted=True, frac=frac, it=it, xvals=xvals,
+                                     return_sorted=False)
+        return ret_array.T
 
 class vprm: 
     '''
@@ -160,7 +166,7 @@ class vprm:
                                              116:3, 121:1, 123:2,
                                              122 : 1, 124 : 2,
                                              125 : 3,
-                                             126: 3, #This could be the savanna type! Check.
+                                             126: 5, #This could be the savanna type! Check.
                                              20: 4, 30: 7, 90: 7,
                                              100: 7, 60: 8,
                                              40: 6, 50: 8,
@@ -207,6 +213,8 @@ class vprm:
             ds_out = out_grid
         if weights_for_regridder is None:
             print('Need to generate the weights for the regridder. This can be very slow and memory intensive')
+            print(src_grid)
+            print(ds_out)
             if driver == 'xEMSF':
                 regridder = xe.Regridder(src_grid, ds_out, "bilinear")
                 if regridder_save_path is not None:
@@ -219,7 +227,7 @@ class vprm:
                 dest_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
                 src_grid.to_netcdf(src_temp_path)
                 ds_out.to_netcdf(dest_temp_path)
-                os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear -r --64bit_offset  --extrap_method nearestd  --no_log'.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path))
+                os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear -r --64bit_offset  --extrap_method nearestd –src_regional –dest_regional '.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path)) # --no_log
                 os.remove(src_temp_path) 
                 os.remove(dest_temp_path)
                 weights_for_regridder = regridder_save_path
@@ -231,6 +239,7 @@ class vprm:
                                      reuse_weights=True)
         veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
                               for i in self.map_copernicus_to_vprm_class.keys()])
+        veg_inds = np.array(veg_inds, dtype=np.int32)
         for c, i in enumerate(veg_inds):
             if c == 0:
                 t = copy.deepcopy(self.land_cover_type)
@@ -245,67 +254,67 @@ class vprm:
         var_list =  t.sat_img.data_vars
         t.sat_img = xr.concat([t.sat_img[var] for var in var_list], dim='vprm_classes')
         t.sat_img = t.sat_img.assign_coords({'vprm_classes': [int(c) for c in list(var_list)]})
-        t.sat_img = t.sat_img.to_dataset(name='vegetation_fraction_map')
-        
-        day_of_the_year = [i.timetuple().tm_yday for i in self.timestamps]
-        kys = self.sat_imgs.sat_img.time.size
+        t.sat_img = t.sat_img.to_dataset(name='vegetation_fraction_map')       
+        day_of_the_year = np.array(self.sat_imgs.sat_img[self.time_key].values, dtype=np.int32)
+        kys = len(self.sat_imgs.sat_img[self.time_key].values)
         final_array = []
         for ky in range(kys):
             sub_array = []
             for v in veg_inds:
-                tres = self.sat_imgs.sat_img.isel({'time':ky})['evi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, 0) 
+                tres = self.sat_imgs.sat_img.isel({self.time_key:ky})['evi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, 0) 
                 sub_array.append(regridder(tres.values))
             final_array.append(sub_array)
         ds_t_evi = copy.deepcopy(ds_out)
-        ds_t_evi = ds_t_evi.assign({'evi': (['time', 'vprm_classes','lat','lon'], final_array)})
+        ds_t_evi = ds_t_evi.assign({'evi': (['vprm_classes', 'time', 'lat','lon'], np.moveaxis(final_array, 0 ,1))})
         ds_t_evi = ds_t_evi.assign_coords({"time": day_of_the_year})
         ds_t_evi = ds_t_evi.assign_coords({"vprm_classes": veg_inds})
         final_array = []
         for ky in range(kys):
             sub_array = []
             for v in veg_inds:
-                tres = self.sat_imgs.sat_img.isel({'time': ky})['lswi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, 0) 
+                tres = self.sat_imgs.sat_img.isel({self.time_key: ky})['lswi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, 0) 
                 sub_array.append(regridder(tres.values))
             final_array.append(sub_array)
         ds_t_lswi = copy.deepcopy(ds_out)
-        ds_t_lswi = ds_t_lswi.assign({'lswi': (['time', 'vprm_classes','lat','lon'], final_array)})
+        ds_t_lswi = ds_t_lswi.assign({'lswi': (['vprm_classes', 'time', 'lat','lon'], np.moveaxis(final_array,0, 1))})
         ds_t_lswi = ds_t_lswi.assign_coords({"time": day_of_the_year})
         ds_t_lswi = ds_t_lswi.assign_coords({"vprm_classes": veg_inds})  
         
         ds_t_max_evi = copy.deepcopy(ds_out)
         ds_t_max_evi = ds_t_max_evi.assign({'evi_max': (['vprm_classes','lat','lon'],
-                                                     np.nanmax(ds_t_evi['evi'],axis = 0))})
+                                                     np.nanmax(ds_t_evi['evi'],axis = 1))})
         ds_t_max_evi = ds_t_max_evi.assign_coords({"vprm_classes": veg_inds})  
         
         ds_t_min_evi = copy.deepcopy(ds_out)
         ds_t_min_evi = ds_t_min_evi.assign({'evi_min': (['vprm_classes','lat','lon'],
-                                                     np.nanmin(ds_t_evi['evi'],axis = 0))})
+                                                     np.nanmin(ds_t_evi['evi'],axis = 1))})
         ds_t_min_evi = ds_t_min_evi.assign_coords({"vprm_classes": veg_inds})
         
         ds_t_max_lswi = copy.deepcopy(ds_out)
         ds_t_max_lswi = ds_t_max_lswi.assign({'lswi_max': (['vprm_classes','lat','lon'],
-                                                     np.nanmax(ds_t_lswi['lswi'],axis = 0))})
+                                                     np.nanmax(ds_t_lswi['lswi'],axis = 1))})
         ds_t_max_lswi = ds_t_max_lswi.assign_coords({"vprm_classes": veg_inds})  
         
         ds_t_min_lswi = copy.deepcopy(ds_out)
         ds_t_min_lswi = ds_t_min_lswi.assign({'lswi_min': (['vprm_classes','lat','lon'],
-                                                     np.nanmin(ds_t_lswi['lswi'],axis = 0))})
+                                                     np.nanmin(ds_t_lswi['lswi'],axis = 1))})
         ds_t_min_lswi = ds_t_min_lswi.assign_coords({"vprm_classes": veg_inds})
 
         ret_dict = {'lswi': ds_t_lswi, 'evi': ds_t_evi, 'veg_fraction': t.sat_img,
                     'lswi_max': ds_t_max_lswi, 'lswi_min': ds_t_min_lswi,
                     'evi_max': ds_t_max_evi, 'evi_min': ds_t_min_evi}
         return ret_dict
+
     
     def add_sat_img(self, handler, b_nir=None,
                     b_red=None, b_blue=None,
                     b_swir=None,
                     drop_bands=False, 
                     which_evi=None,
-                    max_evi=False,
                     timestamp_key=None,
                     smearing=False,
-                    mask_bad_pixels=True):
+                    mask_bad_pixels=True,
+                    mask_clouds=True):
         '''
             Add a new satellite image and calculate EVI and LSWI if desired
 
@@ -319,7 +328,6 @@ class vprm:
                                            calculation of EVI and LSWI. Saves memory.
                                            Can also be a list of keys to drop.
                         which_evi (str): Either evi or evi2. evi2 does not need a blue band.
-                        max_evi (float): If given, every evi larger than this will be cut.
                         timestamp_key (float): satellite data key containing a timestamp for each
                                                single pixel - to be used with lowess
 
@@ -332,8 +340,10 @@ class vprm:
         if not isinstance(handler, satellite_data_manager):
             print('Satellite image needs to be an object of the sattelite_data_manager class')
             return  
-        handler.sat_img = handler.sat_img.reindex(y=sorted(list(handler.sat_img.y)))
-        handler.sat_img = handler.sat_img.reindex(x=sorted(list(handler.sat_img.x)))
+        if float(handler.sat_img.y[0]) > float(handler.sat_img.y[-1]):
+            handler.sat_img = handler.sat_img.isel(y=slice(None, None, -1)) #reindex(y=sorted(list(handler.sat_img.y)))
+        if float(handler.sat_img.x[0]) > float(handler.sat_img.x[-1]):      
+            handler.sat_img = handler.sat_img.isel(x=slice(None, -1, None))
         if which_evi in ['evi', 'evi2']:
             nir = handler.sat_img[b_nir] 
             red = handler.sat_img[b_red]
@@ -343,10 +353,12 @@ class vprm:
                 temp_evi = (evi_params['g'] * ( nir - red)  / (nir + evi_params['c1'] * red - evi_params['c2'] * blue + evi_params['l'])).values
             elif which_evi=='evi2':
                 temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l'])).values 
+            temp_evi[temp_evi<0] = np.nan
+            temp_evi[temp_evi>1] = np.nan
             temp_lswi = ((nir - swir) / (nir + swir)).values
-            if max_evi is not False:
-                temp_evi[temp_evi>max_evi] = max_evi
-                temp_evi[~np.isfinite(temp_evi)] = max_evi
+            temp_lswi[temp_lswi<-1] = np.nan
+            temp_lswi[temp_lswi>1] = np.nan
+
             handler.sat_img = handler.sat_img.assign({'evi': (['y','x'], temp_evi)})
             handler.sat_img = handler.sat_img.assign({'lswi': (['y','x'], temp_lswi)}) 
         if timestamp_key is not None:
@@ -360,15 +372,20 @@ class vprm:
                                          new_dim_name='site_names', 
                                          interp_method='nearest')
             handler.sat_img = handler.sat_img.assign_coords({'site_names': [i.get_site_name() for i in self.sites]})
+        bands_to_mask = []
+        for btm in [b_nir, b_red, b_blue, b_swir]:
+            if btm is not None:
+                  bands_to_mask.append(btm)
         if mask_bad_pixels:
-            bands_to_mask = []
-            for btm in [b_nir, b_red, b_blue, b_swir]:
-                if btm is not None:
-                      bands_to_mask.append(btm)
             if bands_to_mask == []:   
                 handler.mask_bad_pixels()
             else:
-                handler.mask_bad_pixels(bands_to_mask)                
+                handler.mask_bad_pixels(bands_to_mask)
+        if mask_clouds:
+            if bands_to_mask == []:   
+                handler.mask_clouds()
+            else:
+                handler.mask_clouds(bands_to_mask)
         if drop_bands:
             if isinstance(drop_bands, list):
                 drop_keys = drop_bands
@@ -495,35 +512,44 @@ class vprm:
             print('Load pre-generated land cover map')
             self.land_cover_type = copernicus_land_cover_map(land_cover_map)
             self.land_cover_type.load()
-            self.land_cover_type.sat_img = self.land_cover_type.sat_img.reindex(y=sorted(list(self.land_cover_type.sat_img.y)))
-            self.land_cover_type.sat_img = self.land_cover_type.sat_img.reindex(x=sorted(list(self.land_cover_type.sat_img.x)))
+            if float(self.land_cover_type.sat_img.y[0]) > float(self.land_cover_type.sat_img.y[-1]):  
+                self.land_cover_type.sat_img = self.land_cover_type.sat_img.isel(y=slice(None, None, -1))
+            if float(self.land_cover_type.sat_img.x[0]) > float(self.land_cover_type.sat_img.x[-1]):              
+                self.land_cover_type.sat_img = self.land_cover_type.sat_img.isel(x=slice(None, -1, None))
             self.land_cover_type.sat_img = self.land_cover_type.sat_img.rename({list(self.land_cover_type.sat_img.keys())[0]: 'land_cover_type'})
  
         else:
             print('Generating satellite data compatible land cover map')
-            land_cover_map.reproject(proj=self.prototype.sat_img.rio.crs.to_proj4())
+           # land_cover_map.reproject(proj=self.prototype.sat_img.rio.crs.to_proj4())
+            if land_cover_map.sat_img.rio.crs.to_proj4() != self.sat_imgs.sat_img.rio.crs.to_proj4():
+                print('Projection of land cover map and satellite images need to match. Reproject first.')
+                return False
+            if float(land_cover_map.sat_img.y[0]) > float(land_cover_map.sat_img.y[-1]): 
+                land_cover_map.sat_img = land_cover_map.sat_img.isel(y=slice(None, None, -1))
+            if float(land_cover_map.sat_img.x[0]) > float(land_cover_map.sat_img.x[-1]):
+                land_cover_map.sat_img = land_cover_map.sat_img.isel(x=slice(None, -1, None))
+            land_cover_map.sat_img = land_cover_map.sat_img.sel(x=slice(self.xs.min(),self.xs.max()),
+                                                                y=slice(self.ys.min(),self.ys.max()))
             for key in self.map_copernicus_to_vprm_class.keys():
                 land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_copernicus_to_vprm_class[key]
-            f_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values))
-            count_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values))
+            f_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16)
+            count_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16)
             veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
                                   for i in self.map_copernicus_to_vprm_class.keys()])
             if filter_size is None:
                 filter_size = int(np.ceil(self.sat_imgs.sat_img.rio.resolution()[0]/land_cover_map.get_resolution()))
                 print('Filter size {}:'.format(filter_size))
             for i in veg_inds:
-                mask = np.array(land_cover_map.sat_img[var_name].values == i, dtype=float)
-                ta  = scipy.ndimage.uniform_filter(mask, size=(filter_size, filter_size)) * 25
-                f_array[ta>count_array] = i 
+                mask = np.array(land_cover_map.sat_img[var_name].values == i, dtype=np.float)
+                ta  = scipy.ndimage.uniform_filter(mask, size=(filter_size, filter_size)) * (filter_size **2)
+                f_array[ta>count_array] = i
                 count_array[ta>count_array] = ta[ta>count_array]
-            f_array[f_array==0]=np.nan
+            f_array[f_array==0]=8 # 8 is Category for nothing | alternatively np.nan?
             land_cover_map.sat_img[var_name].values = f_array
             del ta
             del count_array
             del f_array
             del mask
-            land_cover_map.sat_img = land_cover_map.sat_img.reindex(y=sorted(list(land_cover_map.sat_img.y)))
-            land_cover_map.sat_img = land_cover_map.sat_img.reindex(x=sorted(list(land_cover_map.sat_img.x)))
             t =  land_cover_map.sat_img.sel(x=self.xs, y=self.ys, method="nearest").to_array().values[0]
 #            t =  land_cover_map.sat_img.sel(x=self.x_long, y=self.y_lat, method="nearest").to_array().values[0]
             self.land_cover_type = copy.deepcopy(self.prototype)
@@ -580,7 +606,7 @@ class vprm:
             if 'timestamps' in keys:
                 keys.remove('timestamps')
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img.sel(site_names=i)['timestamps'].values, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img.sel(site_names=i)['timestamps'].values, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})      
             else:
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.timestamps, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})
@@ -617,6 +643,11 @@ class vprm:
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({'time_gap_filled': xvals})        
         return
 
+    def clip_values(self, key, min_val, max_val):
+        self.sat_imgs.sat_img[key].values[self.sat_imgs.sat_img[key].values<min_val] = min_val
+        self.sat_imgs.sat_img[key].values[self.sat_imgs.sat_img[key].values>max_val] = max_val
+        return
+    
     def load_weather_data(self, hour, day, month, year, era_keys):
         '''
             Load meteorlocial data from the available (on DKRZ's levante) data storage
@@ -1093,7 +1124,7 @@ class vprm:
                 self.res = copy.deepcopy(self.land_cover_type) 
                 keys = list(self.land_cover_type.sat_img.keys())
                 self.res.sat_img = self.res.sat_img.drop(keys) 
-                t = self.land_cover_type.sat_img['land_cover_type'].values
+                t = np.array(self.land_cover_type.sat_img['land_cover_type'].values, dtype=np.float64)
                 t_shape = np.shape(t)
                 lamb, par0, alpha, beta = copy.deepcopy(t), copy.deepcopy(t), copy.deepcopy(t), copy.deepcopy(t)
                 for i in range(t_shape[0]):

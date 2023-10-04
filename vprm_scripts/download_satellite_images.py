@@ -15,6 +15,8 @@ p = argparse.ArgumentParser(
 p.add_argument("--config", type=str)
 p.add_argument("--login_data", type=str)
 p.add_argument("--year", type=int, default=None)
+p.add_argument("--h", type=int, default=None)
+p.add_argument("--v", type=int, default=None)
 args = p.parse_args()
 
 with open(args.config, "r") as stream:
@@ -34,11 +36,14 @@ if args.year is not None:
 else:
     years = cfg['years']
 
+hvs=cfg['hvs']
+if (args.h is not None) & (args.v is not None):
+    hvs = [(args.h, args.v)]
 
 for year in years:
     savepath = os.path.join(cfg['sat_image_path'], str(year))
     if cfg['satellite'] == 'modis':
-        for i in cfg['hvs']:
+        for i in hvs:
             handler = modis()
             try:
                 handler.download(date(year, 1, 1),
@@ -52,7 +57,7 @@ for year in years:
                 print(e)
 
     elif cfg['satellite'] == 'viirs':
-        for i in cfg['hvs']:
+        for i in hvs:
             print(i)
             handler = VIIRS()
             try:
