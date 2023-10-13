@@ -40,20 +40,22 @@ def add_land_cover_map(vprm_inst, land_cover_on_modis_grid=None, copernicus_data
     # Download needs to be done manually from here: https://lcviewer.vito.be/download
     # If the land-cover-map on the modis grid needs to be calculated on the fly
     # for checks interactive viewer can be useful https://lcviewer.vito.be/2019
-    
+    handler_lt = None
     if copernicus_data_path is not None:
         tiles_to_add = []
         for i, c in enumerate(glob.glob(os.path.join(copernicus_data_path, '*'))):
             print(c)
-            if i == 0:
-                handler_lt = copernicus_land_cover_map(c)
-                handler_lt.load()
-                handler.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
+            temp_map = copernicus_land_cover_map(c)
+            temp_map.load()
+            dj = vprm_inst.is_disjoint(temp_map)
+            if dj:
+                print('Do not add {}'.format(c))
+                continue
+            temp_map.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
+            if handler_lt is None:
+                handler_lt = temp_map
             else:
-                lcm=copernicus_land_cover_map(c)
-                lcm.load()
-                lcm.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
-                tiles_to_add.append(lcm)
+                tiles_to_add.append(temp_map)
         handler_lt.add_tile(tiles_to_add, reproject=False)
         vprm_inst.add_land_cover_map(handler_lt, save_path=save_path)
         return
@@ -68,12 +70,9 @@ file_collections = np.unique([i.split('.')[1] for i in
 print(hvs)
 #Load the data
 for c0, f in enumerate(sorted(file_collections)):
-    if c0>3:
-        continue
     handlers = []
     if cfg['satellite'] == 'modis':
         for c, i in enumerate(hvs):
-            print(i[0], i[1])
             fpath = glob.glob(os.path.join(cfg['sat_image_path'], this_year,
                                            '*{}*h{:02d}v{:02d}*.h*'.format(f, i[0], i[1])))[0]
             print(fpath)
@@ -102,7 +101,9 @@ for c0, f in enumerate(sorted(file_collections)):
                               b_blue='B03', b_swir='B06',
                               which_evi='evi',
                               drop_bands=True,
-                              timestamp_key='sur_refl_day_of_year',) 
+                              timestamp_key='sur_refl_day_of_year',
+                              mask_bad_pixels=True,
+                              mask_clouds=True) 
     elif cfg['satellite'] == 'viirs':
         vprm_inst.add_sat_img(handler, b_nir='SurfReflect_I2', b_red='SurfReflect_I1',
                               b_blue='no_blue_sensor', b_swir='SurfReflect_I3',
@@ -130,18 +131,18 @@ else:
                                               'veg_map_on_modis_grid.nc'))
  
 # Apply lowess smoothing
-#vprm_inst.lowess(gap_filled=False, frac=0.2, it=3) #0.2
+vprm_inst.lowess(gap_filled=False, frac=0.2, it=3) #0.2
 
 vprm_inst.clip_values('evi', 0, 1)
 vprm_inst.clip_values('lswi',-1, 1)
 
 # Regrid to WRF Grid defined in out_grid 
-lons = np.linspace(cfg['lon_min'], cfg['lon_max'] , cfg['n_bins_lon']) 
-lats = np.linspace(cfg['lat_min'], cfg['lat_max'], cfg['n_bins_lat'])
-out_grid = dict()
-out_grid['lons'] = lons
-out_grid['lats'] = lats
-t = xr.open_dataset('/work/bd1231/tglauch/santiago/geo_em.d01.nc')
+#lons = np.linspace(cfg['lon_min'], cfg['lon_max'] , cfg['n_bins_lon']) 
+#lats = np.linspace(cfg['lat_min'], cfg['lat_max'], cfg['n_bins_lat'])
+#out_grid = dict()
+#out_grid['lons'] = lons
+#out_grid['lats'] = lats
+t = xr.open_dataset(cfg['geo_em_file'])
 out_grid = xr.Dataset({"lon": (["y", "x"], t['XLONG_M'].values.squeeze(),
                       {"units": "degrees_east"}),
                       "lat": (["y", "x"], t['XLAT_M'].values.squeeze(),
@@ -162,4 +163,7 @@ filename_dict = {'lswi': 'LSWI', 'evi': 'EVI', 'veg_fraction': 'VEG_FRA',
                  'lswi_max': 'LSWI_MAX', 'lswi_min': 'LSWI_MIN', 
                  'evi_max': 'EVI_MAX', 'evi_min': 'EVI_MIN'} 
 for key in wrf_op.keys():
-    wrf_op[key].to_netcdf(os.path.join(cfg['out_path'],file_base + filename_dict[key] +'_{}.nc'.format(this_year)))
+    ofile = os.path.join(cfg['out_path'],file_base + filename_dict[key] +'_{}.nc'.format(this_year))
+    if os.path.exists(ofile):
+        os.remove(ofile)
+    wrf_op[key].to_netcdf(ofile)

@@ -140,18 +140,20 @@ if args.hourly:
         preds_gpp = xr.concat(preds_gpp, 'time')
         preds_gpp = preds_gpp.assign_coords({'time': ts})
         outpath = os.path.join(cfg['predictions_path'],
-                               'gpp_h{:02d}v{:02d}_{:03d}.h5'.format(h, v, i))
+                               'gpp_h{:02d}v{:02d}_{}_{:03d}.h5'.format(h, v, args.year, i))
         if os.path.exists(outpath):
             os.remove(outpath)
         preds_gpp.to_netcdf(outpath)
+        preds_gpp.close()
         
         preds_nee = xr.concat(preds_nee, 'time')
         preds_nee = preds_nee.assign_coords({'time': ts})
         outpath = os.path.join(cfg['predictions_path'],
-                               'nee_h{:02d}v{:02d}_{:03d}.h5'.format(h, v, i))
+                               'nee_h{:02d}v{:02d}_{}_{:03d}.h5'.format(h, v,args.year, i))
         if os.path.exists(outpath):
             os.remove(outpath)
         preds_nee.to_netcdf(outpath)
+        preds_nee.close()
 
 else:
 
@@ -190,6 +192,7 @@ else:
     if os.path.exists(outpath):
         os.remove(outpath)
     preds_gpp.to_netcdf(outpath)
+    preds_gpp.close()
 
     preds_nee = xr.concat(preds_nee, 'time')
     preds_nee = preds_nee.assign_coords({'time': ts})
@@ -198,4 +201,5 @@ else:
     if os.path.exists(outpath):
         os.remove(outpath)
     preds_nee.to_netcdf(outpath)
+    preds_nee.close()
             

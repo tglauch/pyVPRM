@@ -23,6 +23,8 @@ import pandas as pd
 import datetime
 from dateutil import parser
 from multiprocessing import Process
+import rasterio
+
 
 def adjust_timestamps(sat_img, start_date, stop_date, timestamp0):
     start_day = start_date.timetuple().tm_yday
@@ -213,8 +215,6 @@ class vprm:
             ds_out = out_grid
         if weights_for_regridder is None:
             print('Need to generate the weights for the regridder. This can be very slow and memory intensive')
-            print(src_grid)
-            print(ds_out)
             if driver == 'xEMSF':
                 regridder = xe.Regridder(src_grid, ds_out, "bilinear")
                 if regridder_save_path is not None:
@@ -227,7 +227,7 @@ class vprm:
                 dest_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
                 src_grid.to_netcdf(src_temp_path)
                 ds_out.to_netcdf(dest_temp_path)
-                os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear -r --64bit_offset  --extrap_method nearestd –src_regional –dest_regional '.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path)) # --no_log
+                os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear -r --netcdf4 --no_log --extrap_method nearestd –src_regional –dest_regional '.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path)) # --no_log
                 os.remove(src_temp_path) 
                 os.remove(dest_temp_path)
                 weights_for_regridder = regridder_save_path
@@ -240,6 +240,7 @@ class vprm:
         veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
                               for i in self.map_copernicus_to_vprm_class.keys()])
         veg_inds = np.array(veg_inds, dtype=np.int32)
+        dims = list(ds_out.dims.mapping.keys())
         for c, i in enumerate(veg_inds):
             if c == 0:
                 t = copy.deepcopy(self.land_cover_type)
@@ -250,12 +251,14 @@ class vprm:
             else:
                 t1 = np.array(self.land_cover_type.sat_img['land_cover_type'] ==i, dtype=float)
                 t1 = regridder(t1)
-                t.sat_img = t.sat_img.assign({str(i): (['lat','lon'], t1)})
+                t.sat_img = t.sat_img.assign({str(i): (dims, t1)})
         var_list =  t.sat_img.data_vars
         t.sat_img = xr.concat([t.sat_img[var] for var in var_list], dim='vprm_classes')
         t.sat_img = t.sat_img.assign_coords({'vprm_classes': [int(c) for c in list(var_list)]})
-        t.sat_img = t.sat_img.to_dataset(name='vegetation_fraction_map')       
+        t.sat_img = t.sat_img.to_dataset(name='vegetation_fraction_map')   
+        t.sat_img = t.sat_img.rename({'y': 'south_north', 'x': 'west_east'})
         day_of_the_year = np.array(self.sat_imgs.sat_img[self.time_key].values, dtype=np.int32)
+        day_of_the_year += self.timestamp_start.timetuple().tm_yday
         kys = len(self.sat_imgs.sat_img[self.time_key].values)
         final_array = []
         for ky in range(kys):
@@ -264,10 +267,14 @@ class vprm:
                 tres = self.sat_imgs.sat_img.isel({self.time_key:ky})['evi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, 0) 
                 sub_array.append(regridder(tres.values))
             final_array.append(sub_array)
+        out_dims = ['vprm_classes', 'time']
+        out_dims.extend(dims)
         ds_t_evi = copy.deepcopy(ds_out)
-        ds_t_evi = ds_t_evi.assign({'evi': (['vprm_classes', 'time', 'lat','lon'], np.moveaxis(final_array, 0 ,1))})
+        ds_t_evi = ds_t_evi.assign({'evi': (out_dims, np.moveaxis(final_array, 0 ,1))})
         ds_t_evi = ds_t_evi.assign_coords({"time": day_of_the_year})
         ds_t_evi = ds_t_evi.assign_coords({"vprm_classes": veg_inds})
+        ds_t_evi = ds_t_evi.rename({'y': 'south_north', 'x': 'west_east'})        
+
         final_array = []
         for ky in range(kys):
             sub_array = []
@@ -276,33 +283,49 @@ class vprm:
                 sub_array.append(regridder(tres.values))
             final_array.append(sub_array)
         ds_t_lswi = copy.deepcopy(ds_out)
-        ds_t_lswi = ds_t_lswi.assign({'lswi': (['vprm_classes', 'time', 'lat','lon'], np.moveaxis(final_array,0, 1))})
+        ds_t_lswi = ds_t_lswi.assign({'lswi': (out_dims, np.moveaxis(final_array,0, 1))})
         ds_t_lswi = ds_t_lswi.assign_coords({"time": day_of_the_year})
         ds_t_lswi = ds_t_lswi.assign_coords({"vprm_classes": veg_inds})  
+        ds_t_lswi = ds_t_lswi.rename({'y': 'south_north', 'x': 'west_east'})        
         
+        out_dims = ['vprm_classes']
+        out_dims.extend(dims)
         ds_t_max_evi = copy.deepcopy(ds_out)
-        ds_t_max_evi = ds_t_max_evi.assign({'evi_max': (['vprm_classes','lat','lon'],
+        ds_t_max_evi = ds_t_max_evi.assign({'evi_max': (out_dims,
                                                      np.nanmax(ds_t_evi['evi'],axis = 1))})
         ds_t_max_evi = ds_t_max_evi.assign_coords({"vprm_classes": veg_inds})  
+        ds_t_max_evi = ds_t_max_evi.rename({'y': 'south_north', 'x': 'west_east'})
         
         ds_t_min_evi = copy.deepcopy(ds_out)
-        ds_t_min_evi = ds_t_min_evi.assign({'evi_min': (['vprm_classes','lat','lon'],
+        ds_t_min_evi = ds_t_min_evi.assign({'evi_min': (out_dims,
                                                      np.nanmin(ds_t_evi['evi'],axis = 1))})
         ds_t_min_evi = ds_t_min_evi.assign_coords({"vprm_classes": veg_inds})
+        ds_t_min_evi = ds_t_min_evi.rename({'y': 'south_north', 'x': 'west_east'})
         
         ds_t_max_lswi = copy.deepcopy(ds_out)
-        ds_t_max_lswi = ds_t_max_lswi.assign({'lswi_max': (['vprm_classes','lat','lon'],
+        ds_t_max_lswi = ds_t_max_lswi.assign({'lswi_max': (out_dims,
                                                      np.nanmax(ds_t_lswi['lswi'],axis = 1))})
         ds_t_max_lswi = ds_t_max_lswi.assign_coords({"vprm_classes": veg_inds})  
+        ds_t_max_lswi = ds_t_max_lswi.rename({'y': 'south_north', 'x': 'west_east'})
         
         ds_t_min_lswi = copy.deepcopy(ds_out)
-        ds_t_min_lswi = ds_t_min_lswi.assign({'lswi_min': (['vprm_classes','lat','lon'],
+        ds_t_min_lswi = ds_t_min_lswi.assign({'lswi_min': (out_dims,
                                                      np.nanmin(ds_t_lswi['lswi'],axis = 1))})
         ds_t_min_lswi = ds_t_min_lswi.assign_coords({"vprm_classes": veg_inds})
-
+        ds_t_min_lswi = ds_t_min_lswi.rename({'y': 'south_north', 'x': 'west_east'})
+        
         ret_dict = {'lswi': ds_t_lswi, 'evi': ds_t_evi, 'veg_fraction': t.sat_img,
                     'lswi_max': ds_t_max_lswi, 'lswi_min': ds_t_min_lswi,
                     'evi_max': ds_t_max_evi, 'evi_min': ds_t_min_evi}
+        
+        for key in ret_dict.keys():
+            ret_dict[key] = ret_dict[key].assign_attrs(title="VPRM input data for WRF: {}".format(key),
+                                                       MODIS_version = '061',
+                                                       author = 'Dr. Theo Glauch',
+                                                       institution1 = 'Heidelberg University',
+                                                       institution2='Deutsches Zentrum für Luft- und Raumfahrt (DLR)',
+                                                       contact = 'theo.glauch@dlr.de',
+                                                       comment = 'Used VPRM classes: 1 Evergreen forest, 2 Deciduous forest, 3 Mixed forest, 4 Shrubland, 5 Trees and grasses, 6 Cropland, 7 Grassland, 8 Barren, Urban and built-up, water, permanent snow and ice')
         return ret_dict
 
     
@@ -705,10 +728,13 @@ class vprm:
             t = self.era5_inst.get_data(key='t2m').values - 273.15
         ret = (((t - tmin) * (t - tmax)) / ((t-tmin)*(t-tmax) - (t - topt)**2))
         if land_cover_type is not None:
-            if ret<0:
+            if (ret<0) | (t<tmin):
                 ret= 0
+            if t<tmin:
+                t = tmin
         else:
-            ret[ret<0] = 0          
+            ret[(ret<0) | (t<tmin)] = 0   
+            t[t<tmin] = tmin[t<tmin]
         return (t, ret)
         
     def get_p_scale(self, lon=None, lat=None,
@@ -1003,7 +1029,8 @@ class vprm:
             site_name  = s.get_site_name()
             ret_dict = dict()
             for k in ['evi', 'Ps', 'par', 
-                      'Ts', 'Ws', 'lswi']:
+                      'Ts', 'Ws', 'lswi',
+                      'tcorr']:
                 ret_dict[k] = []
             drop_rows = []
             for index, row in s.get_data().iterrows():
@@ -1016,6 +1043,7 @@ class vprm:
                 ret_dict['par'].append(self.get_par(ssrd=row['ssrd']))
                 Ts_all = self.get_t_scale(land_cover_type=s.get_land_type(), temperature=row['t2m'])
                 ret_dict['Ts'].append(Ts_all[1])
+                ret_dict['tcorr'].append(Ts_all[0])
                 ret_dict['Ws'].append(self.get_w_scale(site_name=site_name))
                 ret_dict['lswi'].append(self.get_lswi(site_name=site_name))
             s.drop_rows_by_index(drop_rows)
@@ -1086,7 +1114,7 @@ class vprm:
         Ts_all = self.get_t_scale(lon, lat)
         ret_dict['Ts'] = Ts_all[1]
         ret_dict['Ws'] = self.get_w_scale(lon, lat)
-        ret_dict['t'] = Ts_all[0]
+        ret_dict['tcorr'] = Ts_all[0]
         if add_era_variables!=[]:
             for i in add_era_variables:
                 if lon is not None:
@@ -1152,7 +1180,7 @@ class vprm:
         ret_res = dict()
         gpp = (self.res.sat_img['lamb'].values * inputs['Ps'] * inputs['Ws'] * inputs['Ts']) * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.res.sat_img['par0'].values)
         ret_res['gpp'] = gpp
-        ret_res['nee'] = -gpp + self.res.sat_img['alpha'].values * inputs['t'] + self.res.sat_img['beta'].values
+        ret_res['nee'] = -gpp + self.res.sat_img['alpha'].values * inputs['tcorr'] + self.res.sat_img['beta'].values
         return ret_res
         
 
@@ -1199,7 +1227,7 @@ class vprm:
 
             best_mse = np.inf    
             for i in range(100):
-                func = lambda x, a, b: a * x['t2m'] + b
+                func = lambda x, a, b: a * x['tcorr'] + b
                 fit_respiration = curve_fit(func, data_for_fit, data_for_fit['respiration'], maxfev=5000,
                                             p0=[np.random.uniform(-0.5, 0.5),
                                                 np.random.uniform(-0.5, 0.5)]) 
@@ -1226,3 +1254,8 @@ class vprm:
 
 
         return best_fit_params_dict
+
+    def is_disjoint(self, this_sat_img):
+        bounds = self.prototype.sat_img.rio.transform_bounds(this_sat_img.sat_img.rio.crs)
+        dj = rasterio.coords.disjoint_bounds(bounds, this_sat_img.sat_img.rio.bounds())
+        return dj

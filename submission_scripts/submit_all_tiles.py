@@ -31,7 +31,6 @@ raw_code =' python ' + args.script + ' --year {} --h {} --v {} --config {} --n_c
 for i, year in enumerate(cfg['years']):
     for counter, hv_chunk in enumerate([cfg['hvs'][i:i + n] for i in range(0, len(cfg['hvs']), n)]):
         sub_code = ''
-
         for i in hv_chunk:
             sub_code += raw_code.format(year, i[0], i[1], args.config) + '\n'
             sub_code += 'sleep 10 \n'

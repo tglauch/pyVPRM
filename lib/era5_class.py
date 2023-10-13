@@ -86,7 +86,9 @@ class ERA5:
                                                                                       self.year, self.month, e_id))
             elif self.add_time_str == '1M':
                 fname = os.path.join(bpath, '{:03d}/E5{}_1M_{}_{:03d}.grb'.format(e_id,keys_dict[key][1],
-                                                                                      self.year, e_id))                
+                                                                                      self.year, e_id)) 
+            if key in self.file_handlers.keys():
+                self.file_handlers[key]['current'].close()
             t_dict['current'] = pygrib.open(fname)
             t_dict['current_name'] = fname
             t_dict['current_ind'] = 0
