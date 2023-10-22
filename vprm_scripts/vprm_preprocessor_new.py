@@ -63,65 +63,61 @@ def add_land_cover_map(vprm_inst, land_cover_on_modis_grid=None, copernicus_data
     
 
 hvs =  cfg['hvs']
-vprm_inst = vprm(n_cpus=args.n_cpus)
 file_collections = np.unique([i.split('.')[1] for i in
                               glob.glob(os.path.join(cfg['sat_image_path'], this_year,
                                         '*h{:02d}v{:02d}*.h*'.format(hvs[0][0], hvs[0][1])))])
 
 print(hvs)
+insts = []
 #Load the data
-for c0, f in enumerate(sorted(file_collections)):
-    handlers = []
-    if cfg['satellite'] == 'modis':
-        for c, i in enumerate(hvs):
+for c, i in enumerate(hvs):
+    new_inst = vprm(n_cpus=args.n_cpus)
+    for c0, f in enumerate(sorted(file_collections)):
+        if cfg['satellite'] == 'modis':
             fpath = glob.glob(os.path.join(cfg['sat_image_path'], this_year,
                                            '*{}*h{:02d}v{:02d}*.h*'.format(f, i[0], i[1])))[0]
             print(fpath)
-            if c == 0:
-                handler = modis(sat_image_path=fpath)
-                handler.load()
-            else:
-                handler2 = modis(sat_image_path=fpath)
-                handler2.load()
-                handlers.append(handler2)
-    elif cfg['satellite'] == 'viirs':
+            handler = modis(sat_image_path=fpath)
+            handler.load()
+        elif cfg['satellite'] == 'viirs':
             fpath = glob.glob(os.path.join(cfg['sat_image_path'], this_year,
                                            '*{}*h{:02d}v{:02d}*.h*'.format(f, i[0], i[1])))[0]
             print(fpath)
-            if c == 0:
-                handler = VIIRS(sat_image_path=fpath)
-                handler.load()
-            else:
-                handler2 = VIIRS(sat_image_path=fpath)
-                handler2.load()
-                handlers.append(handler2)
-    else:
-        print('Set the satellite in the cfg either to modis or viirs.')
-    handler.add_tile(handlers, reproject=False)
+            handler = VIIRS(sat_image_path=fpath)
+            handler.load()
+        else:
+            print('Set the satellite in the cfg either to modis or viirs.')
 
-    if cfg['satellite'] == 'modis':
-        vprm_inst.add_sat_img(handler, b_nir='B02', b_red='B01',
-                              b_blue='B03', b_swir='B06',
-                              which_evi='evi',
-                              drop_bands=True,
-                              timestamp_key='sur_refl_day_of_year',
-                              mask_bad_pixels=True,
-                              mask_clouds=True) 
-    elif cfg['satellite'] == 'viirs':
-        vprm_inst.add_sat_img(handler, b_nir='SurfReflect_I2', b_red='SurfReflect_I1',
-                              b_blue='no_blue_sensor', b_swir='SurfReflect_I3',
-                              which_evi='evi2',
-                              drop_bands=True)
-
+        if cfg['satellite'] == 'modis':
+            new_inst.add_sat_img(handler, b_nir='B02', b_red='B01',
+                                  b_blue='B03', b_swir='B06',
+                                  which_evi='evi',
+                                  drop_bands=True,
+                                  timestamp_key='sur_refl_day_of_year',
+                                  mask_bad_pixels=True,
+                                  mask_clouds=True) 
+        elif cfg['satellite'] == 'viirs':
+            new_inst.add_sat_img(handler, b_nir='SurfReflect_I2', b_red='SurfReflect_I1',
+                                  b_blue='no_blue_sensor', b_swir='SurfReflect_I3',
+                                  which_evi='evi2',
+                                  drop_bands=True)
            
-# Sort and merge satellite images
-vprm_inst.sort_and_merge_by_timestamp()
+    # Sort and merge satellite images
+    new_inst.sort_and_merge_by_timestamp()
+    
+    # Apply lowess smoothing
+    new_inst.lowess(gap_filled=False, frac=0.3, it=3) #0.2
 
-# Apply lowess smoothing
-vprm_inst.lowess(gap_filled=False, frac=0.2, it=3) #0.2
+    new_inst.clip_values('evi', 0, 1)
+    new_inst.clip_values('lswi',-1, 1)
+    # new_inst.clip_nans('evi', 0)
+    # new_inst.clip_nans('lswi', 0)
+    insts.append(new_inst)
 
-vprm_inst.clip_values('evi', 0, 1)
-vprm_inst.clip_values('lswi',-1, 1)
+insts = np.array(insts)
+vprm_inst = insts[0]
+if len(insts) > 1:
+    vprm_inst.add_vprm_insts(insts[1:])
 
 # Add the land cover map
 if not os.path.exists(cfg['out_path']):

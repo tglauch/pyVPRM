@@ -363,10 +363,10 @@ class vprm:
         if not isinstance(handler, satellite_data_manager):
             print('Satellite image needs to be an object of the sattelite_data_manager class')
             return  
-        if float(handler.sat_img.y[0]) > float(handler.sat_img.y[-1]):
-            handler.sat_img = handler.sat_img.isel(y=slice(None, None, -1)) #reindex(y=sorted(list(handler.sat_img.y)))
-        if float(handler.sat_img.x[0]) > float(handler.sat_img.x[-1]):      
-            handler.sat_img = handler.sat_img.isel(x=slice(None, -1, None))
+        # if float(handler.sat_img.y[0]) > float(handler.sat_img.y[-1]):
+        #     handler.sat_img = handler.sat_img.isel(y=slice(None, None, -1)) #reindex(y=sorted(list(handler.sat_img.y)))
+        # if float(handler.sat_img.x[0]) > float(handler.sat_img.x[-1]):      
+        #     handler.sat_img = handler.sat_img.isel(x=slice(None, -1, None))
         if which_evi in ['evi', 'evi2']:
             nir = handler.sat_img[b_nir] 
             red = handler.sat_img[b_red]
@@ -394,7 +394,8 @@ class vprm:
                                          lat=[i[1] for i in self.lonlats],
                                          new_dim_name='site_names', 
                                          interp_method='nearest')
-            handler.sat_img = handler.sat_img.assign_coords({'site_names': [i.get_site_name() for i in self.sites]})
+            handler.sat_img = handler.sat_img.assign_coords({'site_names': [i.get_site_name()
+                                                                            for i in self.sites]})
         bands_to_mask = []
         for btm in [b_nir, b_red, b_blue, b_swir]:
             if btm is not None:
@@ -492,8 +493,8 @@ class vprm:
             self.prototype = copy.deepcopy(biggest) 
             keys = list(self.prototype.sat_img.keys())
             self.prototype.sat_img = self.prototype.sat_img.drop(keys)
-            for h in self.sat_imgs:
-                h.sat_img = h.sat_img.rio.reproject_match(self.prototype.sat_img, nodata=np.nan)
+          #  for h in self.sat_imgs:
+          #      h.sat_img = h.sat_img.rio.reproject_match(self.prototype.sat_img, nodata=np.nan)
         else:
             self.prototype = copy.deepcopy(self.sat_imgs[0]) 
             keys = list(self.prototype.sat_img.keys()) 
@@ -517,6 +518,22 @@ class vprm:
         self.time_key = 'time'
         return
 
+    def clip_to_box(self, sat_to_crop):
+        bounds = sat_to_crop.sat_img.rio.bounds()
+        self.sat_imgs.sat_img = self.sat_imgs.sat_img.rio.clip_box(bounds[0],
+                                                                   bounds[1],
+                                                                   bounds[2],
+                                                                   bounds[3])
+        self.xs = self.sat_imgs.sat_img.x.values
+        self.ys = self.sat_imgs.sat_img.y.values
+        self.target_shape = (len(self.xs), len(self.ys))
+        X, Y = np.meshgrid(self.xs, self.ys)
+        t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
+                                '+proj=longlat +datum=WGS84')
+        self.x_long, self.y_lat = t.transform(X, Y) 
+        keys = list(self.sat_imgs.sat_img.keys())
+        self.prototype = satellite_data_manager(sat_img=self.sat_imgs.sat_img.drop(keys))
+        return
     
     def add_land_cover_map(self, land_cover_map, var_name='band_1',
                            save_path=None, filter_size=None):
@@ -524,8 +541,9 @@ class vprm:
             Add the land cover map. Either use a pre-calculated one or do the calculation on the fly.
 
                 Parameters:
-                        land_cover_map (str or satimg instance): The input land cover map 
-                        var_name (str): Name of the band in the output xarray
+                        land_cover_map (str or satimg instance): The input land cover map. 
+                                                                 If string, assume it's a pre-generated map
+                        var_name (str): Name of the land_cover_band in the xarray dataset
                         save_path (str): Path to save the map. Can be useful for re-using
                         filter_size (int): Number of pixels from which the land cover type is aggregated.
                 Returns:
@@ -533,26 +551,16 @@ class vprm:
         '''
         if isinstance(land_cover_map, str):
             print('Load pre-generated land cover map')
-            self.land_cover_type = copernicus_land_cover_map(land_cover_map)
-            self.land_cover_type.load()
-            if float(self.land_cover_type.sat_img.y[0]) > float(self.land_cover_type.sat_img.y[-1]):  
-                self.land_cover_type.sat_img = self.land_cover_type.sat_img.isel(y=slice(None, None, -1))
-            if float(self.land_cover_type.sat_img.x[0]) > float(self.land_cover_type.sat_img.x[-1]):              
-                self.land_cover_type.sat_img = self.land_cover_type.sat_img.isel(x=slice(None, -1, None))
-            self.land_cover_type.sat_img = self.land_cover_type.sat_img.rename({list(self.land_cover_type.sat_img.keys())[0]: 'land_cover_type'})
- 
+            self.land_cover_type = satellite_data_manager(sat_img=land_cover_map)
         else:
             print('Generating satellite data compatible land cover map')
            # land_cover_map.reproject(proj=self.prototype.sat_img.rio.crs.to_proj4())
             if land_cover_map.sat_img.rio.crs.to_proj4() != self.sat_imgs.sat_img.rio.crs.to_proj4():
                 print('Projection of land cover map and satellite images need to match. Reproject first.')
                 return False
-            if float(land_cover_map.sat_img.y[0]) > float(land_cover_map.sat_img.y[-1]): 
-                land_cover_map.sat_img = land_cover_map.sat_img.isel(y=slice(None, None, -1))
-            if float(land_cover_map.sat_img.x[0]) > float(land_cover_map.sat_img.x[-1]):
-                land_cover_map.sat_img = land_cover_map.sat_img.isel(x=slice(None, -1, None))
-            land_cover_map.sat_img = land_cover_map.sat_img.sel(x=slice(self.xs.min(),self.xs.max()),
-                                                                y=slice(self.ys.min(),self.ys.max()))
+            # bounds = self.sat_imgs.sat_img.rio.bounds()
+            # land_cover_map.sat_img = land_cover_map.sat_img.rio.clip_box(bounds[0], bounds[1],
+            #                                                              bounds[2], bounds[3])
             for key in self.map_copernicus_to_vprm_class.keys():
                 land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_copernicus_to_vprm_class[key]
             f_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16)
@@ -578,7 +586,7 @@ class vprm:
             self.land_cover_type = copy.deepcopy(self.prototype)
             self.land_cover_type.sat_img = self.land_cover_type.sat_img.assign({'land_cover_type': (['y','x'], t)}) 
             if save_path is not None:
-                 self.land_cover_type.sat_img.rio.to_raster(save_path)
+                 self.land_cover_type.save(save_path)
         return
     
     def calc_min_max_evi_lswi(self):
@@ -662,13 +670,18 @@ class vprm:
                     y_ind = np.argmin(np.abs(y - self.sat_imgs.sat_img.coords['y'].values))
                     for key in keys:
                         self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.timestamps, xvals=xvals, frac=frac, it=it) for i in np.arange(-10, 10, 1))).T 
+        
         self.time_key = 'time_gap_filled'
-        self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({'time_gap_filled': xvals})        
+        self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({'time_gap_filled': list(xvals)}) 
         return
 
     def clip_values(self, key, min_val, max_val):
         self.sat_imgs.sat_img[key].values[self.sat_imgs.sat_img[key].values<min_val] = min_val
         self.sat_imgs.sat_img[key].values[self.sat_imgs.sat_img[key].values>max_val] = max_val
+        return
+
+    def clip_nans(self, key, val):
+        self.sat_imgs.sat_img[key].values[np.isnan(self.sat_imgs.sat_img[key].values)] = val
         return
     
     def load_weather_data(self, hour, day, month, year, era_keys):
@@ -1259,3 +1272,25 @@ class vprm:
         bounds = self.prototype.sat_img.rio.transform_bounds(this_sat_img.sat_img.rio.crs)
         dj = rasterio.coords.disjoint_bounds(bounds, this_sat_img.sat_img.rio.bounds())
         return dj
+
+    
+    def add_vprm_insts(self, vprm_insts):          
+
+        if isinstance(self.sat_imgs, satellite_data_manager):
+            self.sat_imgs.add_tile([v.sat_imgs for v in vprm_insts],
+                                    reproject=False)
+            self.xs = self.sat_imgs.sat_img.x.values
+            self.ys = self.sat_imgs.sat_img.y.values
+            self.target_shape = (len(self.xs), len(self.ys))
+            X, Y = np.meshgrid(self.xs, self.ys)
+            t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
+                                    '+proj=longlat +datum=WGS84')
+            self.x_long, self.y_lat = t.transform(X, Y) 
+            keys = list(self.sat_imgs.sat_img.keys())
+            self.prototype = satellite_data_manager(sat_img=self.sat_imgs.sat_img.drop(keys))
+            
+    
+        if self.land_cover_type is not None:
+            self.land_cover_type.add_tile([v.land_cover_type for v in vprm_insts],
+                                    reproject=False)
+        

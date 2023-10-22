@@ -34,6 +34,7 @@ from datetime import datetime
 from rasterio.warp import calculate_default_transform
 import h5py
 from dateutil import parser
+import xarray as xr
 
 def geodesic_point_buffer(lat, lon, km):
     buf = Point(0, 0).buffer(km * 1000)  # distance in metres
@@ -69,6 +70,8 @@ class satellite_data_manager:
         self.outpath = datapath
         self.sat_image_path = sat_image_path  
         self.sat_img = sat_img
+        if isinstance(self.sat_img, str):
+            self.sat_img = xr.open_dataset(self.sat_img)
         self.t = None
         return
     
@@ -440,7 +443,7 @@ class modis(earthdata):
         self.sat_img['sur_refl_state_500m'].values[np.isnan(self.sat_img['sur_refl_state_500m'].values)] = int('1' * 16,2)
         mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit   
         for b in band_nums:
-            self.sat_img['B{:02d}'.format(b)].values[mask != int('00', 2)] = np.nan
+            self.sat_img['B{:02d}'.format(b)].values[mask == int('01', 2)] = np.nan
         return
 
     def get_resolution(self):
@@ -547,12 +550,14 @@ class VIIRS(earthdata):
             rename_dict[i] = i.split('Data_Fields_')[1]
         self.sat_img = self.sat_img.rename(rename_dict)
         self.keys = np.array(list(self.sat_img.data_vars))
+        bands = []
         for k in self.keys:
             if ('SurfReflect_I' not in k) & ('SurfReflect_M' not in k):
                 continue
             sf = self.sat_img.attrs[[i for i in self.sat_img.attrs if ('scale_factor' in i) & ('err' not in i) & (k in i)][0]]
             self.sat_img[k] = self.sat_img[k] * sf
-
+            bands.append(k)
+        self.bands = bands
         transform = Affine(self.pixel_size, 0, west, 0, -self.pixel_size, north)
         coords = affine_to_coords(transform, self.sat_img.rio.width, self.sat_img.rio.height)
         self.sat_img.coords["x"] = coords["x"]
@@ -562,7 +567,44 @@ class VIIRS(earthdata):
         
         # self.sat_img.rio.write_crs(proj, inplace=True)
 #        self.sat_img = self.sat_img.to_array()
-        return    
+        return   
+
+    def mask_bad_pixels(self, bands=None):
+        if bands is None:
+            bands=self.bands
+         
+        band_nums = [int(band[-1]) for band in bands]
+        masks = dict()
+
+        for b in band_nums:
+            if b>2: ## VIIRS only has quality mask for band1 and band2
+                continue
+            start_bit = b * 4# Start Bit 
+            end_bit = b * 4 + 3 # End Bit  (inclusive)
+            num_bits_to_extract = end_bit - start_bit + 1
+            bit_mask = (1 << num_bits_to_extract) - 1
+            self.sat_img['SurfReflect_QC_500m'].values[np.isnan(self.sat_img['SurfReflect_QC_500m'].values)] = int('1' * 15,2)
+            masks[b] = (np.array(self.sat_img['SurfReflect_QC_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit 
+
+        for mask_int in masks.keys():
+            masks[mask_int] = (masks[mask_int] != int('0000', 2))
+            self.sat_img['SurfReflect_I{}'.format(mask_int)].values[masks[mask_int]] = np.nan
+        return
+
+    def mask_clouds(self, bands=None):
+        if bands is None:
+            bands=self.bands
+         
+        band_nums = [int(band[-1]) for band in bands]
+        start_bit = 0 # Start Bit 
+        end_bit = 1 # End Bit  (inclusive)
+        num_bits_to_extract = end_bit - start_bit + 1
+        bit_mask = (1 << num_bits_to_extract) - 1
+        self.sat_img['SurfReflect_State_500m'].values[np.isnan(self.sat_img['SurfReflect_State_500m'].values)] = int('1' * 16,2)
+        mask = (np.array(self.sat_img['SurfReflect_State_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit   
+        for b in band_nums:
+            self.sat_img['SurfReflect_I{}'.format(b)].values[mask == int('01', 2)] = np.nan
+        return
 
     
     def get_cloud_coverage(self):
