@@ -15,10 +15,10 @@ import datetime
 map_function = lambda lon: (lon + 360) if (lon < 0) else lon
 
 
-bpaths = {'sf00': '/pool/data/ERA5/E5/sf/an/{}', # '/work/bk1099/data/sf00_1H'i,
-          'sf12': '/pool/data/ERA5/E5/sf/fc/{}', #'/work/bk1099/data/sf12_1H',
-          'pl00': '/pool/data/ERA5/E5/pl/an/{}', #'/work/bk1099/data/pl00_1H'i,
-          'ml00': '/pool/data/ERA5/E5/ml/an/{}'} #'/work/bk1099/data/ml00_1H/'}
+bpaths = {'sf00': '/pool/data/ERA5/E*/sf/an/{}', # '/work/bk1099/data/sf00_1H'i,
+          'sf12': '/pool/data/ERA5/E*/sf/fc/{}', #'/work/bk1099/data/sf12_1H',
+          'pl00': '/pool/data/ERA5/E*/pl/an/{}', #'/work/bk1099/data/pl00_1H'i,
+          'ml00': '/pool/data/ERA5/E*/ml/an/{}'} #'/work/bk1099/data/ml00_1H/'}
 
 # Check documentation under 
 # https://confluence.ecmwf.int/display/CKB/ERA5%3A+data+documentation#ERA5:datadocumentation-Spatialgrid
@@ -79,18 +79,19 @@ class ERA5:
             bpath = bpaths[keys_dict[key][1]].format(self.add_time_str)
             e_id = keys_dict[key][0]
             if self.add_time_str == '1H':
-                fname = os.path.join(bpath, '{:03d}/E5{}_1H_{}-{:02d}-{:02d}_{:03d}.grb'.format(e_id,keys_dict[key][1],
+                fname = os.path.join(bpath, '{:03d}/E*{}_1H_{}-{:02d}-{:02d}_{:03d}.grb'.format(e_id,keys_dict[key][1],
                                                                                       self.year, self.month, self.day, e_id))
             elif self.add_time_str == '1D':
-                fname = os.path.join(bpath, '{:03d}/E5{}_1D_{}-{:02d}_{:03d}.grb'.format(e_id,keys_dict[key][1],
+                fname = os.path.join(bpath, '{:03d}/E*{}_1D_{}-{:02d}_{:03d}.grb'.format(e_id,keys_dict[key][1],
                                                                                       self.year, self.month, e_id))
             elif self.add_time_str == '1M':
-                fname = os.path.join(bpath, '{:03d}/E5{}_1M_{}_{:03d}.grb'.format(e_id,keys_dict[key][1],
+                fname = os.path.join(bpath, '{:03d}/E*{}_1M_{}_{:03d}.grb'.format(e_id,keys_dict[key][1],
                                                                                       self.year, e_id)) 
+            fname = glob.glob(fname)
             if key in self.file_handlers.keys():
                 self.file_handlers[key]['current'].close()
-            t_dict['current'] = pygrib.open(fname)
-            t_dict['current_name'] = fname
+            t_dict['current'] = pygrib.open(fname[0])
+            t_dict['current_name'] = list(fname)
             t_dict['current_ind'] = 0
             t_dict['type'] = keys_dict[key][1]
             self.file_handlers[key] = t_dict
@@ -143,7 +144,22 @@ class ERA5:
                     data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][int(self.day)].values)
             elif self.add_time_str == '1M':
                 for key in self.keys:
-                    data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][int(self.month)].values)
+                    if self.month not in [self.file_handlers[key]['current'][t+1].month for t in range(self.file_handlers[key]['current'].messages)]:
+                        for i in self.file_handlers[key]['current_name']:
+                            print(i)
+                            tmp = pygrib.open(i)
+                            if self.month in [tmp[t+1].month for t in range(tmp.messages)]:
+                                self.file_handlers[key]['current'] = tmp
+                                break 
+                                
+                    if self.month not in [self.file_handlers[key]['current'][t+1].month for t in range(self.file_handlers[key]['current'].messages)]:
+                        print('No data for given month')
+                        return
+
+                    for c in range(self.file_handlers[key]['current'].messages):
+                        if self.file_handlers[key]['current'][c+1].month == self.month:
+                            break
+                    data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][ c + 1 ].values)
                 
             self.ds_out = copy.deepcopy(self.ds_in_t)
             self.ds_out = self.ds_out.assign(data_dict)

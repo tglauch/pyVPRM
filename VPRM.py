@@ -14,7 +14,6 @@ from pyproj import Transformer
 import copy
 from joblib import Parallel, delayed
 import xarray as xr
-import xesmf as xe
 import scipy
 import uuid
 import time
@@ -193,6 +192,9 @@ class vprm:
                 Returns:
                         Dictionary with a dictinoary of the WRF input arrays
         '''
+        
+        import xesmf as xe
+
 
         src_x = self.sat_imgs.sat_img.coords['x'].values
         src_y = self.sat_imgs.sat_img.coords['y'].values
@@ -363,27 +365,28 @@ class vprm:
         if not isinstance(handler, satellite_data_manager):
             print('Satellite image needs to be an object of the sattelite_data_manager class')
             return  
-        # if float(handler.sat_img.y[0]) > float(handler.sat_img.y[-1]):
-        #     handler.sat_img = handler.sat_img.isel(y=slice(None, None, -1)) #reindex(y=sorted(list(handler.sat_img.y)))
-        # if float(handler.sat_img.x[0]) > float(handler.sat_img.x[-1]):      
-        #     handler.sat_img = handler.sat_img.isel(x=slice(None, -1, None))
         if which_evi in ['evi', 'evi2']:
             nir = handler.sat_img[b_nir] 
             red = handler.sat_img[b_red]
             swir = handler.sat_img[b_swir] 
             if which_evi=='evi':
                 blue = handler.sat_img[b_blue] 
-                temp_evi = (evi_params['g'] * ( nir - red)  / (nir + evi_params['c1'] * red - evi_params['c2'] * blue + evi_params['l'])).values
+                temp_evi = (evi_params['g'] * ( nir - red)  / (nir + evi_params['c1'] * red - evi_params['c2'] * blue + evi_params['l']))#.values
             elif which_evi=='evi2':
-                temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l'])).values 
-            temp_evi[temp_evi<0] = np.nan
-            temp_evi[temp_evi>1] = np.nan
-            temp_lswi = ((nir - swir) / (nir + swir)).values
-            temp_lswi[temp_lswi<-1] = np.nan
-            temp_lswi[temp_lswi>1] = np.nan
+                temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l']))#.values
+                
+            temp_evi = xr.where((temp_evi<0) | (temp_evi>1) , np.nan, temp_evi)
+           # temp_evi[temp_evi<0] = np.nan
+            #temp_evi[temp_evi>1] = np.nan
+            temp_lswi = ((nir - swir) / (nir + swir))#.values
+            temp_lswi = xr.where((temp_lswi<-1) | (temp_lswi>1) , np.nan, temp_lswi)
 
-            handler.sat_img = handler.sat_img.assign({'evi': (['y','x'], temp_evi)})
-            handler.sat_img = handler.sat_img.assign({'lswi': (['y','x'], temp_lswi)}) 
+          #  temp_lswi[temp_lswi<-1] = np.nan
+          # temp_lswi[temp_lswi>1] = np.nan
+            handler.sat_img['evi'] = temp_evi
+            handler.sat_img['lswi'] = temp_lswi
+           # handler.sat_img = handler.sat_img.assign({'evi': (['y','x'], temp_evi)})
+           # handler.sat_img = handler.sat_img.assign({'lswi': (['y','x'], temp_lswi)}) 
         if timestamp_key is not None:
             handler.sat_img = handler.sat_img.rename({timestamp_key: 'timestamps'})
         if self.sites is not None:
@@ -600,16 +603,19 @@ class vprm:
         self.max_lswi = copy.deepcopy(self.prototype)
         self.min_max_evi = copy.deepcopy(self.prototype)
         shortcut = self.sat_imgs.sat_img
-        if self.sites is None:
-            self.max_lswi.sat_img = self.max_lswi.sat_img.assign({'max_lswi': (['y','x'], np.nanmax(shortcut['lswi'], axis=0))})
-            self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'min_evi': (['y','x'], np.nanmin(shortcut['evi'], axis=0))})
-            self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'max_evi': (['y','x'], np.nanmax(shortcut['evi'], axis=0))})   
-            self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['y','x'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})  
-        else:
-            self.max_lswi.sat_img = self.max_lswi.sat_img.assign({'max_lswi': (['site_names'], np.nanmax(shortcut['lswi'], axis=0))})
-            self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'min_evi': (['site_names'], np.nanmin(shortcut['evi'], axis=0))})
-            self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'max_evi': (['site_names'], np.nanmax(shortcut['evi'], axis=0))})   
-            self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['site_names'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})              
+        # if self.sites is None:
+        self.max_lswi.sat_img['max_lswi'] = shortcut['lswi'].max(self.time_key, skipna=True)
+        self.min_max_evi.sat_img['min_evi'] = shortcut['evi'].min(self.time_key, skipna=True)
+        self.min_max_evi.sat_img['max_evi'] = shortcut['evi'].max(self.time_key, skipna=True)
+        self.min_max_evi.sat_img['th'] = shortcut['evi'].min(self.time_key, skipna=True) + 0.55 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True))
+            # self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'min_evi': (['y','x'], np.nanmin(shortcut['evi'], axis=0))})
+            # self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'max_evi': (['y','x'], np.nanmax(shortcut['evi'], axis=0))})   
+            # self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['y','x'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})  
+        # else:
+        #     self.max_lswi.sat_img = self.max_lswi.sat_img.assign({'max_lswi': (['site_names'], np.nanmax(shortcut['lswi'], axis=0))})
+        #     self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'min_evi': (['site_names'], np.nanmin(shortcut['evi'], axis=0))})
+        #     self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'max_evi': (['site_names'], np.nanmax(shortcut['evi'], axis=0))})   
+        #     self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['site_names'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})              
         return
     
     def lowess(self, lonlats=None, keys=None, gap_filled=False, frac=0.25, it=3):
@@ -945,9 +951,9 @@ class vprm:
             tmax[mask] = self.temp_coefficients[i][2]
 
         self.t2m = copy.deepcopy(self.prototype)
-        self.t2m.sat_img = self.t2m.sat_img.assign({'tmin': (['y','x'], tmin)}) 
-        self.t2m.sat_img = self.t2m.sat_img.assign({'topt': (['y','x'], topt)}) 
-        self.t2m.sat_img = self.t2m.sat_img.assign({'tmax': (['y','x'], tmax)}) 
+        self.t2m.sat_img = self.t2m.sat_img.assign({'tmin': (['y','x'], tmin),
+                                                    'topt': (['y','x'], topt),
+                                                    'tmax': (['y','x'], tmax)})  
         return
 
     def _set_sat_img_counter(self, datetime_utc):
@@ -1177,11 +1183,10 @@ class vprm:
                             par0[i,j] = fit_params_dict[int(t[i,j])]['par0']
                             alpha[i,j] = fit_params_dict[int(t[i,j])]['alpha']
                             beta[i,j] = fit_params_dict[int(t[i,j])]['beta']
-                self.res.sat_img = self.res.sat_img.assign({'lamb': (['y','x'], lamb)}) 
-                self.res.sat_img = self.res.sat_img.assign({'par0': (['y','x'], par0)}) 
-                self.res.sat_img = self.res.sat_img.assign({'alpha': (['y','x'], alpha)}) 
-                self.res.sat_img = self.res.sat_img.assign({'beta': (['y','x'], beta)})
-
+                self.res.sat_img = self.res.sat_img.assign({'lamb': (['y','x'], lamb),
+                                                            'par0': (['y','x'], par0),
+                                                            'alpha': (['y','x'], alpha),
+                                                            'beta': (['y','x'], beta)}) 
         if not os.path.exists(os.path.dirname(regridder_weights)):
             os.makedirs(os.path.dirname(regridder_weights))
 
