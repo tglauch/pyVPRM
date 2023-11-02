@@ -7,7 +7,7 @@ from dateutil import parser
 from scipy.interpolate import interp2d
 import pygrib
 import copy
-import xesmf as xe
+
 import uuid
 import datetime
 
@@ -180,6 +180,8 @@ class ERA5:
 
     def regrid(self, lats=None, lons=None, dataset=None, n_cpus=1,
                weights=None, overwrite_regridder=False):
+        
+        import xesmf as xe
 
         if (self.regridder is None) | (overwrite_regridder):
             # t_ds_in = xr.Dataset({"lat": (['lat'], self.ds_in['lat'].values, {"units": "degrees_north"}),

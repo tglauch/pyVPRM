@@ -1,4 +1,4 @@
-from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
+#from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
 import pathlib
 import sys
 import os
@@ -694,10 +694,12 @@ class sentinel2(satellite_data_manager):
     # Note: Available data on the copernicus hub is 
     # limited
     
-    def __init__(self, datapath=None, sat_image_path=None):
+    def __init__(self, datapath=None, sat_image_path=None, sat_img=None):
         super().__init__(datapath, sat_image_path)
         self.api = False
         self.load_kwargs = {}
+        if sat_img is not None:
+            self.sat_img = sat_img
         return
         
     def individual_loading(self):
@@ -713,10 +715,10 @@ class sentinel2(satellite_data_manager):
         
     # Requires an copernicus account
         
-        if self.api == False:
-            self.api = SentinelAPI(username,
-                                   pwd,
-                                   'https://apihub.copernicus.eu/apihub')
+        # if self.api == False:
+        #     self.api = SentinelAPI(username,
+        #                            pwd,
+        #                            'https://apihub.copernicus.eu/apihub')
         if lonlat is not False:
             footprint = (
                     "POINT({} {})".format(lonlat[0], lonlat[1])
@@ -724,15 +726,15 @@ class sentinel2(satellite_data_manager):
         else:
             footprint = shape
             
-        products = self.api.query(footprint,
-                             date = (date0, date1), # (date(2022, 8, 10), date(2022, 10, 7)),
-                             platformname = platformname,
-                             processinglevel = processinglevel,
-                             cloudcoverpercentage = cloudcoverpercentage)
-        self.api.download(list(products.keys())[0],
-                          directory_path=savepath)
-        meta_data = self.api.to_geodataframe(products)
-        self.outpath = self._unzip(savepath, meta_data['title'][0])
+        # products = self.api.query(footprint,
+        #                      date = (date0, date1), # (date(2022, 8, 10), date(2022, 10, 7)),
+        #                      platformname = platformname,
+        #                      processinglevel = processinglevel,
+        #                      cloudcoverpercentage = cloudcoverpercentage)
+        # self.api.download(list(products.keys())[0],
+        #                   directory_path=savepath)
+        # meta_data = self.api.to_geodataframe(products)
+        # self.outpath = self._unzip(savepath, meta_data['title'][0])
         
     def _unzip(self, folder_path, file_name):
         outpath = os.path.join(folder_path, file_name)
@@ -775,11 +777,29 @@ class sentinel2(satellite_data_manager):
                  'HIGH_PROBA_CLOUDS_PERCENTAGE']:
             print(i, self.meta_data[i])
         return
+
+    def mask_bad_pixels(self, bands=None):
+        if bands is None:
+            bands=self.bands   
+        self.sat_img[bands] = xr.where(self.sat_img['scl']==0,
+                                       np.nan,self.sat_img[bands])
+        return
+    
+    def mask_clouds(self, bands=None):
+        if bands is None:
+            bands=self.bands
+         
+        self.sat_img[bands] = xr.where((self.sat_img['scl']==9) | (self.sat_img['scl']==8),
+                                       np.nan, self.sat_img[bands])
+        return
     
     
     def get_recording_time(self):
-        return datetime.strptime(self.meta_data['PRODUCT_START_TIME'],
-                                 '%Y-%m-%dT%H:%M:%S.%fZ')
+        if 'time' in list(self.sat_img.coords):
+            return self.sat_img.coords['time'].values
+        else:  
+            return datetime.strptime(self.meta_data['PRODUCT_START_TIME'],
+                                     '%Y-%m-%dT%H:%M:%S.%fZ')
     
 
 

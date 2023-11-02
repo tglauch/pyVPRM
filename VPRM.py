@@ -96,7 +96,10 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=Non
             if timestamps is None:
                 t_timestamp = np.arange(len(array_to_smooth[:, j]))
             else:
-                t_timestamp = timestamps[:, j]
+                if timestamps.ndim == 1:
+                    t_timestamp = timestamps
+                else:
+                    t_timestamp = timestamps[:, j]
             # if vclass!=None:
             #     if vclass[j] == 8: # skip arrays with land type class 8 
             #         continue
@@ -371,16 +374,14 @@ class vprm:
             swir = handler.sat_img[b_swir] 
             if which_evi=='evi':
                 blue = handler.sat_img[b_blue] 
-                temp_evi = (evi_params['g'] * ( nir - red)  / (nir + evi_params['c1'] * red - evi_params['c2'] * blue + evi_params['l']))#.values
+                temp_evi = (evi_params['g'] * ( nir - red)  / (nir + evi_params['c1'] * red - evi_params['c2'] * blue + evi_params['l']))
             elif which_evi=='evi2':
-                temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l']))#.values
-                
+                temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l']))
             temp_evi = xr.where((temp_evi<0) | (temp_evi>1) , np.nan, temp_evi)
            # temp_evi[temp_evi<0] = np.nan
             #temp_evi[temp_evi>1] = np.nan
-            temp_lswi = ((nir - swir) / (nir + swir))#.values
+            temp_lswi = ((nir - swir) / (nir + swir))
             temp_lswi = xr.where((temp_lswi<-1) | (temp_lswi>1) , np.nan, temp_lswi)
-
           #  temp_lswi[temp_lswi<-1] = np.nan
           # temp_lswi[temp_lswi>1] = np.nan
             handler.sat_img['evi'] = temp_evi
@@ -503,8 +504,9 @@ class vprm:
             keys = list(self.prototype.sat_img.keys()) 
             self.prototype.sat_img = self.prototype.sat_img.drop(keys)
 
+        self.timestamps = np.array(self.timestamps).flatten()
         sort_inds = np.argsort(self.timestamps)
-        self.timestamps = np.array(self.timestamps)[sort_inds]
+        self.timestamps = np.array([pd.Timestamp(i).to_pydatetime() for i in self.timestamps])[sort_inds]
         self.timestamp_start = self.timestamps[0]
         self.timestamp_end = self.timestamps[-1]
         self.tot_num_days = (self.timestamp_end - self.timestamp_start).days
@@ -516,7 +518,10 @@ class vprm:
                                   sat_img_handler.stop_date(), self.timestamp_start)
             # else:
             #     Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(adjust_timestamps)(sat_img_handler.sat_img, sat_img_handler.start_date(), sat_img_handler.stop_date(), self.timestamp_start) for sat_img_handler in self.sat_imgs)
-        self.sat_imgs = satellite_data_manager(sat_img = xr.concat([i.sat_img for i in np.array(self.sat_imgs)[sort_inds]], 'time'))
+        if len(self.timestamps) == len(self.sat_imgs):
+            self.sat_imgs = satellite_data_manager(sat_img = xr.concat([i.sat_img for i in np.array(self.sat_imgs)[sort_inds]], 'time'))
+        else:
+            self.sat_imgs = self.sat_imgs[0]
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time": day_steps})
         self.time_key = 'time'
         return
@@ -639,26 +644,26 @@ class vprm:
             if (not 'B' in k) & (not 'evi' in k) &\
                (not 'lswi' in k) & (not 'timestamps' in k):
                 keys.remove(k)
-        if self.sites is not None:         
+        if self.sites is not None:  # Is flux tower sites are given        
             if 'timestamps' in keys:
                 keys.remove('timestamps')
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img.sel(site_names=i)['timestamps'].values, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})      
             else:
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.timestamps, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})
 
             
-        elif lonlats is None:
+        elif lonlats is None: # If smoothing the entire array
             if 'timestamps' in keys:
                 keys.remove('timestamps')
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
             else:
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.timestamps, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
                 
-        else:
+        else: # If smoothing only specific coordinates
             t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                      self.sat_imgs.sat_img.rio.crs)
             if 'timestamps' in keys:
@@ -675,7 +680,7 @@ class vprm:
                     x_ind = np.argmin(np.abs(x - self.sat_imgs.sat_img.coords['x'].values))
                     y_ind = np.argmin(np.abs(y - self.sat_imgs.sat_img.coords['y'].values))
                     for key in keys:
-                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.timestamps, xvals=xvals, frac=frac, it=it) for i in np.arange(-10, 10, 1))).T 
+                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i in np.arange(-10, 10, 1))).T 
         
         self.time_key = 'time_gap_filled'
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({'time_gap_filled': list(xvals)}) 
