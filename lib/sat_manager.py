@@ -73,6 +73,7 @@ class satellite_data_manager:
         if isinstance(self.sat_img, str):
             self.sat_img = xr.open_dataset(self.sat_img)
         self.t = None
+        self.bands = None
         return
     
     def value_at_lonlat(self, lon, lat, as_array=True, key=None,
@@ -115,6 +116,14 @@ class satellite_data_manager:
             return ret.to_array().values
         else:
             return ret
+    
+    def drop_bands(self, band_names=None):
+        if band_names is not None:
+            self.sat_img = self.sat_img.drop(band_names)
+        else:
+            if self.bands is None:
+                self.set_band_names()    
+            self.sat_img = self.sat_img.drop(self.bands)
         
     def reduce_along_lat_lon(self, lon, lat, interp_method='linear', new_dim_name='z'):
         if self.t is None:
@@ -407,6 +416,14 @@ class modis(earthdata):
         
     def stop_date(self):
         return parser.parse(self.sat_img.attrs['GRANULEENDINGDATETIME'].split(',')[-1]).replace(tzinfo=None)
+
+    def set_band_names(self):
+        print('Trying to set reflectance bands assuming standard naming for MODIS')
+        bands = []
+        for i in list(self.sat_img.data_vars):
+            if ('sur_refl' in i) & ('_b' in i):
+                bands.append(i)
+        self.bands = bands 
         
     def mask_bad_pixels(self, bands=None):
         if bands is None:
@@ -448,9 +465,6 @@ class modis(earthdata):
 
     def get_resolution(self):
         return self.sat_img.rio.resolution()
-    
-    def drop_bands(self):
-        self.sat_img = self.sat_img.drop(self.bands)
         
     def individual_loading(self):
         if ('MOD09GA' in self.product) or ('MOD21' in self.product):
@@ -512,6 +526,15 @@ class VIIRS(earthdata):
     def set_sat_img(self, ind):
         #implements ones M and L bands are used. Currently only M bands implemented. 
         return
+
+    def set_band_names(self):
+        print('Trying to set reflectance bands assuming standard naming for VIIRS')
+        bands = []
+        for k in list(self.sat_img.data_vars):
+            if ('SurfReflect_I' not in k) & ('SurfReflect_M' not in k):
+                continue
+            bands.append(k)
+        self.bands = bands        
 
     def individual_loading(self):
         self.sat_img = rxr.open_rasterio(self.sat_image_path, 
@@ -704,6 +727,14 @@ class sentinel2(satellite_data_manager):
         
     def individual_loading(self):
         return
+
+    def set_band_names(self):
+        print('Trying to set reflectance bands assuming standard naming for Sentinel-2')
+        bands = []
+        for i in list(self.sat_img.data_vars):
+            if ('red' in i) | ('blue' in i) | ('green' in i) | ('swir' in i) | ('nir' in i):
+                bands.append(i)
+        self.bands = bands 
         
     def download(self, date0, date1, savepath,
                  username, pwd,

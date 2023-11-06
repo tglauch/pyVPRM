@@ -6,6 +6,7 @@ from tzwhere import tzwhere
 from dateutil import parser
 import numpy as np 
 import os
+from timezonefinder import TimezoneFinder 
 
 def lat_lon_to_modis(lat, lon):
     CELLS = 2400
@@ -99,8 +100,10 @@ class fluxnet(flux_tower_data):
     def add_tower_data(self):
         idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars)
         idata.rename({self.ssrd_key: 'ssrd', self.t2m_key: 't2m'}, inplace=True, axis=1)
-        tzw = tzwhere.tzwhere()
-        timezone_str = tzw.tzNameAt(self.lat, self.lon) 
+        tf = TimezoneFinder()
+        timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
+        # tzw = tzwhere.tzwhere()
+        # timezone_str = tzw.tzNameAt(self.lat, self.lon) 
         timezone = pytz.timezone(timezone_str)
         dt = parser.parse('200001010000') # pick a date that is definitely standard time and not DST 
         datetime_u = []
@@ -154,8 +157,10 @@ class icos(flux_tower_data):
         idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars,
                             on_bad_lines='skip')
         idata.rename({self.ssrd_key: 'ssrd', self.t2m_key: 't2m'}, inplace=True, axis=1)
-        tzw = tzwhere.tzwhere()
-        timezone_str = tzw.tzNameAt(self.lat, self.lon) 
+        tf = TimezoneFinder()
+        timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
+        #tzw = tzwhere.tzwhere()
+        #timezone_str = tzw.tzNameAt(self.lat, self.lon) 
         timezone = pytz.timezone(timezone_str)
         dt = parser.parse('200001010000') # pick a date that is definitely standard time and not DST 
         datetime_u = []

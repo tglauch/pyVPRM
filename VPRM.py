@@ -79,7 +79,7 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=Non
         mask = np.isfinite(array_to_smooth)
         print(t_timestamp, array_to_smooth)
         if xvals is None:
-            xvals = t_timestamp[mask]
+            xvals = t_timestamp
         ret = lowess(array_to_smooth[mask], t_timestamp[mask],
                      is_sorted=True, frac=frac, it=it,
                      xvals=xvals,
@@ -392,8 +392,11 @@ class vprm:
             handler.sat_img = handler.sat_img.rename({timestamp_key: 'timestamps'})
         if self.sites is not None:
             if smearing:
-                handler = self.smearing(sat_img=handler, lonlats=self.lonlats,
-                                        keys=['evi', 'lswi'])
+                handler = self.smearing(keys=['evi', 'lswi'],
+                                        size=(3,3),
+                                        sat_img=handler,
+                                        lonlats=self.lonlats,
+                                        )
             handler.reduce_along_lat_lon(lon=[i[0] for i in self.lonlats],
                                          lat=[i[1] for i in self.lonlats],
                                          new_dim_name='site_names', 
@@ -425,7 +428,7 @@ class vprm:
         return
 
     
-    def smearing(self, size=(3,3), sat_img=None, lonlats=None, keys=None):
+    def smearing(self, keys, size, sat_img=None, lonlats=None):
         '''
             By default performs a spatial smearing on the list of pre-loaded satellite images.
             If sat_img is given the smearing is performed on that specific image.
@@ -455,10 +458,12 @@ class vprm:
             else:
                 t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                          img.sat_img.rio.crs)
+                xs = img.sat_img.coords['x'].values
+                ys = img.sat_img.coords['y'].values
                 for ll in lonlats:
                     x, y = t.transform(ll[0], ll[1])
-                    x_ind = np.argmin(np.abs(x - img.sat_img.coords['x'].values))
-                    y_ind = np.argmin(np.abs(y - img.sat_img.coords['y'].values))
+                    x_ind = np.argmin(np.abs(x - xs))
+                    y_ind = np.argmin(np.abs(y - ys))
                     for key in keys:
                         img.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = \
                             uniform_filter(img.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10],
@@ -578,8 +583,10 @@ class vprm:
             if filter_size is None:
                 filter_size = int(np.ceil(self.sat_imgs.sat_img.rio.resolution()[0]/land_cover_map.get_resolution()))
                 print('Filter size {}:'.format(filter_size))
+            if filter_size <= 1:
+                filter_size = 1
             for i in veg_inds:
-                mask = np.array(land_cover_map.sat_img[var_name].values == i, dtype=np.float)
+                mask = np.array(land_cover_map.sat_img[var_name].values == i, dtype=np.float64)
                 ta  = scipy.ndimage.uniform_filter(mask, size=(filter_size, filter_size)) * (filter_size **2)
                 f_array[ta>count_array] = i
                 count_array[ta>count_array] = ta[ta>count_array]
@@ -633,7 +640,7 @@ class vprm:
                 Returns:
                         None
         '''
-        
+        self.sat_imgs.sat_img.load()
         if keys is None:
             keys = list(self.sat_imgs.sat_img.data_vars)
         if gap_filled:
@@ -658,7 +665,7 @@ class vprm:
             if 'timestamps' in keys:
                 keys.remove('timestamps')
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamtps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
             else:
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
