@@ -9,6 +9,7 @@ from lib.sat_manager import VIIRS, sentinel2, modis,\
                             copernicus_land_cover_map, satellite_data_manager
 from lib.era5_class import ERA5
 from scipy.ndimage import uniform_filter
+from astropy.convolution import convolve
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from pyproj import Transformer
 import copy
@@ -448,10 +449,11 @@ class vprm:
         if keys is None:
             keys = list(sat_img[0].sat_img.data_vars)
             
+        size = np.expand_dims(np.ones(shape=size)/np.sum(np.ones(shape=size)), 0)
         for img in sat_img:
             if lonlats is None:
                 for key in keys:
-                    img.sat_img[key][:,:] = uniform_filter(img.sat_img[key].values[:,:], size=size, mode='nearest')
+                    img.sat_img[key][:,:] = convolve(img.sat_img[key].values[:,:,:], kernel=size, mode='nearest')
             else:
                 t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                          img.sat_img.rio.crs)
@@ -460,8 +462,8 @@ class vprm:
                     x_ind = np.argmin(np.abs(x - img.sat_img.coords['x'].values))
                     y_ind = np.argmin(np.abs(y - img.sat_img.coords['y'].values))
                     for key in keys:
-                        img.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = \
-                            uniform_filter(img.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10],
+                        img.sat_img[key][y_ind-20 : y_ind+20, x_ind-20 : x_ind+20] = \
+                            convolve(img.sat_img[key][y_ind-20 : y_ind+20, x_ind-20 : x_ind+20],
                                            size=size, mode='nearest')
         if intern_call is True:
             return sat_img[0]
