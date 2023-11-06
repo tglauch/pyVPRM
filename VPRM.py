@@ -23,6 +23,7 @@ import datetime
 from dateutil import parser
 from multiprocessing import Process
 import rasterio
+from astropy.convolution import convolve
 
 
 def adjust_timestamps(sat_img, start_date, stop_date, timestamp0):
@@ -390,19 +391,6 @@ class vprm:
            # handler.sat_img = handler.sat_img.assign({'lswi': (['y','x'], temp_lswi)}) 
         if timestamp_key is not None:
             handler.sat_img = handler.sat_img.rename({timestamp_key: 'timestamps'})
-        if self.sites is not None:
-            if smearing:
-                handler = self.smearing(keys=['evi', 'lswi'],
-                                        size=(3,3),
-                                        sat_img=handler,
-                                        lonlats=self.lonlats,
-                                        )
-            handler.reduce_along_lat_lon(lon=[i[0] for i in self.lonlats],
-                                         lat=[i[1] for i in self.lonlats],
-                                         new_dim_name='site_names', 
-                                         interp_method='nearest')
-            handler.sat_img = handler.sat_img.assign_coords({'site_names': [i.get_site_name()
-                                                                            for i in self.sites]})
         bands_to_mask = []
         for btm in [b_nir, b_red, b_blue, b_swir]:
             if btm is not None:
@@ -441,38 +429,36 @@ class vprm:
                 Returns:
                         None
         '''
-        intern_call = False
-        if sat_img is None:
-            sat_img = self.sat_imgs
-        else:
-            intern_call = True
-            sat_img = [sat_img]
-            
-        if keys is None:
-            keys = list(sat_img[0].sat_img.data_vars)
-            
-        for img in sat_img:
-            if lonlats is None:
-                for key in keys:
-                    img.sat_img[key][:,:] = uniform_filter(img.sat_img[key].values[:,:], size=size, mode='nearest')
-            else:
-                t = Transformer.from_crs('+proj=longlat +datum=WGS84',
-                                         img.sat_img.rio.crs)
-                xs = img.sat_img.coords['x'].values
-                ys = img.sat_img.coords['y'].values
-                for ll in lonlats:
-                    x, y = t.transform(ll[0], ll[1])
-                    x_ind = np.argmin(np.abs(x - xs))
-                    y_ind = np.argmin(np.abs(y - ys))
-                    for key in keys:
-                        img.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = \
-                            uniform_filter(img.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10],
-                                           size=size, mode='nearest')
-        if intern_call is True:
-            return sat_img[0]
-        else:
-            return
         
+        size = np.expand_dims(np.ones(shape=size)/np.sum(np.ones(shape=size)), 0)
+        if lonlats is None:
+            for key in keys:
+                self.sat_imgs.sat_img[key][:,:] = convolve(self.sat_imgs.sat_img[key].values[:,:],
+                                                           kernel=size, preserve_nan=True)
+        else:
+            t = Transformer.from_crs('+proj=longlat +datum=WGS84',
+                                     self.sat_imgs.sat_img.rio.crs)
+            xs = self.sat_imgs.sat_img.coords['x'].values
+            ys = self.sat_imgs.sat_img.coords['y'].values
+            for ll in lonlats:
+                x, y = t.transform(ll[0], ll[1])
+                x_ind = np.argmin(np.abs(x - xs))
+                y_ind = np.argmin(np.abs(y - ys))
+                for key in keys:
+                    self.sat_imgs.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = \
+                        convolve(self.sat_imgs.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10],
+                                 kernel=size, preserve_nan=True)
+        return
+
+
+    def reduce_along_lat_lon(self):
+        self.sat_imgs.reduce_along_lat_lon(lon=[i[0] for i in self.lonlats],
+                                           lat=[i[1] for i in self.lonlats],
+                                           new_dim_name='site_names', 
+                                           interp_method='nearest')
+        self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({'site_names': [i.get_site_name()
+                                                                        for i in self.sites]})
+    
     
     def sort_and_merge_by_timestamp(self):
         '''
