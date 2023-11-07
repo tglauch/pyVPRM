@@ -274,9 +274,11 @@ class satellite_data_manager:
                                                                   lonlat[0],
                                                                   radius)),
                                     crs='WGS 84')
+        print('circle done')
         if not circle_poly.crs == self.sat_img.rio.crs:
             # If the crs is not equal reproject the data
             circle_poly = circle_poly.to_crs(self.sat_img.rio.crs)
+        print('reproject done')
 
         crop_bound_box = [box(*circle_poly.total_bounds)]
 
@@ -429,30 +431,29 @@ class modis(earthdata):
         if bands is None:
             bands=self.bands
          
-        band_nums = [int(band.split('B')[1]) for band in bands]
+        band_nums = [(band, int(band.split('B')[1])) for band in bands]
         masks = dict()
 
         for b in band_nums:
-
-            start_bit = (b - 1) * 4 + 2 # Start Bit 
-            end_bit = b * 4 + 1 # End Bit  (inclusive)
+            start_bit = (b[1] - 1) * 4 + 2 # Start Bit 
+            end_bit = b[1] * 4 + 1 # End Bit  (inclusive)
             num_bits_to_extract = end_bit - start_bit + 1
             bit_mask = (1 << num_bits_to_extract) - 1
             self.sat_img['sur_refl_qc_500m'].values[np.isnan(self.sat_img['sur_refl_qc_500m'].values)] = int('1' * 31,2)
-            masks[b] = (np.array(self.sat_img['sur_refl_qc_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit 
+            masks[b[1]] = (np.array(self.sat_img['sur_refl_qc_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit 
 
-        for mask_int in masks.keys():
-            masks[mask_int] = (masks[mask_int] != int('0000', 2)) #& (masks[mask_int] != '0111')  &\
+        for b in band_nums:
+            masks[b[1]] = (masks[b[1]] != int('0000', 2)) #& (masks[mask_int] != '0111')  &\
                              # (masks[mask_int] != '1000') & (masks[mask_int] != '1010') &\
                              # (masks[mask_int] != '1100')
-            self.sat_img['B{:02d}'.format(mask_int)].values[masks[mask_int]] = np.nan
+            self.sat_img[b[0]].values[masks[b[1]]] = np.nan
         return
 
     def mask_clouds(self, bands=None):
         if bands is None:
             bands=self.bands
          
-        band_nums = [int(band.split('B')[1]) for band in bands]
+        band_nums = [(band, int(band.split('B')[1])) for band in bands]
         start_bit = 0 # Start Bit 
         end_bit = 1 # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1
@@ -460,7 +461,7 @@ class modis(earthdata):
         self.sat_img['sur_refl_state_500m'].values[np.isnan(self.sat_img['sur_refl_state_500m'].values)] = int('1' * 16,2)
         mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit   
         for b in band_nums:
-            self.sat_img['B{:02d}'.format(b)].values[mask == int('01', 2)] = np.nan
+            self.sat_img[b[0]].values[mask == int('01', 2)] = np.nan
         return
 
     def get_resolution(self):
@@ -476,15 +477,16 @@ class modis(earthdata):
         if self.use_keys is None:
             self.use_keys = list(self.sat_img.keys())
         self.sat_img = self.sat_img[self.use_keys]
-        rename_dict = dict()
+        #rename_dict = dict()
         bands = []
         for i in self.use_keys:
             if ('sur_refl' in i) & ('_b' in i):
-                rename_dict[i] = i.replace('_1', '').split('_')[-1].replace('b', 'B')
-                bands.append(rename_dict[i])
-            else:
-                rename_dict[i] = i
-        self.sat_img = self.sat_img.rename(rename_dict)
+                bands.append(i)
+              #  rename_dict[i] = i.replace('_1', '').split('_')[-1].replace('b', 'B')
+              #  bands.append(rename_dict[i])
+            # else:
+            #     rename_dict[i] = i
+        # self.sat_img = self.sat_img.rename(rename_dict)
         self.bands = bands
         self.keys = np.array(list(self.sat_img.data_vars))
         for key in self.keys:

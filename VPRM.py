@@ -341,7 +341,6 @@ class vprm:
                     drop_bands=False, 
                     which_evi=None,
                     timestamp_key=None,
-                    smearing=False,
                     mask_bad_pixels=True,
                     mask_clouds=True):
         '''
@@ -378,7 +377,7 @@ class vprm:
                 temp_evi = (evi_params['g'] * ( nir - red)  / (nir + evi_params['c1'] * red - evi_params['c2'] * blue + evi_params['l']))
             elif which_evi=='evi2':
                 temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l']))
-            temp_evi = xr.where((temp_evi<0) | (temp_evi>1) , np.nan, temp_evi)
+            temp_evi = xr.where((temp_evi<=0) | (temp_evi>1) , np.nan, temp_evi)
            # temp_evi[temp_evi<0] = np.nan
             #temp_evi[temp_evi>1] = np.nan
             temp_lswi = ((nir - swir) / (nir + swir))
@@ -416,25 +415,30 @@ class vprm:
         return
 
     
-    def smearing(self, keys, size, sat_img=None, lonlats=None):
+    def smearing(self, keys, kernel, sat_img=None, lonlats=None):
         '''
             By default performs a spatial smearing on the list of pre-loaded satellite images.
             If sat_img is given the smearing is performed on that specific image.
 
                 Parameters:
-                        size (tuple): The extension of the spatial smoothing
+                        kernel (tuple): The extension of the spatial smoothing
                         lonlats (str): If given the smearing is only performed at the
                                        given lats and lons
                         keys (list): keys for the smoothign of the satellite images
                 Returns:
                         None
         '''
-        
-        size = np.expand_dims(np.ones(shape=size)/np.sum(np.ones(shape=size)), 0)
+
+        if isinstance(kernel, tuple):
+            arsz = int(3*np.max(kernel))
+            kernel = np.expand_dims(np.ones(shape=kernel)/np.sum(np.ones(shape=kernel)), 0)
+        else:
+            kernel = np.expand_dims(kernel.array, 0)
+            arsz = int(3*np.max(np.shape(kernel)))
         if lonlats is None:
             for key in keys:
-                self.sat_imgs.sat_img[key][:,:] = convolve(self.sat_imgs.sat_img[key].values[:,:],
-                                                           kernel=size, preserve_nan=True)
+                self.sat_imgs.sat_img[key][:,:] = convolve(self.sat_imgs.sat_img[key].values[:,:,:],
+                                                           kernel=kernel, preserve_nan=True)
         else:
             t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                      self.sat_imgs.sat_img.rio.crs)
@@ -445,9 +449,10 @@ class vprm:
                 x_ind = np.argmin(np.abs(x - xs))
                 y_ind = np.argmin(np.abs(y - ys))
                 for key in keys:
-                    self.sat_imgs.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = \
-                        convolve(self.sat_imgs.sat_img[key][y_ind-10 : y_ind+10, x_ind-10 : x_ind+10],
-                                 kernel=size, preserve_nan=True)
+                    print(key)
+                    self.sat_imgs.sat_img[key][:, y_ind-arsz : y_ind+arsz, x_ind-arsz : x_ind+arsz] = \
+                        convolve(self.sat_imgs.sat_img[key][:, y_ind-arsz : y_ind+arsz, x_ind-arsz : x_ind+arsz],
+                                 kernel=kernel, preserve_nan=True)          
         return
 
 
@@ -616,7 +621,7 @@ class vprm:
         #     self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['site_names'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})              
         return
     
-    def lowess(self, lonlats=None, keys=None, gap_filled=False, frac=0.25, it=3):
+    def lowess(self, lonlats=None, keys=None, daily=False, frac=0.25, it=3):
         '''
             Performs the lowess smoothing
 
@@ -627,9 +632,10 @@ class vprm:
                         None
         '''
         self.sat_imgs.sat_img.load()
+        
         if keys is None:
             keys = list(self.sat_imgs.sat_img.data_vars)
-        if gap_filled:
+        if daily:
             xvals = np.arange(self.tot_num_days)    
         else:
             xvals = self.sat_imgs.sat_img['time']
@@ -955,10 +961,10 @@ class vprm:
         return
 
     def _set_sat_img_counter(self, datetime_utc):
-        counter_new = (datetime_utc - self.timestamp_start).days
-        counter_new = np.argmin(np.abs(self.sat_imgs.sat_img[self.time_key].values - counter_new))
-        if (counter_new < 0) | (counter_new >= len(self.sat_imgs.sat_img[self.time_key])-1):
-            print('No data for {}'.format(datetime_utc))
+        days_after_first_image = (datetime_utc - self.timestamp_start).total_seconds()/(24*60*60)
+        counter_new = np.argmin(np.abs(self.sat_imgs.sat_img[self.time_key].values - days_after_first_image))
+        if ( days_after_first_image < 0) | (days_after_first_image > self.sat_imgs.sat_img[self.time_key][-1]):
+            #print('No data for {}'.format(datetime_utc))
             self.counter = 0
             return False
         elif counter_new != self.counter:
@@ -1040,7 +1046,7 @@ class vprm:
     
     
     def data_for_fitting(self):
-        
+        self.sat_imgs.sat_img.load()
         for s in self.sites:
             self.new = True
             site_name  = s.get_site_name()
@@ -1052,6 +1058,7 @@ class vprm:
             drop_rows = []
             for index, row in s.get_data().iterrows():
                 img_status = self._set_sat_img_counter(row['datetime_utc'])
+                #print(self.counter)
                 if img_status == False:
                     drop_rows.append(index)
                     continue
