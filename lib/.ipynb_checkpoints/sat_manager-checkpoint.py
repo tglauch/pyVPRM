@@ -431,7 +431,7 @@ class modis(earthdata):
         if bands is None:
             bands=self.bands
          
-        band_nums = [(band, int(band.split('B')[1])) for band in bands]
+        band_nums = [(band, int(band.split('_b')[1])) for band in bands]
         masks = dict()
 
         for b in band_nums:
@@ -453,7 +453,7 @@ class modis(earthdata):
         if bands is None:
             bands=self.bands
          
-        band_nums = [(band, int(band.split('B')[1])) for band in bands]
+        band_nums = [(band, int(band.split('_b')[1])) for band in bands]
         start_bit = 0 # Start Bit 
         end_bit = 1 # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1

@@ -621,7 +621,8 @@ class vprm:
         #     self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['site_names'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})              
         return
     
-    def lowess(self, lonlats=None, keys=None, daily=False, frac=0.25, it=3):
+    def lowess(self, keys, lonlats=None, daily=False,
+               frac=0.25, it=3):
         '''
             Performs the lowess smoothing
 
@@ -633,16 +634,13 @@ class vprm:
         '''
         self.sat_imgs.sat_img.load()
         
-        if keys is None:
-            keys = list(self.sat_imgs.sat_img.data_vars)
         if daily:
             xvals = np.arange(self.tot_num_days)    
         else:
             xvals = self.sat_imgs.sat_img['time']
 
         if self.sites is not None:  # Is flux tower sites are given        
-            if 'timestamps' in keys:
-                keys.remove('timestamps')
+            if 'timestamp' in list(self.sat_imgs.sat_img.data_vars):
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img.sel(site_names=i)['timestamps'].values, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})      
             else:
@@ -651,14 +649,13 @@ class vprm:
 
             
         elif lonlats is None: # If smoothing the entire array
-            if 'timestamps' in keys:
-                keys.remove('timestamps')
+            if 'timestamp' in list(self.sat_imgs.sat_img.data_vars):
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamtps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
             else:
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
-                
+
         else: 
             print('Not implemented')
             # Originally had a function to smooth only at specific lat/long. 
