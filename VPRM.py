@@ -639,10 +639,7 @@ class vprm:
             xvals = np.arange(self.tot_num_days)    
         else:
             xvals = self.sat_imgs.sat_img['time']
-        for k in keys:
-            if (not 'B' in k) & (not 'evi' in k) &\
-               (not 'lswi' in k) & (not 'timestamps' in k):
-                keys.remove(k)
+
         if self.sites is not None:  # Is flux tower sites are given        
             if 'timestamps' in keys:
                 keys.remove('timestamps')
@@ -662,24 +659,11 @@ class vprm:
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
                 
-        else: # If smoothing only specific coordinates
-            t = Transformer.from_crs('+proj=longlat +datum=WGS84',
-                                     self.sat_imgs.sat_img.rio.crs)
-            if 'timestamps' in keys:
-                keys.remove('timestamps')
-                for ll in lonlats:
-                    x, y = t.transform(ll[0], ll[1])
-                    x_ind = np.argmin(np.abs(x - self.sat_imgs.sat_img.coords['x'].values))
-                    y_ind = np.argmin(np.abs(y - self.sat_imgs.sat_img.coords['y'].values))
-                    for key in keys:
-                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,y_ind-10:y_ind+10, x_ind+i].values, xvals=xvals, frac=frac, it=it) for i in np.arange(-10, 10, 1))).T    
-            else:
-                for ll in lonlats:
-                    x, y = t.transform(ll[0], ll[1])
-                    x_ind = np.argmin(np.abs(x - self.sat_imgs.sat_img.coords['x'].values))
-                    y_ind = np.argmin(np.abs(y - self.sat_imgs.sat_img.coords['y'].values))
-                    for key in keys:
-                        self.sat_imgs.sat_img[key][:, y_ind-10 : y_ind+10, x_ind-10 : x_ind+10] = np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,y_ind-10:y_ind+10, x_ind+i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i in np.arange(-10, 10, 1))).T 
+        else: 
+            print('Not implemented')
+            # Originally had a function to smooth only at specific lat/long. 
+            # That doesn't make sense anymore, because the time dimension will change through lowess smoothing.
+            # If this is your plan then try to crop the sat image first and then do the lowess filtering.
         
         self.time_key = 'time_gap_filled'
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({'time_gap_filled': list(xvals)}) 
