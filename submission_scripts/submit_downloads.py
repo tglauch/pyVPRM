@@ -21,7 +21,7 @@ which_sat = cfg['satellite']
 n_cpus = 1 
 sub_code =' python {}  --config {} --login_data {} --year {} & ' 
 
-for year in cfg['years']:
+for year in [2021]: #cfg['years']:
     sub_code_f = ''
     with open('submit_raw.sub', 'r') as ifile:
         sub_info = ifile.read()

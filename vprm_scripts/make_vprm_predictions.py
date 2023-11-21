@@ -62,6 +62,8 @@ with open(args.config, "r") as stream:
 vprm_inst = vprm(n_cpus=args.n_cpus)
 for c, i in enumerate(sorted(glob.glob(os.path.join(cfg['sat_image_path'], str(args.year),
                                                     '*h{:02d}v{:02d}*.h*'.format(h, v))))):
+    if '.xml' in i:
+        continue
     if cfg['satellite'] == 'modis':
         handler = modis(sat_image_path=i)
         handler.load()

@@ -266,6 +266,14 @@ class satellite_data_manager:
         self.ext = self.get_plotting_extend()
         return
     
+    def crop_box(self, box):
+        if not box.crs == self.sat_img.rio.crs:
+            # If the crs is not equal reproject the data
+            print('Reproject Box')
+            box = box.to_crs(self.sat_img.rio.crs)
+        self.sat_img = self.sat_img.rio.clip(box,all_touched=True,
+                                             from_disk=False).squeeze()        
+    
     def crop(self, lonlat, radius):
         # crop the satellite images in place using a given radius around a given 
         # longitude and latitude
@@ -349,27 +357,20 @@ class earthdata(satellite_data_manager):
                  lonlat=None, pwd = None, token=None,
                  delta = 1, jpg=False, enddate=None,
                  hv=None,rmv_downloads=False):
-        
-        dest = os.path.join(savepath, 'temp_for_download')
-        
-        modisDown = self._init_downloader(dest, date, delta, 
+                
+        modisDown = self._init_downloader(savepath, date, delta, 
                                           username,lonlat,
                                           pwd, token, jpg,
                                           enddate, hv)
         
         # try:
-        print('Download {} data'.format(self.sat))
         modisDown.connect()
-        modisDown.downloadsAllDay()
-        new_files = self.get_files(dest)
-        for nf in new_files:
-            test_path = os.path.join(savepath, os.path.basename(nf))
-            if not os.path.exists(test_path):
-                shutil.move(nf, savepath)
-        self.sat_image_path = os.path.join(savepath, os.path.basename(new_files[0]))
-        if rmv_downloads:
-            shutil.rmtree(dest)
-        print('Done...')
+        ds = modisDown.getListDays()
+        for d in ds:
+            fs = modisDown.getFilesList(d)
+            cde = modisDown.checkDataExist(fs)
+            print('Download {}: {}'.format(d, cde))
+            modisDown.dayDownload(d, cde)
         return
     
     def _to_standard_format(self):
@@ -506,7 +507,7 @@ class modis(earthdata):
                                  '%Y-%m-%dT%H:%M:%S.%fZ')
         date1 = datetime.strptime(self.meta_data['RANGEENDINGDATE'] + 'T' + self.meta_data['RANGEENDINGTIME'] + 'Z',
                                  '%Y-%m-%dT%H:%M:%S.%fZ')
-        return date0 + (date1 - date0 ) /2
+        return date0 + (date1 - date0 ) / 2
 
         
 class VIIRS(earthdata):

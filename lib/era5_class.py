@@ -139,9 +139,11 @@ class ERA5:
             if self.add_time_str == '1H':
                 for key in self.keys:
                     data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][int(self.hour+1)].values)
+                    
             elif self.add_time_str == '1D':
                 for key in self.keys:
                     data_dict[key] = (['lat','lon'], self.file_handlers[key]['current'][int(self.day)].values)
+                    
             elif self.add_time_str == '1M':
                 for key in self.keys:
                     if self.month not in [self.file_handlers[key]['current'][t+1].month for t in range(self.file_handlers[key]['current'].messages)]:

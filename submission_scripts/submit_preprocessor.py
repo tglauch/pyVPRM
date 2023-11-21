@@ -1,6 +1,8 @@
 import os
 import argparse
 import yaml
+import itertools
+import numpy as np
 
 p = argparse.ArgumentParser(
         description = "Commend Line Arguments",
@@ -18,16 +20,18 @@ with open(args.config, "r") as stream:
 
 which_sat = cfg['satellite']
 n_cpus = 124 
-sub_code =' python ' + args.script +' --year {} ' +  '--config {} --n_cpus '.format(args.config) + str(int(n_cpus)) + ' & ' 
+sub_code =' python ' + args.script +' --year {} ' +  '--config {} --n_cpus '.format(args.config) + str(int(n_cpus)) + ' --chunk_x {} --chunk_y {} & ' 
 years = cfg['years']
-for yr in years:
-    with open('submit_raw.sub', 'r') as ifile:
-        sub_info = ifile.read()
+for yr in [2023]: #years:
+    for chunk in list(itertools.product(np.arange(1, int(cfg['n_chunks']) + 1 ),
+                                        np.arange(1, int(cfg['n_chunks']) + 1 ))):
+        with open('submit_raw.sub', 'r') as ifile:
+            sub_info = ifile.read()
 
-    with open('submit_temp.sub', 'w+') as ofile:
-        sub_info = sub_info.format('compute', int(n_cpus), 1, 0, '#SBATCH --constraint=512G',  sub_code.format(yr))
-        ofile.write(sub_info)
+        with open('submit_temp.sub', 'w+') as ofile:
+            sub_info = sub_info.format('compute', int(n_cpus), 1, 0, '#SBATCH --constraint=512G',  sub_code.format(yr, chunk[0], chunk[1]))
+            ofile.write(sub_info)
 
-    print(sub_info)
-    os.system('sbatch submit_temp.sub')
-    os.remove('submit_temp.sub')
+        print(sub_info)
+        os.system('sbatch submit_temp.sub')
+        os.remove('submit_temp.sub')

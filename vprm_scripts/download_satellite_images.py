@@ -44,6 +44,7 @@ for year in years:
     savepath = os.path.join(cfg['sat_image_path'], str(year))
     if cfg['satellite'] == 'modis':
         for i in hvs:
+            print('Tile {}'.format(i))
             handler = modis()
             try:
                 handler.download(date(year, 1, 1),
@@ -57,6 +58,7 @@ for year in years:
                 print(e)
 
     elif cfg['satellite'] == 'viirs':
+        print('Tile {}'.format(i))
         for i in hvs:
             print(i)
             handler = VIIRS()
@@ -73,4 +75,3 @@ for year in years:
 
     else:
         print('No download function for this satellite implemented')
-shutil.rmtree(os.path.join(cfg['sat_image_path'], str(year), 'temp_for_download'))

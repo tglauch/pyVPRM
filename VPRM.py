@@ -24,6 +24,7 @@ from dateutil import parser
 from multiprocessing import Process
 import rasterio
 from astropy.convolution import convolve
+from datetime import datetime, timedelta
 
 
 def adjust_timestamps(sat_img, start_date, stop_date, timestamp0):
@@ -33,39 +34,28 @@ def adjust_timestamps(sat_img, start_date, stop_date, timestamp0):
         for i in range(np.shape(sat_img['timestamps'])[0]):
             this_ts = sat_img['timestamps'][i]
             if np.abs(this_ts - start_day) < np.abs(this_ts - stop_day):
-                sat_img['timestamps'][i] = ((start_date + datetime.timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
+                sat_img['timestamps'][i] = ((start_date + timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
             else:
-                sat_img['timestamps'][i] = ((stop_date - datetime.timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days    
+                sat_img['timestamps'][i] = ((stop_date - timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days    
     else:
         for this_ts in np.unique(sat_img['timestamps'].values): # this_ts is the day of the year
             if np.isnan(this_ts):
                 this_ts = start_day
             if np.abs(this_ts - start_day) < np.abs(this_ts - stop_day):
-                sat_img['timestamps'].values[sat_img['timestamps'].values==this_ts] = ((start_date + datetime.timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
+                sat_img['timestamps'].values[sat_img['timestamps'].values==this_ts] = ((start_date + timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
             else:
-                sat_img['timestamps'].values[sat_img['timestamps'].values==this_ts] = ((stop_date - datetime.timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days
+                sat_img['timestamps'].values[sat_img['timestamps'].values==this_ts] = ((stop_date - timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days
             
-        
-#         for i in range(np.shape(sat_img['timestamps'])[0]):
-#             for j in range(np.shape(sat_img['timestamps'])[1]):
-#                 this_ts = sat_img['timestamps'][i][j]
-#                 if np.abs(this_ts - start_day) < np.abs(this_ts - stop_day):
-#                     sat_img['timestamps'][i][j] = ((start_date + datetime.timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
-#                 else:
-#                     sat_img['timestamps'][i][j] = ((stop_date - datetime.timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days
     return
 
 
-def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=None,
+def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, 
                         frac=0.25, it=3):
     '''
         Performs lowess smoothing on a 2-D-array, where the first dimension is the time.
 
             Parameters:
                     array_to_smooth (list): The 2-D-array
-                    vclass (list): 1-D list of vegetation classes. Vegetation class 8 (builup) is
-                                   skipped in the smoothing process
-
             Returns:
                     The lowess smoothed array
     '''
@@ -81,10 +71,18 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=Non
         print(t_timestamp, array_to_smooth)
         if xvals is None:
             xvals = t_timestamp
-        ret = lowess(array_to_smooth[mask], t_timestamp[mask],
-                     is_sorted=True, frac=frac, it=it,
-                     xvals=xvals,
-                     return_sorted=False)
+        ret =  [np.nan]
+        counter = 0
+        while counter<10:
+            ret = lowess(array_to_smooth[mask], t_timestamp[mask],
+                         is_sorted=True, frac=frac+0.05*counter, it=it,
+                         xvals=xvals,
+                         return_sorted=False)
+            if not np.all(np.isfinite(ret)):
+            #    print('Non finite values for frac: {}. Retry.'.format(frac+0.05*counter))
+                counter += 1
+            else:
+                break
         return ret
     else:
         if xvals is not None:
@@ -101,15 +99,22 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, vclass=Non
                     t_timestamp = timestamps
                 else:
                     t_timestamp = timestamps[:, j]
-            # if vclass!=None:
-            #     if vclass[j] == 8: # skip arrays with land type class 8 
-            #         continue
             mask = np.isfinite(array_to_smooth[:, j])
             if xvals is None:
                 xvals = t_timestamp
-            ret_array[:, j] = lowess(array_to_smooth[:, j][mask], t_timestamp[mask],
-                                     is_sorted=True, frac=frac, it=it, xvals=xvals,
-                                     return_sorted=False)
+            lws_res = [np.nan]
+            counter = 0
+            while counter < 10:
+                lws_res = lowess(array_to_smooth[:, j][mask], t_timestamp[mask],
+                                 is_sorted=True, frac=frac+0.05*counter,
+                                 it=it, xvals=xvals,
+                                 return_sorted=False)
+                if not np.all(np.isfinite(lws_res)):
+                  #  print('Non finite values for frac: {}. Retry.'.format(frac+0.05*counter))
+                    counter += 1
+                else:
+                    break
+            ret_array[:, j] = lws_res
         return ret_array.T
 
 class vprm: 
@@ -137,8 +142,6 @@ class vprm:
             self.lonlats = [i.get_lonlat() for i in sites]
         self.n_cpus = n_cpus
         self.era5_inst = None
-        self.ret_dict = dict()
-        self.verbose = verbose
         self.counter = 0
         self.fit_params_dict = None
         self.res = None
@@ -264,11 +267,11 @@ class vprm:
         t.sat_img = t.sat_img.to_dataset(name='vegetation_fraction_map')   
         t.sat_img = t.sat_img.rename({'y': 'south_north', 'x': 'west_east'})
         day_of_the_year = np.array(self.sat_imgs.sat_img[self.time_key].values, dtype=np.int32)
-        day_of_the_year += self.timestamp_start.timetuple().tm_yday
+        day_of_the_year += 1 - day_of_the_year[0]
         kys = len(self.sat_imgs.sat_img[self.time_key].values)
         final_array = []
         for ky in range(kys):
-            sub_array = []
+            sub_array = [] 
             for v in veg_inds:
                 tres = self.sat_imgs.sat_img.isel({self.time_key:ky})['evi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, 0) 
                 sub_array.append(regridder(tres.values))
@@ -329,7 +332,7 @@ class vprm:
                                                        MODIS_version = '061',
                                                        author = 'Dr. Theo Glauch',
                                                        institution1 = 'Heidelberg University',
-                                                       institution2='Deutsches Zentrum für Luft- und Raumfahrt (DLR)',
+                                                       institution2 = 'Deutsches Zentrum für Luft- und Raumfahrt (DLR)',
                                                        contact = 'theo.glauch@dlr.de',
                                                        comment = 'Used VPRM classes: 1 Evergreen forest, 2 Deciduous forest, 3 Mixed forest, 4 Shrubland, 5 Trees and grasses, 6 Cropland, 7 Grassland, 8 Barren, Urban and built-up, water, permanent snow and ice')
         return ret_dict
@@ -591,6 +594,7 @@ class vprm:
 #            t =  land_cover_map.sat_img.sel(x=self.x_long, y=self.y_lat, method="nearest").to_array().values[0]
             self.land_cover_type = copy.deepcopy(self.prototype)
             self.land_cover_type.sat_img = self.land_cover_type.sat_img.assign({'land_cover_type': (['y','x'], t)}) 
+            print(self.land_cover_type.sat_img)
             if save_path is not None:
                  self.land_cover_type.save(save_path)
         return
@@ -610,18 +614,10 @@ class vprm:
         self.max_lswi.sat_img['max_lswi'] = shortcut['lswi'].max(self.time_key, skipna=True)
         self.min_max_evi.sat_img['min_evi'] = shortcut['evi'].min(self.time_key, skipna=True)
         self.min_max_evi.sat_img['max_evi'] = shortcut['evi'].max(self.time_key, skipna=True)
-        self.min_max_evi.sat_img['th'] = shortcut['evi'].min(self.time_key, skipna=True) + 0.55 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True))
-            # self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'min_evi': (['y','x'], np.nanmin(shortcut['evi'], axis=0))})
-            # self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'max_evi': (['y','x'], np.nanmax(shortcut['evi'], axis=0))})   
-            # self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['y','x'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})  
-        # else:
-        #     self.max_lswi.sat_img = self.max_lswi.sat_img.assign({'max_lswi': (['site_names'], np.nanmax(shortcut['lswi'], axis=0))})
-        #     self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'min_evi': (['site_names'], np.nanmin(shortcut['evi'], axis=0))})
-        #     self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'max_evi': (['site_names'], np.nanmax(shortcut['evi'], axis=0))})   
-        #     self.min_max_evi.sat_img = self.min_max_evi.sat_img.assign({'th': (['site_names'], np.nanmin(shortcut['evi'], axis=0) + (0.55 * (np.nanmax(shortcut['evi'], axis=0) - np.nanmin(shortcut['evi'], axis=0))))})              
+        self.min_max_evi.sat_img['th'] = shortcut['evi'].min(self.time_key, skipna=True) + 0.55 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True))             
         return
     
-    def lowess(self, keys, lonlats=None, daily=False,
+    def lowess(self, keys, lonlats=None, times=False,
                frac=0.25, it=3):
         '''
             Performs the lowess smoothing
@@ -634,10 +630,19 @@ class vprm:
         '''
         self.sat_imgs.sat_img.load()
         
-        if daily:
-            xvals = np.arange(self.tot_num_days)    
+        if times == 'daily':
+            xvals = np.arange(self.tot_num_days) 
+        elif isinstance(times, list):
+            times = np.array(sorted(times))
+            if (times[-1] > self.timestamp_end) | (times[0] < self.timestamp_start):
+                print('You have provied some timestamps that are not covered from satellite images.\
+                They will be ignored in the following, to avoid unreliable results')
+            times=times[(times<=self.timestamp_end) & (times>=self.timestamp_start)]
+            xvals = [int(np.round((i - self.timestamp_start).total_seconds()/(24*60*60))) 
+                     for i in times]
         else:
             xvals = self.sat_imgs.sat_img['time']
+        print('Lowess timestamps {}'.format(xvals))
 
         if self.sites is not None:  # Is flux tower sites are given        
             if 'timestamp' in list(self.sat_imgs.sat_img.data_vars):
@@ -671,8 +676,10 @@ class vprm:
         self.sat_imgs.sat_img[key].values[self.sat_imgs.sat_img[key].values>max_val] = max_val
         return
 
-    def clip_nans(self, key, val):
-        self.sat_imgs.sat_img[key].values[np.isnan(self.sat_imgs.sat_img[key].values)] = val
+    def clip_non_finite(self, data_var, val, sel):
+        t = self.sat_imgs.sat_img[data_var].loc[sel].values
+        t[~np.isfinite(t)] = val
+        self.sat_imgs.sat_img[data_var].loc[sel] = t
         return
     
     def load_weather_data(self, hour, day, month, year, era_keys):
@@ -690,8 +697,6 @@ class vprm:
                         None
         '''
         if self.era5_inst is None:
-            if self.verbose:
-                print('Init ERA5 Instance')
             self.era5_inst = ERA5(year, month, day, hour, 
                                   keys=era_keys) 
         self.era5_inst.change_date(year=year, month=month,

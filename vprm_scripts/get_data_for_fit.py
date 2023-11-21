@@ -139,6 +139,8 @@ if len(site_dict.keys()) == 0 :
 vprm_inst = vprm(n_cpus=args.n_cpus)
 
 for c, i in enumerate(glob.glob(os.path.join(cfg['sat_image_path'], str(this_year), '*h{:02d}v{:02d}*.h*'.format(h, v)))):
+    if '.xml' in i:
+        continue
     print(i)
     if cfg['satellite'] == 'modis':
         handler = modis(sat_image_path=i)
