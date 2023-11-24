@@ -91,10 +91,10 @@ out_grid = xr.Dataset({"lon": (["y", "x"], t['XLONG_M'].values.squeeze()[lats[ar
 out_grid  = out_grid.set_coords(['lon', 'lat'])
 
 
-xlong_c = t['XLONG_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y],
-                                        lons[args.chunk_x - 1]:lons[args.chunk_x]]
-xlat_c = t['XLAT_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y],
-                                      lons[args.chunk_x - 1]:lons[args.chunk_x]]
+xlong_c = t['XLONG_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
+                                        lons[args.chunk_x - 1]:lons[args.chunk_x]+1]
+xlat_c = t['XLAT_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
+                                      lons[args.chunk_x - 1]:lons[args.chunk_x]+1]
 
 hvs = np.unique([lat_lon_to_modis(out_grid['lat'].values.flatten()[i], 
                                   out_grid['lon'].values.flatten()[i]) 

@@ -149,16 +149,19 @@ class satellite_data_manager:
     def get_band_names(self):
         return self.keys
         
-    def reproject(self, proj):
+    def reproject(self, proj, **kwargs):
         # reproject using a pre-defined projection or by passing a
         # projection string
         
         if proj == 'WGS84':
-            self.sat_img = self.sat_img.rio.reproject('+proj=longlat +datum=WGS84')#
+            self.sat_img = self.sat_img.rio.reproject('+proj=longlat +datum=WGS84',
+                                                      **kwargs)#
         elif proj == 'CRS':
-            self.sat_img = self.sat_img.rio.reproject(self.sat_img.rio.estimate_utm_crs())   
+            self.sat_img = self.sat_img.rio.reproject(self.sat_img.rio.estimate_utm_crs(),
+                                                      **kwargs)   
         else:
-            self.sat_img = self.sat_img.rio.reproject(proj)
+            self.sat_img = self.sat_img.rio.reproject(proj,
+                                                      **kwargs)
         try:
             self.proj_dict = self.sat_img.rio.crs.to_dict()
         except Exception as e:
