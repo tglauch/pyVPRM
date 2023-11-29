@@ -2,7 +2,7 @@
 
 #SBATCH --partition={}
 #SBATCH --account=bd1231
-#SBATCH --time=8:00:00
+#SBATCH --time=1:00:00
 #SBATCH --cpus-per-task={}
 #SBATCH --ntasks={}
 #SBATCH --mem={}

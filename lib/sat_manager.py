@@ -272,7 +272,6 @@ class satellite_data_manager:
     def crop_box(self, box):
         if not box.crs == self.sat_img.rio.crs:
             # If the crs is not equal reproject the data
-            print('Reproject Box')
             box = box.to_crs(self.sat_img.rio.crs)
         self.sat_img = self.sat_img.rio.clip(box,all_touched=True,
                                              from_disk=False).squeeze()        
@@ -285,11 +284,9 @@ class satellite_data_manager:
                                                                   lonlat[0],
                                                                   radius)),
                                     crs='WGS 84')
-        print('circle done')
         if not circle_poly.crs == self.sat_img.rio.crs:
             # If the crs is not equal reproject the data
             circle_poly = circle_poly.to_crs(self.sat_img.rio.crs)
-        print('reproject done')
 
         crop_bound_box = [box(*circle_poly.total_bounds)]
 

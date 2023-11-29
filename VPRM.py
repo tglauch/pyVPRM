@@ -167,7 +167,8 @@ class vprm:
                                   5: [2, 20, 40], # Savannas
                                   6: [5, 22, 40], # Cropland
                                   7: [2, 18, 40], # Grassland
-                                  8: [0, 0, 40]}  # Other
+                                  8: [0, 0, 40], # Other
+                                  9: [0, 0, 40]}  # Wetland
 
         self.map_copernicus_to_vprm_class = {0: 8, 111: 1, 113: 2,
                                              112:1 , 114:2, 115:3,
@@ -175,7 +176,7 @@ class vprm:
                                              122 : 1, 124 : 2,
                                              125 : 3,
                                              126: 5, #This could be the savanna type! Check.
-                                             20: 4, 30: 7, 90: 7,
+                                             20: 4, 30: 7, 90: 9,
                                              100: 7, 60: 8,
                                              40: 6, 50: 8,
                                              70: 8, 80: 8, 200: 8}
@@ -381,16 +382,10 @@ class vprm:
             elif which_evi=='evi2':
                 temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l']))
             temp_evi = xr.where((temp_evi<=0) | (temp_evi>1) , np.nan, temp_evi)
-           # temp_evi[temp_evi<0] = np.nan
-            #temp_evi[temp_evi>1] = np.nan
             temp_lswi = ((nir - swir) / (nir + swir))
             temp_lswi = xr.where((temp_lswi<-1) | (temp_lswi>1) , np.nan, temp_lswi)
-          #  temp_lswi[temp_lswi<-1] = np.nan
-          # temp_lswi[temp_lswi>1] = np.nan
             handler.sat_img['evi'] = temp_evi
             handler.sat_img['lswi'] = temp_lswi
-           # handler.sat_img = handler.sat_img.assign({'evi': (['y','x'], temp_evi)})
-           # handler.sat_img = handler.sat_img.assign({'lswi': (['y','x'], temp_lswi)}) 
         if timestamp_key is not None:
             handler.sat_img = handler.sat_img.rename({timestamp_key: 'timestamps'})
         bands_to_mask = []
