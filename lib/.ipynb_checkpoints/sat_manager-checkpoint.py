@@ -171,6 +171,43 @@ class satellite_data_manager:
         self.t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                 self.sat_img.rio.crs)
         return
+
+    def transform_to_grid(self, sat_manager_inst):
+        
+        import xesmf as xe
+        
+        src_x = self.sat_img.coords['x'].values
+        src_y = self.sat_img.coords['y'].values
+        X, Y = np.meshgrid(src_x, src_y)
+        t = Transformer.from_crs(self.sat_img.rio.crs,
+                                '+proj=longlat +datum=WGS84')
+        x_long, y_lat = t.transform(X, Y)
+        src_grid = xr.Dataset({"lon": (["y", "x"], x_long ,
+                             {"units": "degrees_east"}),
+                              "lat": (["y", "x"], y_lat,
+                             {"units": "degrees_north"})})
+        src_grid = src_grid.set_coords(['lon', 'lat'])
+
+        src_x = sat_manager_inst.sat_img.coords['x'].values
+        src_y = sat_manager_inst.sat_img.coords['y'].values
+        X, Y = np.meshgrid(src_x, src_y)
+        t = Transformer.from_crs(sat_manager_inst.sat_img.rio.crs,
+                                '+proj=longlat +datum=WGS84')
+        x_long, y_lat = t.transform(X, Y)
+        dest_grid = xr.Dataset({"lon": (["y", "x"], x_long ,
+                             {"units": "degrees_east"}),
+                              "lat": (["y", "x"], y_lat,
+                             {"units": "degrees_north"})})
+        dest_grid = dest_grid.set_coords(['lon', 'lat'])
+
+        regridder = xe.Regridder(src_grid, dest_grid, "bilinear")
+        self.sat_img = regridder(self.sat_img)
+        self.sat_img = self.sat_img.assign_coords({'x': sat_manager_inst.sat_img.coords['x'].values,
+                                            'y': sat_manager_inst.sat_img.coords['y'].values})
+        self.sat_img.rio.set_crs(sat_manager_inst.sat_img.rio.crs)
+        return
+
+
         
     def get_plotting_extend(self):
         # get the corners of the satellite image

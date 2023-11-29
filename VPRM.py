@@ -150,7 +150,7 @@ class vprm:
         self.timestamps = []
         self.t2m = None
         
-        self.target_shape = None
+       # self.target_shape = None
         
         self.sat_img_buffer = dict()
         self.buffer = dict()
@@ -168,7 +168,7 @@ class vprm:
                                   6: [5, 22, 40], # Cropland
                                   7: [2, 18, 40], # Grassland
                                   8: [0, 0, 40], # Other
-                                  9: [0, 0, 40]}  # Wetland
+                                  9: [0, 20, 40]}  # Wetland
 
         self.map_copernicus_to_vprm_class = {0: 8, 111: 1, 113: 2,
                                              112:1 , 114:2, 115:3,
@@ -409,7 +409,7 @@ class vprm:
             else:
                 handler.drop_bands()
         self.sat_imgs.append(handler)  
-        self.timestamps.append(handler.get_recording_time())
+#        self.timestamps.append(handler.get_recording_time())
         return
 
     
@@ -483,11 +483,11 @@ class vprm:
                     x_time_y = prod
             self.xs = biggest.sat_img.x.values
             self.ys = biggest.sat_img.y.values
-            self.target_shape = (len(self.xs), len(self.ys))
-            X, Y = np.meshgrid(self.xs, self.ys)
-            t = Transformer.from_crs(biggest.sat_img.rio.crs,
-                                    '+proj=longlat +datum=WGS84')
-            self.x_long, self.y_lat = t.transform(X, Y) 
+          #  self.target_shape = (len(self.xs), len(self.ys))
+          #  X, Y = np.meshgrid(self.xs, self.ys)
+           # t = Transformer.from_crs(biggest.sat_img.rio.crs,
+           #                         '+proj=longlat +datum=WGS84')
+           # self.x_long, self.y_lat = t.transform(X, Y) 
             self.prototype = copy.deepcopy(biggest) 
             keys = list(self.prototype.sat_img.keys())
             self.prototype.sat_img = self.prototype.sat_img.drop(keys)
@@ -497,25 +497,20 @@ class vprm:
             self.prototype = copy.deepcopy(self.sat_imgs[0]) 
             keys = list(self.prototype.sat_img.keys()) 
             self.prototype.sat_img = self.prototype.sat_img.drop(keys)
-
-        self.timestamps = np.array(self.timestamps).flatten()
-        sort_inds = np.argsort(self.timestamps)
-        self.timestamps = np.array([pd.Timestamp(i).to_pydatetime() for i in self.timestamps])[sort_inds]
+            
+        if 'timestamps' in list(self.sat_imgs[0].sat_img.keys()):
+            for sat_img_handler in self.sat_imgs:
+                adjust_timestamps(sat_img_handler.sat_img, sat_img_handler.start_date(),
+                                  sat_img_handler.stop_date(), self.timestamp_start)
+        self.sat_imgs = satellite_data_manager(sat_img = xr.concat([k.sat_img for k in self.sat_imgs], 'time'))
+        self.sat_imgs.sat_img =  self.sat_imgs.sat_img.sortby(self.sat_imgs.sat_img.time)
+        self.timestamps = self.sat_imgs.sat_img.time
+        self.timestamps = np.array([pd.Timestamp(i).to_pydatetime() for i in self.timestamps.values])
         self.timestamp_start = self.timestamps[0]
         self.timestamp_end = self.timestamps[-1]
         self.tot_num_days = (self.timestamp_end - self.timestamp_start).days
         print('Loaded data from {} to {}'.format(self.timestamp_start, self.timestamp_end))
         day_steps = [i.days for i in (self.timestamps - self.timestamp_start)]
-        if 'timestamps' in list(self.sat_imgs[0].sat_img.keys()):
-            for sat_img_handler in self.sat_imgs:
-                adjust_timestamps(sat_img_handler.sat_img, sat_img_handler.start_date(),
-                                  sat_img_handler.stop_date(), self.timestamp_start)
-            # else:
-            #     Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(adjust_timestamps)(sat_img_handler.sat_img, sat_img_handler.start_date(), sat_img_handler.stop_date(), self.timestamp_start) for sat_img_handler in self.sat_imgs)
-        if len(self.timestamps) == len(self.sat_imgs):
-            self.sat_imgs = satellite_data_manager(sat_img = xr.concat([i.sat_img for i in np.array(self.sat_imgs)[sort_inds]], 'time'))
-        else:
-            self.sat_imgs = self.sat_imgs[0]
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time": day_steps})
         self.time_key = 'time'
         return
@@ -528,11 +523,11 @@ class vprm:
                                                                    bounds[3])
         self.xs = self.sat_imgs.sat_img.x.values
         self.ys = self.sat_imgs.sat_img.y.values
-        self.target_shape = (len(self.xs), len(self.ys))
-        X, Y = np.meshgrid(self.xs, self.ys)
-        t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
-                                '+proj=longlat +datum=WGS84')
-        self.x_long, self.y_lat = t.transform(X, Y) 
+       # self.target_shape = (len(self.xs), len(self.ys))
+       # X, Y = np.meshgrid(self.xs, self.ys)
+       # t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
+       #                         '+proj=longlat +datum=WGS84')
+       # self.x_long, self.y_lat = t.transform(X, Y) 
         keys = list(self.sat_imgs.sat_img.keys())
         self.prototype = satellite_data_manager(sat_img=self.sat_imgs.sat_img.drop(keys))
         return
@@ -1272,11 +1267,11 @@ class vprm:
                                     reproject=False)
             self.xs = self.sat_imgs.sat_img.x.values
             self.ys = self.sat_imgs.sat_img.y.values
-            self.target_shape = (len(self.xs), len(self.ys))
-            X, Y = np.meshgrid(self.xs, self.ys)
-            t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
-                                    '+proj=longlat +datum=WGS84')
-            self.x_long, self.y_lat = t.transform(X, Y) 
+          #  self.target_shape = (len(self.xs), len(self.ys))
+          #  X, Y = np.meshgrid(self.xs, self.ys)
+           # t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
+           #                         '+proj=longlat +datum=WGS84')
+          #  self.x_long, self.y_lat = t.transform(X, Y) 
             keys = list(self.sat_imgs.sat_img.keys())
             self.prototype = satellite_data_manager(sat_img=self.sat_imgs.sat_img.drop(keys))
             
