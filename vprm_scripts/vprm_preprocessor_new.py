@@ -84,21 +84,23 @@ lons = np.linspace(0, np.shape(t['XLONG_M'].values.squeeze())[1],
 out_grid = xr.Dataset({"lon": (["y", "x"], t['XLONG_M'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y],
                                                                          lons[args.chunk_x - 1]:lons[args.chunk_x]],
                       {"units": "degrees_east"}),
+                       "lon_b": (["y_b", "x_b"], t['XLONG_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
+                                                                           lons[args.chunk_x - 1]:lons[args.chunk_x]+1],
+                      {"units": "degrees_east"}),
                       "lat": (["y", "x"], t['XLAT_M'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y],
                                                                        lons[args.chunk_x - 1]:lons[args.chunk_x]],
-                      {"units": "degrees_north"})})
+                      {"units": "degrees_north"}),
+                      "lat_b": (["y_b", "x_b"], t['XLAT_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
+                                                                            lons[args.chunk_x - 1]:lons[args.chunk_x]+1],
+                      {"units": "degrees_north"})
+                      })
 
-out_grid  = out_grid.set_coords(['lon', 'lat'])
+out_grid  = out_grid.set_coords(['lon', 'lat', 'lat_b', 'lon_b'])
 
 
-xlong_c = t['XLONG_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
-                                        lons[args.chunk_x - 1]:lons[args.chunk_x]+1]
-xlat_c = t['XLAT_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
-                                      lons[args.chunk_x - 1]:lons[args.chunk_x]+1]
-
-hvs = np.unique([lat_lon_to_modis(out_grid['lat'].values.flatten()[i], 
-                                  out_grid['lon'].values.flatten()[i]) 
-                for i in range(len(out_grid['lat'].values.flatten()))],
+hvs = np.unique([lat_lon_to_modis(out_grid['lat_b'].values.flatten()[i], 
+                                  out_grid['lon_b'].values.flatten()[i]) 
+                for i in range(len(out_grid['lat_b'].values.flatten()))],
                   axis=0)
 print(hvs)
 insts = []
@@ -131,7 +133,7 @@ for c, i in enumerate(hvs):
             if c0 == 0:
                 trans = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                                handler.sat_img.rio.crs)
-                x_a, y_a = trans.transform(xlong_c, xlat_c)
+                x_a, y_a = trans.transform(out_grid['lon_b'], out_grid['lat_b'])
                 b = box(float(np.min(x_a)), float(np.min(y_a)),
                         float(np.max(x_a)), float(np.max(y_a)))
                 b = gpd.GeoSeries(Polygon(b), crs=handler.sat_img.rio.crs)
@@ -185,15 +187,15 @@ if not os.path.exists(cfg['out_path']):
     os.makedirs(cfg['out_path'])
 veg_file = os.path.join(cfg['out_path'], 'veg_map_on_modis_grid_{}_{}.nc'.format(args.chunk_x,
                                                                                  args.chunk_y))
-if os.path.exists(veg_file):
-    print('Load land cover map')
-    add_land_cover_map(vprm_inst,
-                       land_cover_on_modis_grid=veg_file)
-else:   
-    print('Generate land cover map')
-    add_land_cover_map(vprm_inst,
-                       copernicus_data_path=cfg['copernicus_path'],
-                       save_path=veg_file)
+# if os.path.exists(veg_file):
+#     print('Load land cover map')
+#     add_land_cover_map(vprm_inst,
+#                        land_cover_on_modis_grid=veg_file)
+# else:   
+print('Generate land cover map')
+add_land_cover_map(vprm_inst,
+                   copernicus_data_path=cfg['copernicus_path'],
+                   save_path=veg_file)
  
 
 #Regrid to WRF Grid defined in out_grid 
@@ -205,14 +207,14 @@ else:
 
 
 regridder_path = os.path.join(cfg['out_path'], 'regridder_{}_{}.nc'.format(args.chunk_x,
-                                                                           args.chunk_y))
-if os.path.exists(regridder_path):
-    print('Use existing regridder')
-    wrf_op = vprm_inst.to_wrf_output(out_grid, weights_for_regridder=regridder_path)
-else:
-    print('Create regridder')
-    wrf_op = vprm_inst.to_wrf_output(out_grid, driver = 'ESMF_RegridWeightGen', 
-                                     regridder_save_path=regridder_path)
+                                                                            args.chunk_y))
+# if os.path.exists(regridder_path):
+#     print('Use existing regridder')
+#     wrf_op = vprm_inst.to_wrf_output(out_grid, weights_for_regridder=regridder_path)
+# else:
+print('Create regridder')
+wrf_op = vprm_inst.to_wrf_output(out_grid, driver = 'xEMSF', #'ESMF_RegridWeightGen', 
+                                 regridder_save_path=regridder_path)
 
 
 # Save to NetCDF files

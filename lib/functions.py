@@ -25,6 +25,14 @@ def lat_lon_to_modis(lat, lon):
     return int(h), int(v)
 
 
+def add_corners_to_1d_grid(mids):
+    diff = np.unique(np.diff(mids))[0]/2
+    mids = mids - diff
+    mids = list(mids)
+    mids.append(mids[-1]+2*diff)
+    mids = np.array(mids)
+    return mids
+
 
 class flux_tower_data:
     # Class to store flux tower data in unique format

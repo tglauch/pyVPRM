@@ -22,7 +22,7 @@ which_sat = cfg['satellite']
 n_cpus = 124 
 sub_code =' python ' + args.script +' --year {} ' +  '--config {} --n_cpus '.format(args.config) + str(int(n_cpus)) + ' --chunk_x {} --chunk_y {} & ' 
 years = cfg['years']
-for yr in [2023]: #years:
+for yr in [2022]: #years:
     for chunk in list(itertools.product(np.arange(1, int(cfg['n_chunks']) + 1 ),
                                         np.arange(1, int(cfg['n_chunks']) + 1 ))):
         with open('submit_raw.sub', 'r') as ifile:

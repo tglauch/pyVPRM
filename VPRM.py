@@ -8,6 +8,7 @@ import numpy as np
 from lib.sat_manager import VIIRS, sentinel2, modis,\
                             copernicus_land_cover_map, satellite_data_manager
 from lib.era5_class import ERA5
+from lib.functions import add_corners_to_1d_grid
 from scipy.ndimage import uniform_filter
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from pyproj import Transformer
@@ -26,28 +27,8 @@ import rasterio
 from astropy.convolution import convolve
 from datetime import datetime, timedelta
 
-
-def adjust_timestamps(sat_img, start_date, stop_date, timestamp0):
-    start_day = start_date.timetuple().tm_yday
-    stop_day = stop_date.timetuple().tm_yday    
-    if sat_img['timestamps'].ndim == 1:
-        for i in range(np.shape(sat_img['timestamps'])[0]):
-            this_ts = sat_img['timestamps'][i]
-            if np.abs(this_ts - start_day) < np.abs(this_ts - stop_day):
-                sat_img['timestamps'][i] = ((start_date + timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
-            else:
-                sat_img['timestamps'][i] = ((stop_date - timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days    
-    else:
-        for this_ts in np.unique(sat_img['timestamps'].values): # this_ts is the day of the year
-            if np.isnan(this_ts):
-                this_ts = start_day
-            if np.abs(this_ts - start_day) < np.abs(this_ts - stop_day):
-                sat_img['timestamps'].values[sat_img['timestamps'].values==this_ts] = ((start_date + timedelta(days=float(np.abs(this_ts - start_day)))) - timestamp0).days
-            else:
-                sat_img['timestamps'].values[sat_img['timestamps'].values==this_ts] = ((stop_date - timedelta(days=float(np.abs(this_ts - stop_day)))) - timestamp0).days
-            
-    return
-
+regridder_options = dict()
+regridder_options['conservative'] = 'conserve'
 
 def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, 
                         frac=0.25, it=3):
@@ -117,6 +98,7 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None,
             ret_array[:, j] = lws_res
         return ret_array.T
 
+
 class vprm: 
     '''
     Class for the  Vegetation Photosynthesis and Respiration Model
@@ -184,7 +166,8 @@ class vprm:
     
     
     def to_wrf_output(self, out_grid, weights_for_regridder=None,
-                      regridder_save_path=None, driver='xEMSF'):
+                      regridder_save_path=None, driver='xEMSF',
+                      interp_method='conservative'):
 
         '''
             Generate output in the format that can be used as an input for WRF 
@@ -203,18 +186,26 @@ class vprm:
         
         import xesmf as xe
 
-
         src_x = self.sat_imgs.sat_img.coords['x'].values
         src_y = self.sat_imgs.sat_img.coords['y'].values
+        src_x_b = add_corners_to_1d_grid(src_x)
+        src_y_b = add_corners_to_1d_grid(src_y)
         X, Y = np.meshgrid(src_x, src_y)
+        X_b, Y_b = np.meshgrid(src_x, src_y)
         t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
                                 '+proj=longlat +datum=WGS84')
         x_long, y_lat = t.transform(X, Y)
+        X_b, Y_b = np.meshgrid(src_x_b, src_y_b)
+        x_long_b, y_lat_b = t.transform(X_b, Y_b)
         src_grid = xr.Dataset({"lon": (["y", "x"], x_long ,
-                             {"units": "degrees_east"}),
+                              {"units": "degrees_east"}),
+                              "lon_b": (["y_b", "x_b"], x_long_b,
+                              {"units": "degrees_east"}),
                               "lat": (["y", "x"], y_lat,
-                             {"units": "degrees_north"})})
-        src_grid = src_grid.set_coords(['lon', 'lat'])
+                              {"units": "degrees_north"}),
+                              "lat_b": (["y_b", "x_b"], y_lat_b,
+                              {"units": "degrees_north"})})
+        src_grid = src_grid.set_coords(['lon', 'lat', 'lat_b', 'lon_b'])
         if isinstance(out_grid, dict):
             ds_out = xr.Dataset(
                  {"lon": (["lon"], out_grid['lons'],
@@ -226,7 +217,7 @@ class vprm:
         if weights_for_regridder is None:
             print('Need to generate the weights for the regridder. This can be very slow and memory intensive')
             if driver == 'xEMSF':
-                regridder = xe.Regridder(src_grid, ds_out, "bilinear")
+                regridder = xe.Regridder(src_grid, ds_out, interp_method)
                 if regridder_save_path is not None:
                     regridder.to_netcdf(regridder_save_path)
             elif driver == 'ESMF_RegridWeightGen':
@@ -237,20 +228,20 @@ class vprm:
                 dest_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
                 src_grid.to_netcdf(src_temp_path)
                 ds_out.to_netcdf(dest_temp_path)
-                os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear -r --netcdf4 --no_log --extrap_method nearestd –src_regional –dest_regional '.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path)) # --no_log
-                os.remove(src_temp_path) 
-                os.remove(dest_temp_path)
+                os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m {} -r --netcdf4 --no_log --extrap_method nearestd –src_regional –dest_regional '.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path, regridder_options[interp_method])) # --no_log
+                #os.remove(src_temp_path) 
+                #os.remove(dest_temp_path)
                 weights_for_regridder = regridder_save_path
             else:
                 print('Driver needs to be xEMSF or ESMF_RegridWeightGen' )
         if weights_for_regridder is not None:
             regridder = xe.Regridder(src_grid, ds_out,
-                                     "bilinear", weights=weights_for_regridder,
+                                     interp_method, weights=weights_for_regridder,
                                      reuse_weights=True)
         veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
                               for i in self.map_copernicus_to_vprm_class.keys()])
         veg_inds = np.array(veg_inds, dtype=np.int32)
-        dims = list(ds_out.dims.mapping.keys())
+        dims = [i for i in list(ds_out.dims.mapping.keys()) if '_b' not in i]
         for c, i in enumerate(veg_inds):
             if c == 0:
                 t = copy.deepcopy(self.land_cover_type)
@@ -274,8 +265,8 @@ class vprm:
         for ky in range(kys):
             sub_array = [] 
             for v in veg_inds:
-                tres = self.sat_imgs.sat_img.isel({self.time_key:ky})['evi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, 0) 
-                sub_array.append(regridder(tres.values))
+                tres = self.sat_imgs.sat_img.isel({self.time_key:ky})['evi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, np.nan) 
+                sub_array.append(regridder(tres.values, skipna=True))
             final_array.append(sub_array)
         out_dims = ['vprm_classes', 'time']
         out_dims.extend(dims)
@@ -289,8 +280,8 @@ class vprm:
         for ky in range(kys):
             sub_array = []
             for v in veg_inds:
-                tres = self.sat_imgs.sat_img.isel({self.time_key: ky})['lswi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, 0) 
-                sub_array.append(regridder(tres.values))
+                tres = self.sat_imgs.sat_img.isel({self.time_key: ky})['lswi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, np.nan) 
+                sub_array.append(regridder(tres.values, skipna=True))
             final_array.append(sub_array)
         ds_t_lswi = copy.deepcopy(ds_out)
         ds_t_lswi = ds_t_lswi.assign({'lswi': (out_dims, np.moveaxis(final_array,0, 1))})
@@ -483,11 +474,6 @@ class vprm:
                     x_time_y = prod
             self.xs = biggest.sat_img.x.values
             self.ys = biggest.sat_img.y.values
-          #  self.target_shape = (len(self.xs), len(self.ys))
-          #  X, Y = np.meshgrid(self.xs, self.ys)
-           # t = Transformer.from_crs(biggest.sat_img.rio.crs,
-           #                         '+proj=longlat +datum=WGS84')
-           # self.x_long, self.y_lat = t.transform(X, Y) 
             self.prototype = copy.deepcopy(biggest) 
             keys = list(self.prototype.sat_img.keys())
             self.prototype.sat_img = self.prototype.sat_img.drop(keys)
@@ -497,11 +483,7 @@ class vprm:
             self.prototype = copy.deepcopy(self.sat_imgs[0]) 
             keys = list(self.prototype.sat_img.keys()) 
             self.prototype.sat_img = self.prototype.sat_img.drop(keys)
-            
-        if 'timestamps' in list(self.sat_imgs[0].sat_img.keys()):
-            for sat_img_handler in self.sat_imgs:
-                adjust_timestamps(sat_img_handler.sat_img, sat_img_handler.start_date(),
-                                  sat_img_handler.stop_date(), self.timestamp_start)
+                            
         self.sat_imgs = satellite_data_manager(sat_img = xr.concat([k.sat_img for k in self.sat_imgs], 'time'))
         self.sat_imgs.sat_img =  self.sat_imgs.sat_img.sortby(self.sat_imgs.sat_img.time)
         self.timestamps = self.sat_imgs.sat_img.time
@@ -512,6 +494,11 @@ class vprm:
         print('Loaded data from {} to {}'.format(self.timestamp_start, self.timestamp_end))
         day_steps = [i.days for i in (self.timestamps - self.timestamp_start)]
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time": day_steps})
+        if 'timestamps' in list(self.sat_imgs.sat_img.keys()):
+            tismp = np.round(np.array((self.sat_imgs.sat_img['timestamps'].values  - np.datetime64(self.timestamp_start))/1e9/(24*60*60), dtype=float))
+            dims = list(self.sat_imgs.sat_img.data_vars['timestamps'].dims)
+            self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'timestamps': (dims, tismp)}) 
+
         self.time_key = 'time'
         return
 
@@ -555,9 +542,6 @@ class vprm:
             if land_cover_map.sat_img.rio.crs.to_proj4() != self.sat_imgs.sat_img.rio.crs.to_proj4():
                 print('Projection of land cover map and satellite images need to match. Reproject first.')
                 return False
-            # bounds = self.sat_imgs.sat_img.rio.bounds()
-            # land_cover_map.sat_img = land_cover_map.sat_img.rio.clip_box(bounds[0], bounds[1],
-            #                                                              bounds[2], bounds[3])
             for key in self.map_copernicus_to_vprm_class.keys():
                 land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_copernicus_to_vprm_class[key]
             f_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16)
@@ -1019,8 +1003,7 @@ class vprm:
         land_type[~np.isfinite(land_type)] = 0 
         ret_dict['land_cover_type'] = land_type
         return ret_dict           
-    
-    
+
     def data_for_fitting(self):
         self.sat_imgs.sat_img.load()
         for s in self.sites:
@@ -1214,6 +1197,7 @@ class vprm:
         best_fit_params_dict = dict()
         for key in fit_dict.keys():
             min_len = np.min([i.get_len() for i in fit_dict[key]])
+            print(key, min_len)
             data_for_fit = []
             for s in fit_dict[key]:
                 t_data = s.get_data()

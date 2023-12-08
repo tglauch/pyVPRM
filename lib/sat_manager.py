@@ -35,6 +35,7 @@ from rasterio.warp import calculate_default_transform
 import h5py
 from dateutil import parser
 import xarray as xr
+from datetime import datetime, timedelta
 
 def geodesic_point_buffer(lat, lon, km):
     buf = Point(0, 0).buffer(km * 1000)  # distance in metres
@@ -504,8 +505,26 @@ class modis(earthdata):
 
     def get_resolution(self):
         return self.sat_img.rio.resolution()
-        
-    def individual_loading(self):
+    
+    def adjust_obs_timestamps(self, key='sur_refl_day_of_year'):
+        start_date = self.start_date()
+        stop_date = self.stop_date()
+        start_day = start_date.timetuple().tm_yday
+        stop_day = stop_date.timetuple().tm_yday  
+        new = np.full(self.sat_img[key].shape, start_date)
+        for this_ts in np.unique(self.sat_img[key].values): # this_ts is the day of the year
+            if np.isnan(this_ts):
+                this_ts = start_day
+            if np.abs(this_ts - start_day) < np.abs(this_ts - stop_day):
+                test = (start_date + timedelta(days=float(np.abs(this_ts - start_day))))
+                new[self.sat_img[key].values==this_ts] = test
+            else:
+                test = (stop_date - timedelta(days=float(np.abs(this_ts - stop_day))))
+                new[self.sat_img[key].values==this_ts] = test
+        self.sat_img = self.sat_img.assign({key: (list(self.sat_img.dims.mapping.keys()), new)}) 
+        return
+
+    def individual_loading(self, adjust_timestamps=True):
         if ('MOD09GA' in self.product) or ('MOD21' in self.product):
             self.sat_img = rxr.open_rasterio(self.sat_image_path, 
                                      masked=True, cache=False)[1].squeeze()
@@ -530,6 +549,9 @@ class modis(earthdata):
         for key in self.keys:
             self.sat_img[key] = self.sat_img[key] * self.sat_img[key].scale_factor
         self.meta_data = self.sat_img.attrs
+        self.sat_img = self.sat_img.assign_coords({'time': self.get_recording_time()})
+        if adjust_timestamps:
+            self.adjust_obs_timestamps()
         return
     
     def get_files(self, dest):

@@ -40,7 +40,8 @@ keys_dict = {'ssrd': [169, 'sf12'],#surface solar radiation downwards(J/m**2)
 #             'str': [177, 'sf12'],#net surface thermal radiation (J/m**2)
              'src': [198, 'sf00'],
              'q': [133, 'ml00'], # specific humidity (%)
-             'e': [182, 'sf12']} # evaporation
+             'e': [182, 'sf12'], 
+             'sst': [34 ,'sf00']} 
 
 
 class ERA5:
