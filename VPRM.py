@@ -8,9 +8,9 @@ import numpy as np
 from lib.sat_manager import VIIRS, sentinel2, modis,\
                             copernicus_land_cover_map, satellite_data_manager
 from lib.era5_class import ERA5
-from lib.functions import add_corners_to_1d_grid
+from lib.functions import add_corners_to_1d_grid, do_lowess_smoothing,\
+                         make_xesmf_grid, to_esmf_grid
 from scipy.ndimage import uniform_filter
-from statsmodels.nonparametric.smoothers_lowess import lowess
 from pyproj import Transformer
 import copy
 from joblib import Parallel, delayed
@@ -29,74 +29,6 @@ from datetime import datetime, timedelta
 
 regridder_options = dict()
 regridder_options['conservative'] = 'conserve'
-
-def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, 
-                        frac=0.25, it=3):
-    '''
-        Performs lowess smoothing on a 2-D-array, where the first dimension is the time.
-
-            Parameters:
-                    array_to_smooth (list): The 2-D-array
-            Returns:
-                    The lowess smoothed array
-    '''
-
-    ret = []
-
-    if array_to_smooth.ndim == 1:
-        if timestamps is None:
-            t_timestamp = np.arange(len(array_to_smooth))
-        else:
-            t_timestamp = timestamps
-        mask = np.isfinite(array_to_smooth)
-        print(t_timestamp, array_to_smooth)
-        if xvals is None:
-            xvals = t_timestamp
-        ret =  [np.nan]
-        counter = 0
-        while counter<10:
-            ret = lowess(array_to_smooth[mask], t_timestamp[mask],
-                         is_sorted=True, frac=frac+0.05*counter, it=it,
-                         xvals=xvals,
-                         return_sorted=False)
-            if not np.all(np.isfinite(ret)):
-            #    print('Non finite values for frac: {}. Retry.'.format(frac+0.05*counter))
-                counter += 1
-            else:
-                break
-        return ret
-    else:
-        if xvals is not None:
-            ret_array = np.zeros((len(xvals),
-                                  np.shape(array_to_smooth)[1]))
-        else:
-            ret_array = np.zeros((len(array_to_smooth[:, 0]),
-                                  np.shape(array_to_smooth)[1]))
-        for j in range(np.shape(array_to_smooth)[1]):
-            if timestamps is None:
-                t_timestamp = np.arange(len(array_to_smooth[:, j]))
-            else:
-                if timestamps.ndim == 1:
-                    t_timestamp = timestamps
-                else:
-                    t_timestamp = timestamps[:, j]
-            mask = np.isfinite(array_to_smooth[:, j])
-            if xvals is None:
-                xvals = t_timestamp
-            lws_res = [np.nan]
-            counter = 0
-            while counter < 10:
-                lws_res = lowess(array_to_smooth[:, j][mask], t_timestamp[mask],
-                                 is_sorted=True, frac=frac+0.05*counter,
-                                 it=it, xvals=xvals,
-                                 return_sorted=False)
-                if not np.all(np.isfinite(lws_res)):
-                  #  print('Non finite values for frac: {}. Retry.'.format(frac+0.05*counter))
-                    counter += 1
-                else:
-                    break
-            ret_array[:, j] = lws_res
-        return ret_array.T
 
 
 class vprm: 
@@ -149,8 +81,8 @@ class vprm:
                                   5: [2, 20, 40], # Savannas
                                   6: [5, 22, 40], # Cropland
                                   7: [2, 18, 40], # Grassland
-                                  8: [0, 0, 40], # Other
-                                  9: [0, 20, 40]}  # Wetland
+                                  8: [0, 0, 40],}# # Other
+                              #    9: [0, 20, 40]}  # Wetland
 
         self.map_copernicus_to_vprm_class = {0: 8, 111: 1, 113: 2,
                                              112:1 , 114:2, 115:3,
@@ -158,7 +90,7 @@ class vprm:
                                              122 : 1, 124 : 2,
                                              125 : 3,
                                              126: 5, #This could be the savanna type! Check.
-                                             20: 4, 30: 7, 90: 9,
+                                             20: 4, 30: 7, 90: 8, #90:9,
                                              100: 7, 60: 8,
                                              40: 6, 50: 8,
                                              70: 8, 80: 8, 200: 8}
@@ -185,35 +117,13 @@ class vprm:
         '''
         
         import xesmf as xe
-
-        src_x = self.sat_imgs.sat_img.coords['x'].values
-        src_y = self.sat_imgs.sat_img.coords['y'].values
-        src_x_b = add_corners_to_1d_grid(src_x)
-        src_y_b = add_corners_to_1d_grid(src_y)
-        X, Y = np.meshgrid(src_x, src_y)
-        X_b, Y_b = np.meshgrid(src_x, src_y)
-        t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
-                                '+proj=longlat +datum=WGS84')
-        x_long, y_lat = t.transform(X, Y)
-        X_b, Y_b = np.meshgrid(src_x_b, src_y_b)
-        x_long_b, y_lat_b = t.transform(X_b, Y_b)
-        src_grid = xr.Dataset({"lon": (["y", "x"], x_long ,
-                              {"units": "degrees_east"}),
-                              "lon_b": (["y_b", "x_b"], x_long_b,
-                              {"units": "degrees_east"}),
-                              "lat": (["y", "x"], y_lat,
-                              {"units": "degrees_north"}),
-                              "lat_b": (["y_b", "x_b"], y_lat_b,
-                              {"units": "degrees_north"})})
-        src_grid = src_grid.set_coords(['lon', 'lat', 'lat_b', 'lon_b'])
+        
+        src_grid = make_xesmf_grid(self.sat_imgs.sat_img)
         if isinstance(out_grid, dict):
-            ds_out = xr.Dataset(
-                 {"lon": (["lon"], out_grid['lons'],
-                          {"units": "degrees_east"}),
-                  "lat": (["lat"], out_grid['lats'],
-                          {"units": "degrees_north"})})
+            ds_out = make_xesmf_grid(out_grid)
         else:
             ds_out = out_grid
+            
         if weights_for_regridder is None:
             print('Need to generate the weights for the regridder. This can be very slow and memory intensive')
             if driver == 'xEMSF':
@@ -229,8 +139,8 @@ class vprm:
                 src_grid.to_netcdf(src_temp_path)
                 ds_out.to_netcdf(dest_temp_path)
                 os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m {} -r --netcdf4 --no_log --extrap_method nearestd –src_regional –dest_regional '.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path, regridder_options[interp_method])) # --no_log
-                #os.remove(src_temp_path) 
-                #os.remove(dest_temp_path)
+                os.remove(src_temp_path) 
+                os.remove(dest_temp_path)
                 weights_for_regridder = regridder_save_path
             else:
                 print('Driver needs to be xEMSF or ESMF_RegridWeightGen' )
@@ -242,22 +152,23 @@ class vprm:
                               for i in self.map_copernicus_to_vprm_class.keys()])
         veg_inds = np.array(veg_inds, dtype=np.int32)
         dims = [i for i in list(ds_out.dims.mapping.keys()) if '_b' not in i]
-        for c, i in enumerate(veg_inds):
-            if c == 0:
-                t = copy.deepcopy(self.land_cover_type)
-                t.sat_img['land_cover_type'].values = np.array(self.land_cover_type.sat_img['land_cover_type'] ==i,
-                                                               dtype=float)
-                t.sat_img = regridder(t.sat_img)
-                t.sat_img = t.sat_img.rename({'land_cover_type': str(i)})
-            else:
-                t1 = np.array(self.land_cover_type.sat_img['land_cover_type'] ==i, dtype=float)
-                t1 = regridder(t1)
-                t.sat_img = t.sat_img.assign({str(i): (dims, t1)})
-        var_list =  t.sat_img.data_vars
-        t.sat_img = xr.concat([t.sat_img[var] for var in var_list], dim='vprm_classes')
-        t.sat_img = t.sat_img.assign_coords({'vprm_classes': [int(c) for c in list(var_list)]})
-        t.sat_img = t.sat_img.to_dataset(name='vegetation_fraction_map')   
-        t.sat_img = t.sat_img.rename({'y': 'south_north', 'x': 'west_east'})
+        # for c, i in enumerate(veg_inds):
+        #     if c == 0:
+        #         t = copy.deepcopy(self.land_cover_type)
+        #         t.sat_img['land_cover_type'].values = np.array(self.land_cover_type.sat_img['land_cover_type'] ==i,
+        #                                                        dtype=float)
+        #         t.sat_img = regridder(t.sat_img)
+        #         t.sat_img = t.sat_img.rename({'land_cover_type': str(i)})
+        #     else:
+        #         t1 = np.array(self.land_cover_type.sat_img['land_cover_type'] ==i, dtype=float)
+        #         t1 = regridder(t1)
+        #         t.sat_img = t.sat_img.assign({str(i): (dims, t1)})
+        # var_list =  t.sat_img.data_vars
+        # t.sat_img = xr.concat([t.sat_img[var] for var in var_list], dim='vprm_classes')
+        # t.sat_img = t.sat_img.assign_coords({'vprm_classes': [int(c) for c in list(var_list)]})
+        lcm = regridder(self.land_cover_type.sat_img)
+        lcm = lcm.to_dataset(name='vegetation_fraction_map')   
+        lcm = lcm.rename({'y': 'south_north', 'x': 'west_east'})
         day_of_the_year = np.array(self.sat_imgs.sat_img[self.time_key].values, dtype=np.int32)
         day_of_the_year += 1 - day_of_the_year[0]
         kys = len(self.sat_imgs.sat_img[self.time_key].values)
@@ -265,7 +176,7 @@ class vprm:
         for ky in range(kys):
             sub_array = [] 
             for v in veg_inds:
-                tres = self.sat_imgs.sat_img.isel({self.time_key:ky})['evi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, np.nan) 
+                tres = self.sat_imgs.sat_img.isel({self.time_key:ky})['evi'].where(self.land_cover_type.sat_img.sel({'vprm_classes':v}) > 0, np.nan) 
                 sub_array.append(regridder(tres.values, skipna=True))
             final_array.append(sub_array)
         out_dims = ['vprm_classes', 'time']
@@ -280,7 +191,7 @@ class vprm:
         for ky in range(kys):
             sub_array = []
             for v in veg_inds:
-                tres = self.sat_imgs.sat_img.isel({self.time_key: ky})['lswi'].where(self.land_cover_type.sat_img['land_cover_type'].values == v, np.nan) 
+                tres = self.sat_imgs.sat_img.isel({self.time_key: ky})['lswi'].where(self.land_cover_type.sat_img.sel({'vprm_classes':v}) > 0, np.nan)  
                 sub_array.append(regridder(tres.values, skipna=True))
             final_array.append(sub_array)
         ds_t_lswi = copy.deepcopy(ds_out)
@@ -315,7 +226,7 @@ class vprm:
         ds_t_min_lswi = ds_t_min_lswi.assign_coords({"vprm_classes": veg_inds})
         ds_t_min_lswi = ds_t_min_lswi.rename({'y': 'south_north', 'x': 'west_east'})
         
-        ret_dict = {'lswi': ds_t_lswi, 'evi': ds_t_evi, 'veg_fraction': t.sat_img,
+        ret_dict = {'lswi': ds_t_lswi, 'evi': ds_t_evi, 'veg_fraction': lcm,
                     'lswi_max': ds_t_max_lswi, 'lswi_min': ds_t_min_lswi,
                     'evi_max': ds_t_max_evi, 'evi_min': ds_t_min_evi}
         
@@ -520,7 +431,8 @@ class vprm:
         return
     
     def add_land_cover_map(self, land_cover_map, var_name='band_1',
-                           save_path=None, filter_size=None):
+                           save_path=None, filter_size=None,
+                           mode='fractional', regridder_save_path=None):
         '''
             Add the land cover map. Either use a pre-calculated one or do the calculation on the fly.
 
@@ -538,37 +450,70 @@ class vprm:
             self.land_cover_type = satellite_data_manager(sat_img=land_cover_map)
         else:
             print('Generating satellite data compatible land cover map')
-           # land_cover_map.reproject(proj=self.prototype.sat_img.rio.crs.to_proj4())
-            if land_cover_map.sat_img.rio.crs.to_proj4() != self.sat_imgs.sat_img.rio.crs.to_proj4():
-                print('Projection of land cover map and satellite images need to match. Reproject first.')
-                return False
+            
             for key in self.map_copernicus_to_vprm_class.keys():
                 land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_copernicus_to_vprm_class[key]
-            f_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16)
-            count_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16)
-            veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
-                                  for i in self.map_copernicus_to_vprm_class.keys()])
-            if filter_size is None:
-                filter_size = int(np.ceil(self.sat_imgs.sat_img.rio.resolution()[0]/land_cover_map.get_resolution()))
-                print('Filter size {}:'.format(filter_size))
-            if filter_size <= 1:
-                filter_size = 1
-            for i in veg_inds:
-                mask = np.array(land_cover_map.sat_img[var_name].values == i, dtype=np.float64)
-                ta  = scipy.ndimage.uniform_filter(mask, size=(filter_size, filter_size)) * (filter_size **2)
-                f_array[ta>count_array] = i
-                count_array[ta>count_array] = ta[ta>count_array]
-            f_array[f_array==0]=8 # 8 is Category for nothing | alternatively np.nan?
-            land_cover_map.sat_img[var_name].values = f_array
-            del ta
-            del count_array
-            del f_array
-            del mask
-            t =  land_cover_map.sat_img.sel(x=self.xs, y=self.ys, method="nearest").to_array().values[0]
-#            t =  land_cover_map.sat_img.sel(x=self.x_long, y=self.y_lat, method="nearest").to_array().values[0]
-            self.land_cover_type = copy.deepcopy(self.prototype)
-            self.land_cover_type.sat_img = self.land_cover_type.sat_img.assign({'land_cover_type': (['y','x'], t)}) 
-            print(self.land_cover_type.sat_img)
+                
+            if mode == 'fractional':
+                import xesmf as xe
+                veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
+                                      for i in self.map_copernicus_to_vprm_class.keys()])
+                if not os.path.exists(regridder_save_path):
+                    src_grid = to_esmf_grid(land_cover_map.sat_img)
+                    ds_out = to_esmf_grid(self.sat_imgs.sat_img)
+                    src_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
+                    dest_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
+                    src_grid.to_netcdf(src_temp_path)
+                    ds_out.to_netcdf(dest_temp_path)
+                    exec_str = 'mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m conserve -r --netcdf4 --no_log –src_regional –dest_regional '.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path)
+                    print('Run: {}'.format(exec_str))
+                    os.system(exec_str) 
+                    os.remove(src_temp_path) 
+                    os.remove(dest_temp_path)
+                grid1_xesmf = make_xesmf_grid(land_cover_map.sat_img)
+                grid2_xesmf = make_xesmf_grid(self.sat_imgs.sat_img)
+                for i in veg_inds:
+                    land_cover_map.sat_img['veg_{}'.format(i)] =  (['y', 'x'], xr.where(land_cover_map.sat_img[var_name].values == i, 1., 0.))
+                regridder = xe.Regridder(grid1_xesmf, grid2_xesmf, 'conservative',
+                                     weights=regridder_save_path,
+                                     reuse_weights=True)
+                handler = regridder(land_cover_map.sat_img)
+                handler = handler.assign_coords({'x': self.sat_imgs.sat_img.coords['x'].values,
+                                                 'y': self.sat_imgs.sat_img.coords['y'].values})
+                self.land_cover_type = satellite_data_manager(sat_img=handler)
+                
+            else:
+                if land_cover_map.sat_img.rio.crs.to_proj4() != self.sat_imgs.sat_img.rio.crs.to_proj4():
+                    print('Projection of land cover map and satellite images need to match. Reproject first.')
+                    return False
+                f_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16)
+                count_array = np.zeros(np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16)
+                if filter_size is None:
+                    filter_size = int(np.ceil(self.sat_imgs.sat_img.rio.resolution()[0]/land_cover_map.get_resolution()))
+                    print('Filter size {}:'.format(filter_size))
+                if filter_size <= 1:
+                    filter_size = 1
+                for i in veg_inds:
+                    mask = np.array(land_cover_map.sat_img[var_name].values == i, dtype=np.float64)
+                    ta  = scipy.ndimage.uniform_filter(mask, size=(filter_size, filter_size)) * (filter_size **2)
+                    f_array[ta>count_array] = i
+                    count_array[ta>count_array] = ta[ta>count_array]
+                f_array[f_array==0]=8 # 8 is Category for nothing | alternatively np.nan?
+                land_cover_map.sat_img[var_name].values = f_array
+                del ta
+                del count_array
+                del f_array
+                del mask
+                t =  land_cover_map.sat_img.sel(x=self.xs, y=self.ys, method="nearest").to_array().values[0]
+                self.land_cover_type = copy.deepcopy(self.prototype)
+                self.land_cover_type.sat_img = self.land_cover_type.sat_img.assign({var_name: (['y','x'], t)}) 
+                for i in veg_inds:
+                    self.land_cover_type.sat_img['veg_{}'.format(i)] =  (['y', 'x'], xr.where(mm.sat_img[var_name].values == i, 1., 0.))
+            self.land_cover_type.sat_img = self.land_cover_type.sat_img.drop_vars([var_name])
+            var_list = list(dict(self.land_cover_type.sat_img.data_vars.dtypes).keys())
+            self.land_cover_type.sat_img = xr.concat([self.land_cover_type.sat_img[var] for var in var_list],
+                                                     dim='vprm_classes')
+            self.land_cover_type.sat_img = self.land_cover_type.sat_img.assign_coords({'vprm_classes': [int(c.split('_')[1]) for c in list(var_list)]})
             if save_path is not None:
                  self.land_cover_type.save(save_path)
         return

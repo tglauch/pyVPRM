@@ -4,7 +4,7 @@ import pathlib
 sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
 from lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
-from lib.functions import lat_lon_to_modis
+from lib.functions import lat_lon_to_modis, add_corners_to_1d_grid
 from VPRM import vprm
 import yaml
 import glob
@@ -37,37 +37,38 @@ with open(args.config, "r") as stream:
         print(exc)
 
 
-def add_land_cover_map(vprm_inst, land_cover_on_modis_grid=None, copernicus_data_path=None,
-                       save_path=None):
-    # If the land-cover-map on the modis grid is pre-calculated
+# def add_land_cover_map(vprm_inst, land_cover_on_modis_grid=None, copernicus_data_path=None,
+#                        save_path=None, regridder_path=None):
+#     # If the land-cover-map on the modis grid is pre-calculated
     
-    if land_cover_on_modis_grid is not None:
-        vprm_inst.add_land_cover_map(land_cover_on_modis_grid)
+#     if land_cover_on_modis_grid is not None:
+#         vprm_inst.add_land_cover_map(land_cover_on_modis_grid)
 
-    # if vprm_inst not pre-calculated, load the copernicus land cover tiles from the copernicus_data_path.
-    # Download needs to be done manually from here: https://lcviewer.vito.be/download
-    # If the land-cover-map on the modis grid needs to be calculated on the fly
-    # for checks interactive viewer can be useful https://lcviewer.vito.be/2019
-    handler_lt = None
-    if copernicus_data_path is not None:
-        tiles_to_add = []
-        for i, c in enumerate(glob.glob(os.path.join(copernicus_data_path, '*'))):
-            print(c)
-            temp_map = copernicus_land_cover_map(c)
-            temp_map.load()
-            dj = vprm_inst.is_disjoint(temp_map)
-            if dj:
-                print('Do not add {}'.format(c))
-                continue
-            temp_map.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
-            if handler_lt is None:
-                handler_lt = temp_map
-            else:
-                tiles_to_add.append(temp_map)
-        handler_lt.add_tile(tiles_to_add, reproject=False)
-        vprm_inst.add_land_cover_map(handler_lt, save_path=save_path)
-        del handler_lt
-    return
+#     # if vprm_inst not pre-calculated, load the copernicus land cover tiles from the copernicus_data_path.
+#     # Download needs to be done manually from here: https://lcviewer.vito.be/download
+#     # If the land-cover-map on the modis grid needs to be calculated on the fly
+#     # for checks interactive viewer can be useful https://lcviewer.vito.be/2019
+#     handler_lt = None
+#     if copernicus_data_path is not None:
+#         tiles_to_add = []
+#         for i, c in enumerate(glob.glob(os.path.join(copernicus_data_path, '*'))):
+#             print(c)
+#             temp_map = copernicus_land_cover_map(c)
+#             temp_map.load()
+#             dj = vprm_inst.is_disjoint(temp_map)
+#             if dj:
+#                 print('Do not add {}'.format(c))
+#                 continue
+#         #    temp_map.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
+#             if handler_lt is None:
+#                 handler_lt = temp_map
+#             else:
+#                 tiles_to_add.append(temp_map)
+#         handler_lt.add_tile(tiles_to_add, reproject=False)
+#         vprm_inst.add_land_cover_map(handler_lt, save_path=save_path,
+#                                      regridder_save_path= regridder_path)
+#         del handler_lt
+#     return
     
 
 #hvs =  cfg['hvs']
@@ -96,7 +97,6 @@ out_grid = xr.Dataset({"lon": (["y", "x"], t['XLONG_M'].values.squeeze()[lats[ar
                       })
 
 out_grid  = out_grid.set_coords(['lon', 'lat', 'lat_b', 'lon_b'])
-
 
 hvs = np.unique([lat_lon_to_modis(out_grid['lat_b'].values.flatten()[i], 
                                   out_grid['lon_b'].values.flatten()[i]) 
@@ -164,15 +164,13 @@ for c, i in enumerate(hvs):
     
     # Apply lowess smoothing
     new_inst.lowess(keys=['evi', 'lswi'],
-                    times=days,
-                    frac=0.25, it=3) #0.2
+                   times=days,
+                   frac=0.25, it=3) #0.2
 
     new_inst.clip_values('evi', 0, 1)
     new_inst.clip_values('lswi',-1, 1)
     new_inst.sat_imgs.sat_img = new_inst.sat_imgs.sat_img[['evi', 'lswi']]
 
-    # new_inst.clip_nans('evi', 0)
-    # new_inst.clip_nans('lswi', 0)
     insts.append(new_inst)
 
 insts = np.array(insts)
@@ -193,19 +191,59 @@ veg_file = os.path.join(cfg['out_path'], 'veg_map_on_modis_grid_{}_{}.nc'.format
 #                        land_cover_on_modis_grid=veg_file)
 # else:   
 print('Generate land cover map')
-add_land_cover_map(vprm_inst,
-                   copernicus_data_path=cfg['copernicus_path'],
-                   save_path=veg_file)
- 
+regridder_path = os.path.join(cfg['out_path'], 'regridder_{}_{}_lcm.nc'.format(args.chunk_x,
+                                                                               args.chunk_y))
+if os.path.exists(veg_file):
+    vprm_inst.add_land_cover_map(veg_file)
 
-#Regrid to WRF Grid defined in out_grid 
-#lons = np.linspace(cfg['lon_min'], cfg['lon_max'] , cfg['n_bins_lon']) 
-#lats = np.linspace(cfg['lat_min'], cfg['lat_max'], cfg['n_bins_lat'])
-#out_grid = dict()
-#out_grid['lons'] = lons
-#out_grid['lats'] = lats
+    
+# if vprm_inst not pre-calculated, load the copernicus land cover tiles from the copernicus_data_path.
+# Download needs to be done manually from here: https://lcviewer.vito.be/download
+# If the land-cover-map on the modis grid needs to be calculated on the fly
+# for checks interactive viewer can be useful https://lcviewer.vito.be/2019
+
+handler_lt = None
+copernicus_data_path = cfg['copernicus_path']
+
+if copernicus_data_path is not None:
+    tiles_to_add = []
+    for i, c in enumerate(glob.glob(os.path.join(copernicus_data_path, '*'))):
+        print(c)
+        temp_map = copernicus_land_cover_map(c)
+        temp_map.load()
+        dj = vprm_inst.is_disjoint(temp_map)
+        if dj:
+            continue
+        print('Add {}'.format(c))
+    #    temp_map.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
+        if handler_lt is None:
+            handler_lt = temp_map
+        else:
+            tiles_to_add.append(temp_map)
+            
+    handler_lt.add_tile(tiles_to_add, reproject=False)
+    
+    trans = Transformer.from_crs(vprm_inst.sat_imgs.sat_img.rio.crs,
+                                  handler_lt.sat_img.rio.crs,
+                                  always_xy=True)
+    xs = add_corners_to_1d_grid(vprm_inst.sat_imgs.sat_img.coords['x'])
+    ys = add_corners_to_1d_grid(vprm_inst.sat_imgs.sat_img.coords['y'])
+    xs, ys = np.meshgrid(xs,ys)
+    x_a, y_a = trans.transform(xs, ys)
+    print(float(np.min(x_a)), float(np.min(y_a)))
+    print(float(np.max(x_a)), float(np.max(y_a)))
+    print(handler_lt.sat_img)
+    b = box(float(np.min(x_a)), float(np.min(y_a)),
+            float(np.max(x_a)), float(np.max(y_a)))
+    b = gpd.GeoSeries(Polygon(b), crs=handler_lt.sat_img.rio.crs)
+    handler_lt.crop_box(b)
+    print(handler_lt.sat_img)    
+    vprm_inst.add_land_cover_map(handler_lt, save_path=veg_file,
+                                 regridder_save_path=regridder_path)
+    del handler_lt
 
 
+    
 regridder_path = os.path.join(cfg['out_path'], 'regridder_{}_{}.nc'.format(args.chunk_x,
                                                                             args.chunk_y))
 # if os.path.exists(regridder_path):
@@ -215,7 +253,6 @@ regridder_path = os.path.join(cfg['out_path'], 'regridder_{}_{}.nc'.format(args.
 print('Create regridder')
 wrf_op = vprm_inst.to_wrf_output(out_grid, driver = 'xEMSF', #'ESMF_RegridWeightGen', 
                                  regridder_save_path=regridder_path)
-
 
 # Save to NetCDF files
 file_base = 'VPRM_input_'
