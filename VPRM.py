@@ -26,6 +26,7 @@ from multiprocessing import Process
 import rasterio
 from astropy.convolution import convolve
 from datetime import datetime, timedelta
+import yaml
 
 regridder_options = dict()
 regridder_options['conservative'] = 'conserve'
@@ -35,7 +36,7 @@ class vprm:
     '''
     Class for the  Vegetation Photosynthesis and Respiration Model
     '''
-    def __init__(self, land_cover_map=None, verbose=False, n_cpus=1, sites=None):
+    def __init__(self, vprm_config_path, land_cover_map=None, verbose=False, n_cpus=1, sites=None):
         '''
             Initialize a class instance
 
@@ -74,26 +75,22 @@ class vprm:
         
         self.land_cover_type = land_cover_map
                                   # land_cover_type: tmin, topt, tmax
-        self.temp_coefficients = {1: [0, 20, 40], # Evergreen forest
-                                  2: [0, 20, 40], # Deciduous forest
-                                  3: [0, 20, 40], # Mixed forest
-                                  4: [2, 20, 40], # Shrubland
-                                  5: [2, 20, 40], # Savannas
-                                  6: [5, 22, 40], # Cropland
-                                  7: [2, 18, 40], # Grassland
-                                  8: [0, 0, 40],}# # Other
-                              #    9: [0, 20, 40]}  # Wetland
-
-        self.map_copernicus_to_vprm_class = {0: 8, 111: 1, 113: 2,
-                                             112:1 , 114:2, 115:3,
-                                             116:3, 121:1, 123:2,
-                                             122 : 1, 124 : 2,
-                                             125 : 3,
-                                             126: 5, #This could be the savanna type! Check.
-                                             20: 4, 30: 7, 90: 8, #90:9,
-                                             100: 7, 60: 8,
-                                             40: 6, 50: 8,
-                                             70: 8, 80: 8, 200: 8}
+            
+        with open(vprm_config_path, "r") as stream:
+            try:
+                cfg  = yaml.safe_load(stream)
+            except yaml.YAMLError as exc:
+                print(exc)
+                
+        self.temp_coefficients= dict()
+        self.map_to_vprm_class = dict()
+        for key in cfg:
+            if 'tmin' in cfg[key].keys():
+                self.temp_coefficients[cfg[key]['vprm_class']] = [cfg[key]['tmin'],
+                                         cfg[key]['topt'],
+                                         cfg[key]['tmax']]
+            for c in cfg[key]['class_numbers']:
+                self.map_to_vprm_class[c] = cfg[key]['vprm_class']
         return
     
     
@@ -148,24 +145,10 @@ class vprm:
             regridder = xe.Regridder(src_grid, ds_out,
                                      interp_method, weights=weights_for_regridder,
                                      reuse_weights=True)
-        veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
-                              for i in self.map_copernicus_to_vprm_class.keys()])
+        veg_inds = np.unique([self.map_to_vprm_class[i] 
+                              for i in self.map_to_vprm_class.keys()])
         veg_inds = np.array(veg_inds, dtype=np.int32)
         dims = [i for i in list(ds_out.dims.mapping.keys()) if '_b' not in i]
-        # for c, i in enumerate(veg_inds):
-        #     if c == 0:
-        #         t = copy.deepcopy(self.land_cover_type)
-        #         t.sat_img['land_cover_type'].values = np.array(self.land_cover_type.sat_img['land_cover_type'] ==i,
-        #                                                        dtype=float)
-        #         t.sat_img = regridder(t.sat_img)
-        #         t.sat_img = t.sat_img.rename({'land_cover_type': str(i)})
-        #     else:
-        #         t1 = np.array(self.land_cover_type.sat_img['land_cover_type'] ==i, dtype=float)
-        #         t1 = regridder(t1)
-        #         t.sat_img = t.sat_img.assign({str(i): (dims, t1)})
-        # var_list =  t.sat_img.data_vars
-        # t.sat_img = xr.concat([t.sat_img[var] for var in var_list], dim='vprm_classes')
-        # t.sat_img = t.sat_img.assign_coords({'vprm_classes': [int(c) for c in list(var_list)]})
         lcm = regridder(self.land_cover_type.sat_img)
         lcm = lcm.to_dataset(name='vegetation_fraction_map')   
         lcm = lcm.rename({'y': 'south_north', 'x': 'west_east'})
@@ -451,13 +434,13 @@ class vprm:
         else:
             print('Generating satellite data compatible land cover map')
             
-            for key in self.map_copernicus_to_vprm_class.keys():
-                land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_copernicus_to_vprm_class[key]
+            for key in self.map_to_vprm_class.keys():
+                land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_to_vprm_class[key]
                 
             if mode == 'fractional':
                 import xesmf as xe
-                veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
-                                      for i in self.map_copernicus_to_vprm_class.keys()])
+                veg_inds = np.unique([self.map_to_vprm_class[i] 
+                                      for i in self.map_to_vprm_class.keys()])
                 if not os.path.exists(regridder_save_path):
                     src_grid = to_esmf_grid(land_cover_map.sat_img)
                     ds_out = to_esmf_grid(self.sat_imgs.sat_img)
@@ -851,8 +834,8 @@ class vprm:
         tmin = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 0)
         topt = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 20)
         tmax = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 40)
-        veg_inds = np.unique([self.map_copernicus_to_vprm_class[i] 
-                              for i in self.map_copernicus_to_vprm_class.keys()])
+        veg_inds = np.unique([self.map_to_vprm_class[i] 
+                              for i in self.map_to_vprm_class.keys()])
         for i in veg_inds:
             mask = (self.land_cover_type.sat_img['land_cover_type'].values  == i)
             tmin[mask] = self.temp_coefficients[i][0]
