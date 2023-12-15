@@ -7,7 +7,6 @@ sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
 import numpy as np
 from lib.sat_manager import VIIRS, sentinel2, modis,\
                             copernicus_land_cover_map, satellite_data_manager
-from lib.era5_class import ERA5
 from lib.functions import add_corners_to_1d_grid, do_lowess_smoothing,\
                          make_xesmf_grid, to_esmf_grid
 from scipy.ndimage import uniform_filter
@@ -220,6 +219,7 @@ class vprm:
                                                        institution1 = 'Heidelberg University',
                                                        institution2 = 'Deutsches Zentrum für Luft- und Raumfahrt (DLR)',
                                                        contact = 'theo.glauch@dlr.de',
+                                                       date_created = str(datetime.now()),
                                                        comment = 'Used VPRM classes: 1 Evergreen forest, 2 Deciduous forest, 3 Mixed forest, 4 Shrubland, 5 Trees and grasses, 6 Cropland, 7 Grassland, 8 Barren, Urban and built-up, water, permanent snow and ice')
         return ret_dict
 
@@ -294,7 +294,6 @@ class vprm:
             else:
                 handler.drop_bands()
         self.sat_imgs.append(handler)  
-#        self.timestamps.append(handler.get_recording_time())
         return
 
     
@@ -404,11 +403,6 @@ class vprm:
                                                                    bounds[3])
         self.xs = self.sat_imgs.sat_img.x.values
         self.ys = self.sat_imgs.sat_img.y.values
-       # self.target_shape = (len(self.xs), len(self.ys))
-       # X, Y = np.meshgrid(self.xs, self.ys)
-       # t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
-       #                         '+proj=longlat +datum=WGS84')
-       # self.x_long, self.y_lat = t.transform(X, Y) 
         keys = list(self.sat_imgs.sat_img.keys())
         self.prototype = satellite_data_manager(sat_img=self.sat_imgs.sat_img.drop(keys))
         return
@@ -584,6 +578,10 @@ class vprm:
         self.sat_imgs.sat_img[data_var].loc[sel] = t
         return
     
+    def set_met(self, met_inst):
+        self.era5_inst = met_inst
+        return
+        
     def load_weather_data(self, hour, day, month, year, era_keys):
         '''
             Load meteorlocial data from the available (on DKRZ's levante) data storage
@@ -599,8 +597,8 @@ class vprm:
                         None
         '''
         if self.era5_inst is None:
-            self.era5_inst = ERA5(year, month, day, hour, 
-                                  keys=era_keys) 
+            print('Not meteorology given. Provide meteorology instance using the set_met method first.')
+            
         self.era5_inst.change_date(year=year, month=month,
                                    day=day, hour=hour)
         self.hour = hour
@@ -862,6 +860,21 @@ class vprm:
         else:
             self.new = False
             return # Still same satellite image
+        
+
+    def _set_prototype_lat_lon(self):
+        src_x = self.prototype.sat_img.coords['x'].values
+        src_y = self.prototype.sat_img.coords['y'].values
+        X, Y = np.meshgrid(src_x, src_y)
+        t = Transformer.from_crs(self.prototype.sat_img.rio.crs,
+                                '+proj=longlat +datum=WGS84')
+        x_long, y_lat = t.transform(X, Y)
+        self.prototype_lat_lon = xr.Dataset({"lon": (["y", "x"], x_long ,
+                             {"units": "degrees_east"}),
+                              "lat": (["y", "x"], y_lat,
+                             {"units": "degrees_north"})})
+        self.prototype_lat_lon = self.prototype_lat_lon.set_coords(['lon', 'lat'])
+        return
             
     def get_neural_network_variables(self, datetime_utc, lat=None, lon=None,
                                      era_variables=['ssrd', 't2m'], regridder_weights=None,
@@ -891,17 +904,8 @@ class vprm:
             sat_img_keys = list(self.sat_imgs.sat_img.data_vars)
             
         if self.prototype_lat_lon is None:
-            src_x = self.prototype.sat_img.coords['x'].values
-            src_y = self.prototype.sat_img.coords['y'].values
-            X, Y = np.meshgrid(src_x, src_y)
-            t = Transformer.from_crs(self.prototype.sat_img.rio.crs,
-                                    '+proj=longlat +datum=WGS84')
-            x_long, y_lat = t.transform(X, Y)
-            self.prototype_lat_lon = xr.Dataset({"lon": (["y", "x"], x_long ,
-                                 {"units": "degrees_east"}),
-                                  "lat": (["y", "x"], y_lat,
-                                 {"units": "degrees_north"})})
-            self.prototype_lat_lon = self.prototype_lat_lon.set_coords(['lon', 'lat'])
+            self._set_prototype_lat_lon()
+            
         self.load_weather_data(hour, day, month,
                                year, era_keys=era_variables)
         if (lat is None) & (lon is None):
@@ -999,20 +1003,13 @@ class vprm:
             self.buffer['cur_lon'] = lon 
 
         if len(era_keys) > 0:
+            
             if self.prototype_lat_lon is None:
-                src_x = self.prototype.sat_img.coords['x'].values
-                src_y = self.prototype.sat_img.coords['y'].values
-                X, Y = np.meshgrid(src_x, src_y)
-                t = Transformer.from_crs(self.prototype.sat_img.rio.crs,
-                                        '+proj=longlat +datum=WGS84')
-                x_long, y_lat = t.transform(X, Y)
-                self.prototype_lat_lon = xr.Dataset({"lon": (["y", "x"], x_long ,
-                                     {"units": "degrees_east"}),
-                                      "lat": (["y", "x"], y_lat,
-                                     {"units": "degrees_north"})})
-                self.prototype_lat_lon = self.prototype_lat_lon.set_coords(['lon', 'lat'])
+                self._set_prototype_lat_lon()
+                
             self.load_weather_data(hour, day, month,
                                    year, era_keys=era_keys)
+            
             if (lat is None) & (lon is None):
                     self.era5_inst.regrid(dataset=self.prototype_lat_lon,
                                           weights=regridder_weights,
@@ -1029,7 +1026,8 @@ class vprm:
         if add_era_variables!=[]:
             for i in add_era_variables:
                 if lon is not None:
-                    ret_dict[i] = self.era5_inst.get_data(lonlat=(lon, lat), key=i).values.flatten()
+                    ret_dict[i] = self.era5_inst.get_data(lonlat=(lon, lat),
+                                                          key=i).values.flatten()
                 else:
                     ret_dict[i] = self.era5_inst.get_data(key=i).values.flatten()
         return ret_dict  

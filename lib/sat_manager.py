@@ -2,16 +2,12 @@
 import pathlib
 import sys
 import os
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
-from datetime import date
+#sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
 import time
 from shapely.geometry import Point, Polygon, box
-import rasterio as rio
+#import rasterio as rio
 import rioxarray as rxr
-from rasterio.plot import plotting_extent
-from fancy_plot import *
 import matplotlib
-import earthpy.plot as ep
 import zipfile
 import glob
 from pyproj import Transformer
@@ -35,7 +31,7 @@ from rasterio.warp import calculate_default_transform
 import h5py
 from dateutil import parser
 import xarray as xr
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 def geodesic_point_buffer(lat, lon, km):
     buf = Point(0, 0).buffer(km * 1000)  # distance in metres
@@ -142,7 +138,6 @@ class satellite_data_manager:
         self.individual_loading(**kwargs)
         if proj is not None:
             self.reproject(proj=proj)     
-        self.ext = self.get_plotting_extend()
         self.t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                 self.sat_img.rio.crs)
         return
@@ -168,7 +163,6 @@ class satellite_data_manager:
         except Exception as e:
             self.proj_dict = {}
             print(e)
-        self.get_plotting_extend()
         self.t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                 self.sat_img.rio.crs)
         return
@@ -207,87 +201,21 @@ class satellite_data_manager:
                                             'y': sat_manager_inst.sat_img.coords['y'].values})
         self.sat_img.rio.set_crs(sat_manager_inst.sat_img.rio.crs)
         return
-
-
-        
-    def get_plotting_extend(self):
-        # get the corners of the satellite image
-        
-        return plotting_extent(self.sat_img[list(self.sat_img.data_vars.keys())[0]].values,
-                               self.sat_img.rio.transform())
     
     def plot_bands(self, cmaps='Reds', titles=None, save=None):
         # plot the bands of the satellite image
-        
-        if self.sat_img is None:
-            print('No image loaded...yet')
-            return
-
-        sh = len(self.keys)
-        if titles==None:
-            titles = ['B_{}'.format(i) for i in range(sh)] #['Blue', 'Green', 'Red']
-        sqrt_sh = int(np.ceil(np.sqrt(sh)))
-        fig, axs = plt.subplots(sqrt_sh, sqrt_sh,
-                                figsize=(12,9))
-        if np.ndim(axs) == 0 :
-            axs = np.array([[axs]])
-        for i in range(len(axs)):
-            for j in range(len(axs[i])):
-                c = sqrt_sh * i + j
-                if c>=len(titles):
-                    axs[i,j].remove()
-                    continue
-                plt_data = self.sat_img[self.keys[c]].values
-                vmax = np.percentile(plt_data[np.isfinite(plt_data)], 90)
-                if isinstance(cmaps, list):
-                    cmap=cmaps[c]
-                else:
-                    cmap=cmaps
-                ep.plot_bands(plt_data, vmax=vmax, # title=titles[c]
-                              vmin=0, cmap=cmap, figsize = (7,9), 
-                              ax=axs[i,j], extent=self.ext)
-                axs[i,j].set_title(titles[c])
-        if save is not None:
-            fig.savefig(save, dpi=300)
-        fig.show()
-        return
+        pass
     
     def plot_rgb(self, which_bands=[2,1,0], str_clip=2,
                  figsize=0.9, save=None):
         #plot an rgb image with the bands given in which_bands
-        
-        fig, ax = newfig(figsize, ratio=1.0)
-        plt_img = np.array([self.sat_img[c].values
-                            for c in which_bands])
-        ep.plot_rgb(plt_img,
-                    ax=ax, stretch=True, # [0, 2, 1] , rgb=which_bands
-                    extent=self.ext, str_clip=str_clip,
-                    title="Plot of the  data  clipped  to the geometry")
-        if save is not None:
-            fig.savefig(save, dpi=500)
-        fig.show()
-  
+        pass
+    
     def plot_ndvi(self, band1, band2, figsize=0.9,
                   save=None, n_colors=9, vmin=None,
                   vmax=1.0):
         # plot the normalized difference vegetation index
-        
-        data = self.sat_img
-        NDVI =(data[band2] - data[band1])/(data[band2] + data[band1])
-        # mask = (NDVI < -1) | (NDVI >1) | (np.isnan(NDVI))
-        #NDVI[mask] = -1
-        NDVI_map, NDVI_norm = make_cmap(-0.2, 1, n_colors,
-                                        ['white', 'green'])
-        NDVI_map.set_under('white') 
-        fig, ax = newfig(figsize, ratio=1.0)
-        if vmin is None:
-            vmin = 1- (1/n_colors)/2
-        ep.plot_bands(NDVI.values, ax=ax, cmap=NDVI_map,
-                      extent=self.ext, vmin=vmin, vmax=vmax)
-        if save is not None:
-            fig.savefig(save, dpi=500)
-        fig.show()
-        return NDVI
+        pass
    
     def add_tile(self, new_tiles, reproject=False):
         # merge tiles together using the projection of the current satellite image
@@ -304,7 +232,6 @@ class satellite_data_manager:
         to_merge.append(self.sat_img)
         print('Merge')
         self.sat_img = merge.merge_datasets(to_merge)
-        self.ext = self.get_plotting_extend()
         return
     
     def crop_box(self, box):
@@ -572,7 +499,6 @@ class modis(earthdata):
 class VIIRS(earthdata):
     #Class to download and load VIIRS data
 
-    
     def __init__(self, datapath=None, sat_image_path=None):
         super().__init__(datapath, sat_image_path)
         self.use_keys = []
@@ -649,9 +575,6 @@ class VIIRS(earthdata):
         self.sat_img.coords["y"] = coords["y"]
         self.sat_img.rio.write_crs(crs_str, inplace=True)
         self.meta_data = self.sat_img.attrs
-        
-        # self.sat_img.rio.write_crs(proj, inplace=True)
-#        self.sat_img = self.sat_img.to_array()
         return   
 
     def mask_bad_pixels(self, bands=None):
@@ -704,9 +627,7 @@ class VIIRS(earthdata):
                                  '%Y-%m-%dT%H:%M:%S.%fZ')
         return date0 + (date1 - date0 ) /2
 
-        
-
-
+# Proba-V is not yet functional
 class proba_v(satellite_data_manager):
     #Class to download and load Proba V data
 
@@ -895,6 +816,19 @@ class sentinel2(satellite_data_manager):
                                      '%Y-%m-%dT%H:%M:%S.%fZ')
     
 
-
+class esa_world_cover(satellite_data_manager):
+    
+    def __init__(self, sat_image_path):
+        super().__init__()   
+        self.load_kwargs = {}
+        self.sat_image_path = sat_image_path
+        self.resolution = 10.0
+        
+    def get_resolution(self):
+        return self.resolution
+        
+    def individual_loading(self):
+        self.sat_img = rxr.open_rasterio(self.sat_image_path, band_as_variable=True).squeeze()
+        self.keys = np.array(list(self.sat_img.data_vars))
 
                                     

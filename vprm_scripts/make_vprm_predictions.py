@@ -3,12 +3,11 @@ import sys
 import os
 import pathlib
 sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
-#sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
 import yaml 
 from lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
 from VPRM import vprm 
-
+from meteorologies.era5_class import ERA5
 import glob
 import time
 import yaml
@@ -35,9 +34,9 @@ def get_hourly_time_range(year, day_of_year):
         hourly_range.append((start_time))
         start_time = end_time
         end_time = start_time + timedelta(hours=1)
-
     return hourly_range
 
+# Read command line arguments
 p = argparse.ArgumentParser(
         description = "Commend Line Arguments",
         formatter_class = argparse.RawTextHelpFormatter)
@@ -53,12 +52,14 @@ print('Run with args', args)
 h = args.h
 v = args.v
 
+#Read config
 with open(args.config, "r") as stream:
     try:
         cfg  = yaml.safe_load(stream)
     except yaml.YAMLError as exc:
         print(exc)
 
+# Initialize VPRM instance and add satellite images
 vprm_inst = vprm(n_cpus=args.n_cpus)
 for c, i in enumerate(sorted(glob.glob(os.path.join(cfg['sat_image_path'], str(args.year),
                                                     '*h{:02d}v{:02d}*.h*'.format(h, v))))):
@@ -82,16 +83,14 @@ for c, i in enumerate(sorted(glob.glob(os.path.join(cfg['sat_image_path'], str(a
                               which_evi='evi2', 
                               drop_bands=True)
 
+# Pre-Calculations for the VPRM model. This shouldn't change
 vprm_inst.sort_and_merge_by_timestamp()
-
 vprm_inst.lowess(gap_filled=True, frac=0.2, it=3)
-
 vprm_inst.clip_values('evi', 0, 1)
 vprm_inst.clip_values('lswi',-1, 1)
-
 vprm_inst.calc_min_max_evi_lswi()
 
-
+# Add land covery map(s)
 lcm = None
 for c in glob.glob(os.path.join(cfg['copernicus_path'], '*')):
     thandler = copernicus_land_cover_map(c)
@@ -105,22 +104,26 @@ for c in glob.glob(os.path.join(cfg['copernicus_path'], '*')):
     if lcm is None:
         lcm=copernicus_land_cover_map(c)
         lcm.load()
-        lcm.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
     else:
-        thandler.reproject(proj=vprm_inst.prototype.sat_img.rio.crs.to_proj4())
-        lcm.add_tile(thandler)
-
+        lcm.add_tile(thandler, reproject=False)
 vprm_inst.add_land_cover_map(lcm)
 
-vprm_inst.era5_inst = None
+# Set meteorology
+era5_inst = ERA5(2012, 8, 12, 12, 
+                 keys=['t2m', 'ssrd']) 
+vprm_inst.set_met(era5_inst)
 
+# Load VPRM parameters from a dictionary 
 with open(cfg['vprm_params_dict'], 'rb') as ifile:
     res_dict = pickle.load(ifile)
     
+    
+# Make NEE/GPP flux predictions
 days_in_year = 365 + calendar.isleap(args.year)
 regridder_weights = os.path.join(cfg['predictions_path'],
                                  'regridder_weights_{}_{}.nc'.format(h,v))
 
+#...either hourly
 if args.hourly:
     for i in np.arange(1, days_in_year+1, 1):
         time_range=get_hourly_time_range(int(args.year), i)
@@ -157,6 +160,7 @@ if args.hourly:
         preds_nee.to_netcdf(outpath)
         preds_nee.close()
 
+#....our weekly
 else:
 
     ts = []
