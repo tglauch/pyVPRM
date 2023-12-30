@@ -32,6 +32,7 @@ import h5py
 from dateutil import parser
 import xarray as xr
 from datetime import datetime, timedelta, date
+import numpy as np 
 
 def geodesic_point_buffer(lat, lon, km):
     buf = Point(0, 0).buffer(km * 1000)  # distance in metres

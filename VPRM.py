@@ -1100,13 +1100,16 @@ class vprm:
         return
     
 
-    def fit_vprm_data(self, data_list, variable_dict, same_length=True):
+    def fit_vprm_data(self, data_list, variable_dict,
+                      same_length=True,
+                      fit_nee=True):
         '''
             Run a VPRM fit
             Parameters:
                 data_list (list): A list of instances from type flux_tower_data
                 variable_dict (dict): A dictionary giving the target keys for gpp und respiration                           
-                                      i.e. {'gpp': 'GPP_DT_VUT_REF', 'respiration': 'RECO_NT_VUT_REF'}           
+                                      i.e. {'gpp': 'GPP_DT_VUT_REF', 'respiration': 'RECO_NT_VUT_REF',
+                                            'nee': 'NEE_DT_VUT_REF'}           
                 same_length (bool): If true all sites have the same number of input data for the fit.
             Returns:
                 A dictionary with the fit parameters
@@ -1134,6 +1137,7 @@ class vprm:
                 data_for_fit.append(t_data.rename(variable_dict, axis=1))
             data_for_fit = pd.concat(data_for_fit)
 
+            # Respiration
             best_mse = np.inf    
             for i in range(100):
                 func = lambda x, a, b: a * x['tcorr'] + b
@@ -1160,7 +1164,26 @@ class vprm:
                     best_fit_params = fit_gpp 
                 best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
                 best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
-
+                
+            #NEE
+            if fit_nee:
+                best_mse = np.inf
+                for i in range(100):  
+                    func = lambda x, lamb, par0, a, b: -1 * (lamb * data_for_fit['Ws'] * data_for_fit['Ts'] * data_for_fit['Ps']) * data_for_fit['evi'] * data_for_fit['par'] / (1 + data_for_fit['par']/par0) + a * x['tcorr'] + b
+                    fit_gpp = curve_fit(func,
+                                        data_for_fit, data_for_fit['nee'], maxfev=5000,
+                                        p0=[best_fit_params_dict[key]['lamb'],
+                                            best_fit_params_dict[key]['par0'],
+                                            best_fit_params_dict[key]['alpha'],
+                                            best_fit_params_dict[key]['beta']]) 
+                    mse = np.mean((func(data_for_fit, fit_gpp[0][0], fit_gpp[0][1], fit_gpp[0][2], fit_gpp[0][3]) - data_for_fit['gpp'])**2)
+                    if mse < best_mse:
+                        best_mse = mse
+                        best_fit_params = fit_gpp 
+                    best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
+                    best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
+                    best_fit_params_dict[key]['alpha'] = best_fit_params[0][2]
+                    best_fit_params_dict[key]['beta'] = best_fit_params[0][3]
 
         return best_fit_params_dict
 
@@ -1177,11 +1200,6 @@ class vprm:
                                     reproject=False)
             self.xs = self.sat_imgs.sat_img.x.values
             self.ys = self.sat_imgs.sat_img.y.values
-          #  self.target_shape = (len(self.xs), len(self.ys))
-          #  X, Y = np.meshgrid(self.xs, self.ys)
-           # t = Transformer.from_crs(self.sat_imgs.sat_img.rio.crs,
-           #                         '+proj=longlat +datum=WGS84')
-          #  self.x_long, self.y_lat = t.transform(X, Y) 
             keys = list(self.sat_imgs.sat_img.keys())
             self.prototype = satellite_data_manager(sat_img=self.sat_imgs.sat_img.drop(keys))
             
