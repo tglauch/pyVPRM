@@ -144,6 +144,9 @@ class met_data_handler(met_data_handler_base):
                weights=None, overwrite_regridder=False):
         
         import xesmf as xe
+        
+        if self.in_era5_grid is False:
+            return
 
         if (self.regridder is None) | (overwrite_regridder):
             if ((lats is not None) and (lons is not None)):
@@ -219,7 +222,7 @@ if(__name__ == '__main__'):
     day = 20
     hour = 5  #UTC hour
     position = {'lat': 50.30493, 'long': 5.99812}
-    era5_handler = ERA5(year, month, day) 
+    era5_handler = met_data_handler(year, month, day) 
     era5_handler.change_date(hour)
     ret = era5_handler.get_data()
     print(ret)

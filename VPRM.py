@@ -387,6 +387,7 @@ class vprm:
         print('Loaded data from {} to {}'.format(self.timestamp_start, self.timestamp_end))
         day_steps = [i.days for i in (self.timestamps - self.timestamp_start)]
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time": day_steps})
+        self.prototype.sat_img = self.prototype.sat_img.assign_coords({"time": day_steps})
         if 'timestamps' in list(self.sat_imgs.sat_img.keys()):
             tismp = np.round(np.array((self.sat_imgs.sat_img['timestamps'].values  - np.datetime64(self.timestamp_start))/1e9/(24*60*60), dtype=float))
             dims = list(self.sat_imgs.sat_img.data_vars['timestamps'].dims)
@@ -610,6 +611,7 @@ class vprm:
     
     def get_t_scale(self, lon=None, lat=None,
                     land_cover_type=None, temperature=None):
+        #ToDo
         '''
             Get VPRM t_scale
 
@@ -620,34 +622,27 @@ class vprm:
                         t_scale array
         '''
 
-        if land_cover_type is not None:
-            tmin = self.temp_coefficients[land_cover_type][0]
-            topt = self.temp_coefficients[land_cover_type][1]
-            tmax = self.temp_coefficients[land_cover_type][2]
+        tmin = self.temp_coefficients[land_cover_type][0]
+        topt = self.temp_coefficients[land_cover_type][1]
+        tmax = self.temp_coefficients[land_cover_type][2]
+        if temperature is not None:
             t = temperature
         elif lon is not None:
-            tmin = self.t2m.value_at_lonlat(lon, lat, key='tmin', as_array=False).values.flatten()
-            topt = self.t2m.value_at_lonlat(lon, lat, key='topt', as_array=False).values.flatten()
-            tmax = self.t2m.value_at_lonlat(lon, lat, key='tmax', as_array=False).values.flatten()
-            t = self.era5_inst.get_data(lonlat=(lon, lat), key='t2m').values.flatten() - 273.15 # to grad celsius
+            t = self.era5_inst.get_data(lonlat=(lon, lat), key='t2m') - 273.15 # to grad celsius
         else:
-            tmin = self.t2m.sat_img['tmin'].values
-            topt = self.t2m.sat_img['topt'].values
-            tmax = self.t2m.sat_img['tmax'].values
-            t = self.era5_inst.get_data(key='t2m').values - 273.15
+            t = self.era5_inst.get_data(key='t2m') - 273.15
         ret = (((t - tmin) * (t - tmax)) / ((t-tmin)*(t-tmax) - (t - topt)**2))
-        if land_cover_type is not None:
-            if (ret<0) | (t<tmin):
-                ret= 0
-            if t<tmin:
-                t = tmin
+        if isinstance(ret, float):
+            if (ret<0) | (t<tmin): ret= 0
+            if t<tmin: t = tmin
         else:
-            ret[(ret<0) | (t<tmin)] = 0   
-            t[t<tmin] = tmin[t<tmin]
+            ret = xr.where( (ret<0) | (t<tmin) , 0, ret)   
+            t = xr.where(t<tmin, tmin, t)
         return (t, ret)
         
     def get_p_scale(self, lon=None, lat=None,
-                    site_name=None, land_type=None):
+                    site_name=None, land_cover_type=None):
+        #ToDo
         '''
             Get VPRM p_scale for the current satellite image (see self.counter)
 
@@ -658,27 +653,27 @@ class vprm:
                         p_scale array
         '''
 
-        if (self.new is False) & ('p_scale' in self.buffer.keys()):
-            return self.buffer['p_scale']
+        # if (self.new is False) & ('p_scale' in self.buffer.keys()):
+        #     return self.buffer['p_scale']
         lswi = self.get_lswi(lon, lat, site_name)
         evi = self.get_evi(lon, lat, site_name)
         p_scale = ( 1 + lswi ) / 2
         if site_name is not None:
-            th = self.min_max_evi.sat_img.sel(site_names=site_name)['th']
+            th = float(self.min_max_evi.sat_img.sel(site_names=site_name)['th'])
         elif lon is not None:
-            land_type = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type', interp_method='nearest', as_array=False).values.flatten()
-            th = self.min_max_evi.value_at_lonlat(lon, lat, key='th', interp_method='nearest', as_array=False).values.flatten()
+         #  land_type = self.land_cover_type.value_at_lonlat(lon, lat, key='land_cover_type', interp_method='nearest', as_array=False)
+            th = self.min_max_evi.value_at_lonlat(lon, lat, key='th', interp_method='nearest', as_array=False)
         else:
-            land_type = self.land_cover_type.sat_img['land_cover_type'].values
-            th = self.min_max_evi.sat_img['th'].values
-        mask1 = evi > th
-        mask2 = land_type == 1
+         #   land_type = self.land_cover_type.sat_img['land_cover_type']
+            th = self.min_max_evi.sat_img['th']
+        if land_cover_type == 1:
+            th = -np.inf
         if site_name is not None:
-            if mask1 | mask2:    
+            if (evi > th):    
                 p_scale = 1
         else:
-            p_scale[(mask1) | (mask2)] = 1
-        self.buffer['p_scale'] = p_scale
+            p_scale = xr.where(evi > th, 1, p_scale)
+        # self.buffer['p_scale'] = p_scale
         return p_scale 
     
     def get_current_timestamp(self):
@@ -697,7 +692,7 @@ class vprm:
         if ssrd is not None:
             ret = ssrd / 0.505
         elif lon is not None:
-            ret = self.era5_inst.get_data(lonlat=(lon, lat), key='ssrd').values.flatten() / 0.505 / 3600
+            ret = self.era5_inst.get_data(lonlat=(lon, lat), key='ssrd') / 0.505 / 3600
         else:
             ret = self.era5_inst.get_data(key='ssrd') / 0.505 / 3600
         return ret
@@ -713,13 +708,13 @@ class vprm:
                         w_scale array
         '''
 
-        if (self.new is False) & ('w_scale' in self.buffer.keys()):
-            return self.buffer['w_scale']
+        # if (self.new is False) & ('w_scale' in self.buffer.keys()):
+        #     return self.buffer['w_scale']
         lswi = self.get_lswi(lon, lat, site_name)
         if site_name is not None:
-            max_lswi = self.max_lswi.sat_img.sel(site_names=site_name)['max_lswi'].values
+            max_lswi = float(self.max_lswi.sat_img.sel(site_names=site_name)['max_lswi'])
         elif lon is not None:
-            max_lswi = self.max_lswi.value_at_lonlat(lon, lat, key='max_lswi', as_array=False).values.flatten()
+            max_lswi = self.max_lswi.value_at_lonlat(lon, lat, key='max_lswi', as_array=False)
         else:
             max_lswi = self.max_lswi.sat_img['max_lswi']
         self.buffer['w_scale'] = (1+lswi)/(1+max_lswi)
@@ -736,14 +731,14 @@ class vprm:
                         EVI array
         '''
 
-        if (self.new is False) & ('evi' in self.buffer.keys()):
-            return self.buffer['evi']
+        # if (self.new is False) & ('evi' in self.buffer.keys()):
+        #     return self.buffer['evi']
         if site_name is not None:
-            self.buffer['evi'] =  float(self.sat_imgs.sat_img.sel(site_names=site_name).isel({self.time_key :self.counter})['evi'].values)
+            self.buffer['evi'] =  float(self.sat_imgs.sat_img.sel(site_names=site_name).isel({self.time_key :self.counter})['evi'])
         elif lon is not None:
-            self.buffer['evi'] = self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='evi', isel={self.time_key : self.counter}).values.flatten()
+            self.buffer['evi'] = self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='evi', isel={self.time_key : self.counter})
         else:
-            self.buffer['evi'] = self.sat_imgs.sat_img['evi'].isel({self.time_key : self.counter}).values
+            self.buffer['evi'] = self.sat_imgs.sat_img['evi'].isel({self.time_key : self.counter})
         return self.buffer['evi']
         
 
@@ -809,42 +804,42 @@ class vprm:
                         LSWI array
         '''
 
-        if (self.new is False) & ('lswi' in self.buffer.keys()):
-            return self.buffer['lswi']
+        # if (self.new is False) & ('lswi' in self.buffer.keys()):
+        #     return self.buffer['lswi']
         if site_name is not None:
-            self.buffer['lswi'] =  float(self.sat_imgs.sat_img.sel(site_names=site_name).isel({self.time_key:self.counter})['lswi'].values)
+            self.buffer['lswi'] =  float(self.sat_imgs.sat_img.sel(site_names=site_name).isel({self.time_key:self.counter})['lswi'])
         elif lon is not None:
-            self.buffer['lswi'] =  self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='lswi', isel={self.time_key: self.counter}).values.flatten()
+            self.buffer['lswi'] =  self.sat_imgs.value_at_lonlat(lon, lat, as_array=False, key='lswi', isel={self.time_key: self.counter})
         else:
-            self.buffer['lswi'] = self.sat_imgs.sat_img['lswi'].isel({self.time_key: self.counter}).values
+            self.buffer['lswi'] = self.sat_imgs.sat_img['lswi'].isel({self.time_key: self.counter})
         return self.buffer['lswi']
    
-    def init_temps(self):
-        '''
-            Initialize an xarray with the min, max, and opt temperatures for photosynthesis
+#     def init_temps(self):
+#         '''
+#             Initialize an xarray with the min, max, and opt temperatures for photosynthesis
 
-                Parameters:
-                Returns:
-                        None
-        '''
-        if self.land_cover_type is None:
-            return
-        tmin = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 0)
-        topt = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 20)
-        tmax = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 40)
-        veg_inds = np.unique([self.map_to_vprm_class[i] 
-                              for i in self.map_to_vprm_class.keys()])
-        for i in veg_inds:
-            mask = (self.land_cover_type.sat_img['land_cover_type'].values  == i)
-            tmin[mask] = self.temp_coefficients[i][0]
-            topt[mask] = self.temp_coefficients[i][1]
-            tmax[mask] = self.temp_coefficients[i][2]
+#                 Parameters:
+#                 Returns:
+#                         None
+#         '''
+#         if self.land_cover_type is None:
+#             return
+#         tmin = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 0)
+#         topt = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 20)
+#         tmax = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 40)
+#         veg_inds = np.unique([self.map_to_vprm_class[i] 
+#                               for i in self.map_to_vprm_class.keys()])
+#         for i in veg_inds:
+#             mask = (self.land_cover_type.sat_img['land_cover_type'].values  == i)
+#             tmin[mask] = self.temp_coefficients[i][0]
+#             topt[mask] = self.temp_coefficients[i][1]
+#             tmax[mask] = self.temp_coefficients[i][2]
 
-        self.t2m = copy.deepcopy(self.prototype)
-        self.t2m.sat_img = self.t2m.sat_img.assign({'tmin': (['y','x'], tmin),
-                                                    'topt': (['y','x'], topt),
-                                                    'tmax': (['y','x'], tmax)})  
-        return
+#         self.t2m = copy.deepcopy(self.prototype)
+#         self.t2m.sat_img = self.t2m.sat_img.assign({'tmin': (['y','x'], tmin),
+#                                                     'topt': (['y','x'], topt),
+#                                                     'tmax': (['y','x'], tmax)})  
+#         return
 
     def _set_sat_img_counter(self, datetime_utc):
         days_after_first_image = (datetime_utc - self.timestamp_start).total_seconds()/(24*60*60)
@@ -954,9 +949,11 @@ class vprm:
                     drop_rows.append(index)
                     continue
                 ret_dict['evi'].append(self.get_evi(site_name=site_name))
-                ret_dict['Ps'].append(self.get_p_scale(site_name=site_name, land_type=s.get_land_type()))
+                ret_dict['Ps'].append(self.get_p_scale(site_name=site_name,
+                                                       land_cover_type=s.get_land_type()))
                 ret_dict['par'].append(self.get_par(ssrd=row['ssrd']))
-                Ts_all = self.get_t_scale(land_cover_type=s.get_land_type(), temperature=row['t2m'])
+                Ts_all = self.get_t_scale(land_cover_type=s.get_land_type(),
+                                          temperature=row['t2m'])
                 ret_dict['Ts'].append(Ts_all[1])
                 ret_dict['tcorr'].append(Ts_all[0])
                 ret_dict['Ws'].append(self.get_w_scale(site_name=site_name))
@@ -965,7 +962,7 @@ class vprm:
             s.add_columns(ret_dict)
         return self.sites
     
-    def _get_vprm_variables(self, datetime_utc=None, lat=None, lon=None,
+    def _get_vprm_variables(self, land_cover_type, datetime_utc=None, lat=None, lon=None,
                             add_era_variables=[], regridder_weights=None):
 
         '''
@@ -985,8 +982,6 @@ class vprm:
         era_keys = ['ssrd', 't2m']       
         era_keys.extend(add_era_variables)
             
-        if (self.t2m is None):
-                self.init_temps()
         self.counter = 0
         hour = datetime_utc.hour
         day = datetime_utc.day
@@ -1017,9 +1012,11 @@ class vprm:
 
         ret_dict = dict()
         ret_dict['evi'] = self.get_evi(lon, lat)
-        ret_dict['Ps'] = self.get_p_scale(lon, lat)
+        ret_dict['Ps'] = self.get_p_scale(lon, lat, 
+                                         land_cover_type=land_cover_type)
         ret_dict['par'] = self.get_par(lon, lat)
-        Ts_all = self.get_t_scale(lon, lat)
+        Ts_all = self.get_t_scale(lon, lat,
+                                 land_cover_type=land_cover_type)
         ret_dict['Ts'] = Ts_all[1]
         ret_dict['Ws'] = self.get_w_scale(lon, lat)
         ret_dict['tcorr'] = Ts_all[0]
@@ -1054,41 +1051,22 @@ class vprm:
             if fit_params_dict is None:
                 print('Need to provide a dictionary with the fit parameters')
                 return 
-            else:
-                for i in no_flux_veg_types:
-                    fit_params_dict [i] = {'lamb': 0, 'par0': 0,
-                                   'alpha': 0, 'beta': 0}
-                self.res = copy.deepcopy(self.land_cover_type) 
-                keys = list(self.land_cover_type.sat_img.keys())
-                self.res.sat_img = self.res.sat_img.drop(keys) 
-                t = np.array(self.land_cover_type.sat_img['land_cover_type'].values, dtype=np.float64)
-                t_shape = np.shape(t)
-                lamb, par0, alpha, beta = copy.deepcopy(t), copy.deepcopy(t), copy.deepcopy(t), copy.deepcopy(t)
-                for i in range(t_shape[0]):
-                    for j in range(t_shape[1]):
-                        if np.isnan(t[i,j]):
-                            lamb[i,j], par0[i,j], alpha[i,j], beta[i,j] = np.nan, np.nan, np.nan, np.nan
-                        else:
-                            lamb[i,j] = fit_params_dict[int(t[i,j])]['lamb']
-                            par0[i,j] = fit_params_dict[int(t[i,j])]['par0']
-                            alpha[i,j] = fit_params_dict[int(t[i,j])]['alpha']
-                            beta[i,j] = fit_params_dict[int(t[i,j])]['beta']
-                self.res.sat_img = self.res.sat_img.assign({'lamb': (['y','x'], lamb),
-                                                            'par0': (['y','x'], par0),
-                                                            'alpha': (['y','x'], alpha),
-                                                            'beta': (['y','x'], beta)}) 
         if not os.path.exists(os.path.dirname(regridder_weights)):
             os.makedirs(os.path.dirname(regridder_weights))
-
-        inputs = self._get_vprm_variables(date, regridder_weights=regridder_weights)
-        
-        if inputs is None:
-            return None
         
         ret_res = dict()
-        gpp = (self.res.sat_img['lamb'].values * inputs['Ps'] * inputs['Ws'] * inputs['Ts']) * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.res.sat_img['par0'].values)
-        ret_res['gpp'] = gpp
-        ret_res['nee'] = -gpp + self.res.sat_img['alpha'].values * inputs['tcorr'] + self.res.sat_img['beta'].values
+        gpps = []
+        respirations = []
+        for i in self.land_cover_type.sat_img.vprm_classes.values:
+            if i in no_flux_veg_types:
+                continue
+            inputs = self._get_vprm_variables(i, date, regridder_weights=regridder_weights)
+            if inputs is None:
+                return None
+            gpps.append(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/fit_params_dict[i]['par0'])))
+            respirations.append(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['alpha'] * inputs['tcorr'] + fit_params_dict[i]['beta']))
+        ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
+        ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
         return ret_res
         
 
