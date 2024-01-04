@@ -28,8 +28,7 @@ class met_data_handler(met_data_handler_base):
         # Pick a specific key if key is not None. Return as xarray dataset
         
         date_int = int('{}{:02d}{:02d}{:02d}00'.format(self.year, self.month,
-                                                       self.day, self.hour,
-                                                       0))
+                                                       self.day, self.hour, 0))
         row = self.data.loc[self.data[self.names['time']]==date_int]
         if key is None:
             return row[self.non_time_keys].values

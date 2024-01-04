@@ -11,8 +11,8 @@ import uuid
 import datetime
 from meteorologies.met_base_class import met_data_handler_base
 
-map_function = lambda lon: (lon + 360) if (lon < 0) else lon
-
+#map_function = lambda lon: (lon + 360) if (lon < 0) else lon
+map_function = lambda lon: (lon - 360) if (lon >180) else lon
 
 bpaths = {'sf00': '/pool/data/ERA5/E*/sf/an/{}', # '/work/bk1099/data/sf00_1H'i,
           'sf12': '/pool/data/ERA5/E*/sf/fc/{}', #'/work/bk1099/data/sf12_1H',
@@ -97,7 +97,7 @@ class met_data_handler(met_data_handler_base):
             if self.ds_in_t is None:
                 lats, lons = t_dict['current'][1].latlons() 
                 self.ds_in_t = xr.Dataset({"lat": (['lat'], lats[:,0], {"units": "degrees_north"}),
-                                           "lon": (['lon'], lons[0], {"units": "degrees_east"})})
+                                           "lon": (['lon'], [map_function(i) for i in lons[0]], {"units": "degrees_east"})})
                 self.ds_in_t = self.ds_in_t.set_coords(['lon', 'lat'])
 
     def _load_data_for_hour(self):
@@ -131,7 +131,7 @@ class met_data_handler(met_data_handler_base):
                 
             self.ds_out = copy.deepcopy(self.ds_in_t)
             self.ds_out = self.ds_out.assign(data_dict)
-            # self.ds_out['lon']= [map_function(i) for i in self.ds_out['lon'].values]
+            self.ds_out = self.ds_out.sortby('lon')
             self.in_era5_grid = True
 
     def get_all_interpolators(self, day, hour):
@@ -203,15 +203,11 @@ class met_data_handler(met_data_handler_base):
         else:
             lon = lonlat[0]
             if isinstance(lon, list) | isinstance(lon, np.ndarray):
-                if self.in_era5_grid:
-                    lon = [map_function(i) for i in lon]
                 return tmp.interp(lon=('z', lon),
                                   lat=('z', lonlat[1]),
                                   method='linear')
             else:
                 lon = lonlat[0]
-                if self.in_era5_grid:
-                    lon = map_function(lon)
                 return tmp.interp(lon=lon,
                                   lat=lonlat[1])                                            
 

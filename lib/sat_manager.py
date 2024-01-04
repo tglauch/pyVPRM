@@ -260,6 +260,15 @@ class satellite_data_manager:
                                              all_touched=True,
                                              from_disk=False).squeeze()
         return
+    
+    def crop_to_polygon(self, polygon):
+        if not polygon.crs == self.sat_img.rio.crs:
+            polygon = polygon.to_crs(self.sat_img.rio.crs)
+
+        self.sat_img = self.sat_img.rio.clip(polygon.geometry,
+                                             all_touched=True,
+                                             from_disk=False).squeeze()   
+        return
 
     def crop_to_number_of_pixels(self, lonlat, num_pixels, key, reproject=False):
         # crop the satellite images in place to a certain number of pixels around

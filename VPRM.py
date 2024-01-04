@@ -814,33 +814,6 @@ class vprm:
             self.buffer['lswi'] = self.sat_imgs.sat_img['lswi'].isel({self.time_key: self.counter})
         return self.buffer['lswi']
    
-#     def init_temps(self):
-#         '''
-#             Initialize an xarray with the min, max, and opt temperatures for photosynthesis
-
-#                 Parameters:
-#                 Returns:
-#                         None
-#         '''
-#         if self.land_cover_type is None:
-#             return
-#         tmin = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 0)
-#         topt = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 20)
-#         tmax = np.full(np.shape(self.land_cover_type.sat_img['land_cover_type'].values), 40)
-#         veg_inds = np.unique([self.map_to_vprm_class[i] 
-#                               for i in self.map_to_vprm_class.keys()])
-#         for i in veg_inds:
-#             mask = (self.land_cover_type.sat_img['land_cover_type'].values  == i)
-#             tmin[mask] = self.temp_coefficients[i][0]
-#             topt[mask] = self.temp_coefficients[i][1]
-#             tmax[mask] = self.temp_coefficients[i][2]
-
-#         self.t2m = copy.deepcopy(self.prototype)
-#         self.t2m.sat_img = self.t2m.sat_img.assign({'tmin': (['y','x'], tmin),
-#                                                     'topt': (['y','x'], topt),
-#                                                     'tmax': (['y','x'], tmax)})  
-#         return
-
     def _set_sat_img_counter(self, datetime_utc):
         days_after_first_image = (datetime_utc - self.timestamp_start).total_seconds()/(24*60*60)
         counter_new = np.argmin(np.abs(self.sat_imgs.sat_img[self.time_key].values - days_after_first_image))
@@ -856,7 +829,6 @@ class vprm:
             self.new = False
             return # Still same satellite image
         
-
     def _set_prototype_lat_lon(self):
         src_x = self.prototype.sat_img.coords['x'].values
         src_y = self.prototype.sat_img.coords['y'].values
