@@ -22,13 +22,16 @@ class met_data_handler(met_data_handler_base):
         self.non_time_keys = [self.names[i] for i in self.names.keys() if i not in 'time']
         self.data = pd.read_csv(data_file,
                                 usecols=[self.names[i] for i in self.names.keys()])
+        self.data[self.names['time']] = pd.to_datetime(self.data[self.names['time']])
 
     def get_data(self, lonlat=None, key=None):
         # Return ERA5 data for lonlat if lonlat is not None else return all data.
         # Pick a specific key if key is not None. Return as xarray dataset
         
-        date_int = int('{}{:02d}{:02d}{:02d}00'.format(self.year, self.month,
-                                                       self.day, self.hour, 0))
+        date_int = np.datetime64('{}-{:02d}-{:02d} {:02d}:00:00'.format(self.year, 
+                                                                        self.month,
+                                                                        self.day,
+                                                                        self.hour))
         row = self.data.loc[self.data[self.names['time']]==date_int]
         if key is None:
             return row[self.non_time_keys].values
