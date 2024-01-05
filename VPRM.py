@@ -1002,7 +1002,7 @@ class vprm:
         return ret_dict  
     
     def make_vprm_predictions(self, date, fit_params_dict=None,
-                              regridder_weights=None,
+                              met_regridder_weights=None,
                               no_flux_veg_types=[0, 5, 8]):
         '''
             Using the VPRM fit parameters make predictions on the entire satellite image.
@@ -1023,8 +1023,9 @@ class vprm:
             if fit_params_dict is None:
                 print('Need to provide a dictionary with the fit parameters')
                 return 
-        if not os.path.exists(os.path.dirname(regridder_weights)):
-            os.makedirs(os.path.dirname(regridder_weights))
+        if met_regridder_weights is not None:
+            if not os.path.exists(os.path.dirname(met_regridder_weights)):
+                os.makedirs(os.path.dirname(met_regridder_weights))
         
         ret_res = dict()
         gpps = []
@@ -1032,7 +1033,7 @@ class vprm:
         for i in self.land_cover_type.sat_img.vprm_classes.values:
             if i in no_flux_veg_types:
                 continue
-            inputs = self._get_vprm_variables(i, date, regridder_weights=regridder_weights)
+            inputs = self._get_vprm_variables(i, date, regridder_weights=met_regridder_weights)
             if inputs is None:
                 return None
             gpps.append(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/fit_params_dict[i]['par0'])))
@@ -1118,14 +1119,18 @@ class vprm:
             #NEE
             if fit_nee:
                 best_mse = np.inf
+                lamb_init = best_fit_params_dict[key]['lamb']
+                par0_init = best_fit_params_dict[key]['par0']
+                alpha_init = best_fit_params_dict[key]['alpha']
+                beta_init = best_fit_params_dict[key]['beta']
                 for i in range(100):  
                     func = lambda x, lamb, par0, a, b: -1 * (lamb * data_for_fit['Ws'] * data_for_fit['Ts'] * data_for_fit['Ps']) * data_for_fit['evi'] * data_for_fit['par'] / (1 + data_for_fit['par']/par0) + a * x['tcorr'] + b
                     fit_gpp = curve_fit(func,
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
-                                        p0=[best_fit_params_dict[key]['lamb'],
-                                            best_fit_params_dict[key]['par0'],
-                                            best_fit_params_dict[key]['alpha'],
-                                            best_fit_params_dict[key]['beta']]) 
+                                        p0=[np.random.uniform(lamb_init, np.sqrt(lamb_init)),
+                                            np.random.uniform(par0_init, np.sqrt(par0_init)),
+                                            np.random.uniform(alpha_init, np.sqrt(alpha_init)),
+                                            np.random.uniform(beta_init, np.sqrt(beta_init))]) 
                     mse = np.mean((func(data_for_fit, fit_gpp[0][0], fit_gpp[0][1], fit_gpp[0][2], fit_gpp[0][3]) - data_for_fit['gpp'])**2)
                     if mse < best_mse:
                         best_mse = mse

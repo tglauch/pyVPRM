@@ -23,6 +23,9 @@ class met_data_handler(met_data_handler_base):
         self.data = pd.read_csv(data_file,
                                 usecols=[self.names[i] for i in self.names.keys()])
         self.data[self.names['time']] = pd.to_datetime(self.data[self.names['time']])
+        self.data[self.names['t2m']] = self.data[self.names['t2m']] + 273.15
+        self.data[self.names['ssrd']] = self.data[self.names['ssrd']] * 3600
+        return
 
     def get_data(self, lonlat=None, key=None):
         # Return ERA5 data for lonlat if lonlat is not None else return all data.
