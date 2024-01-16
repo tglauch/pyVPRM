@@ -1,6 +1,14 @@
+![pyVPRM_logo](https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d)
+
 # pyVPRM
 
-`pyVPRM` is a software package to run calculations with the Vegetation Photosynthesis and Respriation Model. In addition to the 'classical' implementation it also provides 1.) an interface for different satellite data products 2.) an updated vegetation map handling and 3.) an API for using neural-network-based approaches.
+`pyVPRM` is a software package to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respriation Model (VPRM). The implementation is highly flexible and can be run with different satellite products (Sentinel-2, MODIS, VIIRS,...), land cover products (Copernicus Land Cover Service, ESA 10-m World Cover Map) and meteorologies. Through its modular structure it is also easily extendable. 
+
+Among others it can be used for 
+
+1. Fitting the parameters of a VPRM model
+2. Making flux predictions
+3. Generating input files to run VPRM in the Weather Research and Forecasting Model
 
 
 # How to use
