@@ -11,14 +11,12 @@ import uuid
 import datetime
 from meteorologies.met_base_class import met_data_handler_base
 
-#map_function = lambda lon: (lon + 360) if (lon < 0) else lon
 map_function = lambda lon: (lon - 360) if (lon >180) else lon
 
-bpaths = {'sf00': '/pool/data/ERA5/E*/sf/an/{}', # '/work/bk1099/data/sf00_1H'i,
-          'sf12': '/pool/data/ERA5/E*/sf/fc/{}', #'/work/bk1099/data/sf12_1H',
-          'pl00': '/pool/data/ERA5/E*/pl/an/{}', #'/work/bk1099/data/pl00_1H'i,
-          'ml00': '/pool/data/ERA5/E*/ml/an/{}'} #'/work/bk1099/data/ml00_1H/'}
-
+bpaths = {'sf00': '/pool/data/ERA5/E*/sf/an/{}', 
+          'sf12': '/pool/data/ERA5/E*/sf/fc/{}', 
+          'pl00': '/pool/data/ERA5/E*/pl/an/{}',
+          'ml00': '/pool/data/ERA5/E*/ml/an/{}'} 
 # Check documentation under 
 # https://confluence.ecmwf.int/display/CKB/ERA5%3A+data+documentation#ERA5:datadocumentation-Spatialgrid
 
