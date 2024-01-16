@@ -1,0 +1,31 @@
+years: 
+ - 2023
+satellite: modis
+sat_image_path: /work/bd1231/tglauch/modis_images_new/
+copernicus_path: /work/bd1231/tglauch/copernicus_classification/
+out_path: /work/bd1231/tglauch/VPRM_output_modis/
+predictions_path: /work/bd1231/tglauch/gpp_eu_modis/
+fluxnet_path: /work/bd1231/tglauch/data/
+vprm_params_dict: /home/b/b309233/modis.pickle
+year_for_fitting: 2023
+hvs:
+ - [17,2]
+ - [17,3]
+ - [17,4]
+ - [17,5]
+ - [18,2]
+ - [18,3]
+ - [18,4]
+ - [18,5]
+ - [19,2]
+ - [19,3]
+ - [19,4]
+ - [19,5]
+ - [20,2]
+ - [20,3]
+ - [20,4] 
+ - [20,5]
+ - [17,1]
+ - [18,1]
+ - [19,1]
+ - [20,1]
