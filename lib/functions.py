@@ -12,6 +12,37 @@ from pyproj import Transformer
 import xarray as xr
 from datetime import datetime
 
+def parse_wrf_grid_file(file_path):
+    
+    t = xr.open_dataset(file_path)
+    n_chunks = int(cfg['n_chunks'])
+
+    lats = np.linspace(0, np.shape(t['XLAT_M'].values.squeeze())[0],
+                       n_chunks+1, dtype=int)
+
+    lons = np.linspace(0, np.shape(t['XLONG_M'].values.squeeze())[1],
+                       n_chunks + 1, dtype=int)
+
+    out_grid = xr.Dataset({"lon": (["y", "x"], t['XLONG_M'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y],
+                                                                             lons[args.chunk_x - 1]:lons[args.chunk_x]],
+                          {"units": "degrees_east"}),
+                           "lon_b": (["y_b", "x_b"], t['XLONG_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
+                                                                               lons[args.chunk_x - 1]:lons[args.chunk_x]+1],
+                          {"units": "degrees_east"}),
+                          "lat": (["y", "x"], t['XLAT_M'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y],
+                                                                           lons[args.chunk_x - 1]:lons[args.chunk_x]],
+                          {"units": "degrees_north"}),
+                          "lat_b": (["y_b", "x_b"], t['XLAT_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
+                                                                                lons[args.chunk_x - 1]:lons[args.chunk_x]+1],
+                          {"units": "degrees_north"})
+                          })
+    
+    out_grid  = out_grid.set_coords(['lon', 'lat', 'lat_b', 'lon_b'])
+    return out_grid
+    
+
+
+
 def make_xesmf_grid(sat_img):
     
     if isinstance(sat_img, dict):

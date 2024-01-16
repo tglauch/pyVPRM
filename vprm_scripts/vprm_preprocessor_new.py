@@ -5,7 +5,7 @@ this_file = pathlib.Path(__file__).parent.resolve()
 sys.path.append(os.path.join(this_file, '..'))
 from lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
-from lib.functions import lat_lon_to_modis, add_corners_to_1d_grid
+from lib.functions import lat_lon_to_modis, add_corners_to_1d_grid, parse_wrf_grid_file
 from VPRM import vprm
 import yaml
 import glob
@@ -37,30 +37,7 @@ with open(args.config, "r") as stream:
     except yaml.YAMLError as exc:
         print(exc)
 
-t = xr.open_dataset(cfg['geo_em_file'])
-n_chunks = int(cfg['n_chunks'])
-
-lats = np.linspace(0, np.shape(t['XLAT_M'].values.squeeze())[0],
-                   n_chunks+1, dtype=int)
-
-lons = np.linspace(0, np.shape(t['XLONG_M'].values.squeeze())[1],
-                   n_chunks + 1, dtype=int)
-
-out_grid = xr.Dataset({"lon": (["y", "x"], t['XLONG_M'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y],
-                                                                         lons[args.chunk_x - 1]:lons[args.chunk_x]],
-                      {"units": "degrees_east"}),
-                       "lon_b": (["y_b", "x_b"], t['XLONG_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
-                                                                           lons[args.chunk_x - 1]:lons[args.chunk_x]+1],
-                      {"units": "degrees_east"}),
-                      "lat": (["y", "x"], t['XLAT_M'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y],
-                                                                       lons[args.chunk_x - 1]:lons[args.chunk_x]],
-                      {"units": "degrees_north"}),
-                      "lat_b": (["y_b", "x_b"], t['XLAT_C'].values.squeeze()[lats[args.chunk_y - 1]:lats[args.chunk_y]+1,
-                                                                            lons[args.chunk_x - 1]:lons[args.chunk_x]+1],
-                      {"units": "degrees_north"})
-                      })
-
-out_grid  = out_grid.set_coords(['lon', 'lat', 'lat_b', 'lon_b'])
+out_grid = parse_wrf_grid_file(cfg['geo_em_file'])
 
 hvs = np.unique([lat_lon_to_modis(out_grid['lat_b'].values.flatten()[i], 
                                   out_grid['lon_b'].values.flatten()[i]) 
@@ -96,20 +73,24 @@ for c, i in enumerate(hvs):
             print(fpath)
             handler = modis(sat_image_path=fpath)
             handler.load() 
-            if c0 == 0:
-                trans = Transformer.from_crs('+proj=longlat +datum=WGS84',
-                                               handler.sat_img.rio.crs)
-                x_a, y_a = trans.transform(out_grid['lon_b'], out_grid['lat_b'])
-                b = box(float(np.min(x_a)), float(np.min(y_a)),
-                        float(np.max(x_a)), float(np.max(y_a)))
-                b = gpd.GeoSeries(Polygon(b), crs=handler.sat_img.rio.crs)
-            handler.crop_box(b)
         elif cfg['satellite'] == 'viirs':
             print(fpath)
             handler = VIIRS(sat_image_path=fpath)
             handler.load()
         else:
             print('Set the satellite in the cfg either to modis or viirs.')
+            
+        if c0 == 0:
+            trans = Transformer.from_crs('+proj=longlat +datum=WGS84',
+                                           handler.sat_img.rio.crs)
+
+            # To save memory crop satellite images to WRF grid
+            x_a, y_a = trans.transform(out_grid['lon_b'], out_grid['lat_b'])
+            b = box(float(np.min(x_a)), float(np.min(y_a)),
+                    float(np.max(x_a)), float(np.max(y_a)))
+            b = gpd.GeoSeries(Polygon(b), crs=handler.sat_img.rio.crs)
+
+        handler.crop_box(b)
 
         if cfg['satellite'] == 'modis':
             new_inst.add_sat_img(handler, b_nir='sur_refl_b02', b_red='sur_refl_b01',
