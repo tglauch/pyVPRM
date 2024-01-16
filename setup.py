@@ -20,7 +20,7 @@ setup(name='pyVPRM',
     author='Theo Glauch',
     author_email='theo.glauch@drl.de',
     license='MIT',
-    packages=['pyVPRM', 'lib', 'meteorologies'],
+    packages=['pyVPRM'],
     install_requires=[
         'numpy',
         'scipy',
