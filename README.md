@@ -15,7 +15,7 @@ Among others it can be used for
 
 To install the package simply run 
 
-> pip install pyvprm
+```pip install pyvprm```
 
 
 For each calculation the following steps are necessary:
