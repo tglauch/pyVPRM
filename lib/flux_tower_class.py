@@ -11,7 +11,7 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 from pyproj import Transformer
 import xarray as xr
 from datetime import datetime
-
+import pathlib
 
 class flux_tower_data:
     # Class to store flux tower data in unique format
@@ -78,7 +78,7 @@ class fluxnet(flux_tower_data):
         else:
             self.vars = use_vars
         
-        site_info = pd.read_pickle('/home/b/b309233/software/CO2KI/VPRM/fluxnet_sites.pkl')
+        site_info = pd.read_pickle(os.path.join(pathlib.Path(__file__).parent.resolve(), 'fluxnet_info', 'fluxnet_sites.pkl'))
         self.lat = site_info.loc[site_info['SITE_ID']==site_name]['lat'].values
         self.lon = site_info.loc[site_info['SITE_ID']==site_name]['long'].values
         self.land_cover_type = site_info.loc[site_info['SITE_ID']==site_name]['IGBP'].values
