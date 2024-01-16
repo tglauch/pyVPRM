@@ -12,6 +12,12 @@ Among others it can be used for
 
 
 # How to use
+
+To install the package simply run 
+
+> pip install pyvprm
+
+
 For each calculation the following steps are necessary:
 1. Get the necessary satellite data for your region of interest 
 2. Get the land cover maps for your region of interest
