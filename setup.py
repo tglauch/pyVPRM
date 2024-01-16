@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 def readme():
     with open('README.md') as f:
@@ -20,7 +20,7 @@ setup(name='pyVPRM',
     author='Theo Glauch',
     author_email='theo.glauch@drl.de',
     license='MIT',
-    packages=['pyVPRM'],
+    packages=find_packages(),
     install_requires=[
         'numpy',
         'scipy',
