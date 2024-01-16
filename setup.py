@@ -4,7 +4,7 @@ def readme():
     with open('README.md') as f:
         return f.read()
 
-setup(name='pyvprm',
+setup(name='pyVPRM',
     version='1.0.0',
     description='Vegetation Photosynthesis and Respiration Model',
     long_description='A tool to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respiration Model',
@@ -20,7 +20,7 @@ setup(name='pyvprm',
     author='Theo Glauch',
     author_email='theo.glauch@drl.de',
     license='MIT',
-    packages=['pyvprm'],
+    packages=['pyVPRM'],
     install_requires=[
         'numpy',
         'scipy',
@@ -35,6 +35,6 @@ setup(name='pyvprm',
         'rasterio',
         'rioxarray',
         'geopandas',
-        'h5py',],
+        'h5py'],
     include_package_data=True,
     zip_safe=False)
