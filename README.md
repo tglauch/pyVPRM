@@ -24,7 +24,7 @@ In order to start your own project you need to at least follow theses steps:
 1. Get the necessary satellite data for your region of interest 
 2. Get the land cover maps for your region of interest
 3. Create a config file for your project
-4. Generate your project scripts based on the functions of the VPRM class in `VPRM.py`
+4. Generate your project scripts based on the functions of the vprm class in `VPRM.py`
 5. Run the calculations
 
 Remarks: 
