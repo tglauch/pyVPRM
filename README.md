@@ -16,7 +16,7 @@ Among others it can be used for
 To install the package simply run 
 
 ```
-pip install pyvprm
+pip install git+https://github.com/tglauch/pyVPRM.git
 ```
 
 In order to start your own project you need to at least follow theses steps: 
@@ -25,7 +25,7 @@ In order to start your own project you need to at least follow theses steps:
 2. Get the land cover maps for your region of interest
 3. Create a config file for your project
 4. Generate your project scripts based on the functions of the VPRM class in `VPRM.py`
-5. Run the caluclations
+5. Run the calculations
 
 Remarks: 
 - If there is not yet an interface for your satellite data or land cover map, implement a new subclass in `./lib/sat_manager_add.py`
