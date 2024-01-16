@@ -13,8 +13,8 @@ Among others it can be used for
 
 # How to use
 For each calculation the following steps are necessary:
-1. Get the necessary satellite data for your region of interest
-2. Get the land cover maps for your region of interest
+1. Get the necessary satellite data for your region of interest (for MODIS,VIIRS: https://e4ftl01.cr.usgs.gov, for Sentinel-2: https://scihub.copernicus.eu/)
+2. Get the land cover maps for your region of interest (Copernicus: https://lcviewer.vito.be/2019, ESA World Cover: https://viewer.esa-worldcover.org)
 3. Create a config file for your project
 4. Generate your project scripts based on the function in `VPRM.py`.
 
