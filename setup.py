@@ -35,6 +35,7 @@ setup(name='pyVPRM',
         'rasterio',
         'rioxarray',
         'geopandas',
-        'h5py'],
+        'h5py',
+        'pyModis'],
     include_package_data=True,
     zip_safe=False)
