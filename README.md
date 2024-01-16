@@ -7,7 +7,7 @@
 Among others it can be used for 
 
 1. Fitting the parameters of a VPRM model
-2. Making flux predictions
+2. Making CO2 flux predictions
 3. Generating input files to run VPRM in the Weather Research and Forecasting Model
 
 
