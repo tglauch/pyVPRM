@@ -13,9 +13,14 @@ Among others it can be used for
 
 # How to use
 For each calculation the following steps are necessary:
-1. Get the necessary satellite data for your region of interest. (If there is not yet an interface for this type of satellite data, implement a new subclass in `./lib/sat_manager_add.py`)
-2. Get the land cover maps for your region of interest. (If there is not yet an interface for this land cover map, implement a new subclass in `./lib/sat_manager_add.py` and define the mapping from the land cover classification of your map to the VPRM classes in a config file which is stored in  `./vprm_configs`)
+1. Get the necessary satellite data for your region of interest
+2. Get the land cover maps for your region of interest
 3. Create a config file for your project
+4. Generate your project scripts based on the function in `VPRM.py`.
+
+Remarks: 
+- If there is not yet an interface for your satellite data or land cover map, implement a new subclass in `./lib/sat_manager_add.py`
+- For new land cover maps you need to additionaly provide a mapping to VPRM classes in a config file which is stored in  `./vprm_configs`
 
 
 For all applications you need to download the required land type maps from the Copernicus webpage here: https://lcviewer.vito.be/download, as well as the satellite images.
