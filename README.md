@@ -24,19 +24,4 @@ Remarks:
 - Open access to land cover maps: Copernicus: https://lcviewer.vito.be/2019 | ESA World Cover: https://viewer.esa-worldcover.org
 - Open Aaccess to satellite data: MODIS,VIIRS: https://e4ftl01.cr.usgs.gov | Sentinel-2: https://scihub.copernicus.eu/
 
-
-For all applications you need to download the required land type maps from the Copernicus webpage here: https://lcviewer.vito.be/download, as well as the satellite images.
-
-For a)
-Prepare a config file (see for example config.cfg) and set your login data for `https://urs.earthdata.nasa.gov/` in the logins.yaml
-Download the Satellite data from MODIS or VIIRS using 'download_satellite_images.py'. For example: `python download_satellite_images.py --config ./config.yaml`
-Run the fitting code, for example `python fit_params_draft.py --config ./config.yaml --h 18 --v 4`.
-Use the output in the analysis notebook to fit the paramteters and generate plots. See for example `./analysis_notebooks/2012_VPRM_eval.ipynb`
-
-For b)
-Prepare a config file (see for example config.cfg)
-Run the `make_vprm_predictions.py` code with the config file as argument
-
-For c)
-Prepare a config file (see for example config_wrf_prepocessor.yaml)
-Run the `vprm_preprocessor.py` code with the config file
+In order to get started there are a number of example scripts with corresponding `README` and comments available in the `./examples` folder. 
