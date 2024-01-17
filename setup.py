@@ -39,6 +39,7 @@ setup(name='pyVPRM',
         'pyModis',
         'pytz',
         'tzwhere',
-        'timezonefinder'],
+        'timezonefinder',
+        'pygrib'],
     include_package_data=True,
     zip_safe=False)
