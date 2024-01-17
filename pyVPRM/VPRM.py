@@ -3,12 +3,11 @@ warnings.filterwarnings("ignore")
 import sys
 import os
 import pathlib
-#sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
 import numpy as np
-from lib.sat_manager import VIIRS, sentinel2, modis,\
-                            copernicus_land_cover_map, satellite_data_manager
-from lib.functions import add_corners_to_1d_grid, do_lowess_smoothing,\
-                         make_xesmf_grid, to_esmf_grid
+from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis,\
+                                   copernicus_land_cover_map, satellite_data_manager
+from pyVPRM.lib.functions import add_corners_to_1d_grid, do_lowess_smoothing,\
+                                 make_xesmf_grid, to_esmf_grid
 from scipy.ndimage import uniform_filter
 from pyproj import Transformer
 import copy
