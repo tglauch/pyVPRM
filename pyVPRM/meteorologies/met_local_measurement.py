@@ -6,7 +6,7 @@ import numpy as np
 from dateutil import parser
 import copy
 import datetime
-from meteorologies.met_base_class import met_data_handler_base
+from pyVPRM.meteorologies.met_base_class import met_data_handler_base
 import pandas as pd
 
 key_map = {'time': 'TIMESTAMP_START',

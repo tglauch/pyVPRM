@@ -10,7 +10,7 @@ import copy
 import xesmf as xe
 import uuid
 import datetime
-from meteorologies.met_base_class import met_data_handler_base
+from pyVPRM.meteorologies.met_base_class import met_data_handler_base
 
 class met_data_handler(met_data_handler_base):
     

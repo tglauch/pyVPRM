@@ -9,7 +9,7 @@ import pygrib
 import copy
 import uuid
 import datetime
-from meteorologies.met_base_class import met_data_handler_base
+from pyVPRM.meteorologies.met_base_class import met_data_handler_base
 
 map_function = lambda lon: (lon - 360) if (lon >180) else lon
 
