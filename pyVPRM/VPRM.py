@@ -3,7 +3,7 @@ warnings.filterwarnings("ignore")
 import sys
 import os
 import pathlib
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
+#sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
 import numpy as np
 from lib.sat_manager import VIIRS, sentinel2, modis,\
                             copernicus_land_cover_map, satellite_data_manager

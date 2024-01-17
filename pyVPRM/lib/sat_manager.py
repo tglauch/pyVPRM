@@ -1,13 +1,9 @@
 #from sentinelsat import SentinelAPI, read_geojson, geojson_to_wkt
-import pathlib
 import sys
 import os
-#sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve()))
 import time
 from shapely.geometry import Point, Polygon, box
-#import rasterio as rio
 import rioxarray as rxr
-import matplotlib
 import zipfile
 import glob
 from pyproj import Transformer
@@ -15,7 +11,6 @@ import geopandas as gpd
 from pymodis import downmodis
 import math 
 from pyproj import Proj
-import shutil 
 from affine import Affine
 from rioxarray.rioxarray import affine_to_coords
 import requests
