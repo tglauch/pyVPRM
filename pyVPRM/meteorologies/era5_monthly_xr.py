@@ -14,12 +14,13 @@ from pyVPRM.meteorologies.met_base_class import met_data_handler_base
 
 class met_data_handler(met_data_handler_base):
     
-    def __init__(self, year, month, day, hour, keys=[]):
+    def __init__(self, year, month, day, hour, bpath, keys=[]):
         super().__init__() 
        # Init with year, month, day, hour and the required era5 keys as given in the 
        #  keys_dict above
         self.in_era5_grid = True
         self.this_month = 0
+        self.bpath = bpath
         self.change_date(year, month, day, hour)
 
 
@@ -86,7 +87,7 @@ class met_data_handler(met_data_handler_base):
         
     def _init_data_for_day(self):
         if self.this_month != self.month:
-            self.data = xr.open_dataset('/work/bd1231/tglauch/era5_xr/{}_{}.nc'.format(self.year, self.month))
+            self.data = xr.open_dataset(os.path.join(self.bpath, '{}_{}.nc'.format(self.year, self.month)))
             self.this_month = self.month
         # If something should be done if a new date is provided
         return

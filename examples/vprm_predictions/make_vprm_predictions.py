@@ -2,12 +2,12 @@
 import sys
 import os
 import pathlib
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
+sys.path.append('/home/b/b309233/software/VPRM_preprocessor/')
 import yaml 
-from lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
+from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
-from VPRM import vprm 
-from meteorologies.era5_class import ERA5
+from pyVPRM.VPRM import vprm 
+from pyVPRM.meteorologies import era5_monthly_xr, era5_class_dkrz
 import glob
 import time
 import yaml
@@ -21,7 +21,7 @@ import rasterio
 import pandas as pd
 import pickle
 import argparse
-from lib.functions import lat_lon_to_modis
+from pyVPRM.lib.functions import lat_lon_to_modis
 import calendar
 from datetime import datetime, timedelta
 
@@ -45,7 +45,6 @@ p.add_argument("--v", type=int)
 p.add_argument("--config", type=str)
 p.add_argument("--n_cpus", type=int, default=1)
 p.add_argument("--year", type=int)
-p.add_argument("--hourly", action='store_true', default=False)
 args = p.parse_args()
 print('Run with args', args)
 
@@ -60,11 +59,14 @@ with open(args.config, "r") as stream:
         print(exc)
 
 # Initialize VPRM instance and add satellite images
-vprm_inst = vprm(n_cpus=args.n_cpus)
-for c, i in enumerate(sorted(glob.glob(os.path.join(cfg['sat_image_path'], str(args.year),
-                                                    '*h{:02d}v{:02d}*.h*'.format(h, v))))):
+vprm_inst = vprm(vprm_config_path='../../pyVPRM/vprm_configs/copernicus_land_cover.yaml',
+                 n_cpus=args.n_cpus)
+files = glob.glob(os.path.join(cfg['sat_image_path'],# str(args.year),
+                               '*h{:02d}v{:02d}*.h*'.format(h, v)))
+for c, i in enumerate(sorted(files)):
     if '.xml' in i:
         continue
+    print(i)
     if cfg['satellite'] == 'modis':
         handler = modis(sat_image_path=i)
         handler.load()
@@ -109,8 +111,9 @@ for c in glob.glob(os.path.join(cfg['copernicus_path'], '*')):
 vprm_inst.add_land_cover_map(lcm)
 
 # Set meteorology
-era5_inst = ERA5(2012, 8, 12, 12, 
-                 keys=['t2m', 'ssrd']) 
+era5_inst = era5_monthly_xr.met_data_handler(args.year, 1, 1, 0,
+                                             './data/era5',
+                                             keys=['t2m', 'ssrd']) 
 vprm_inst.set_met(era5_inst)
 
 # Load VPRM parameters from a dictionary 
@@ -123,89 +126,38 @@ days_in_year = 365 + calendar.isleap(args.year)
 regridder_weights = os.path.join(cfg['predictions_path'],
                                  'regridder_weights_{}_{}.nc'.format(h,v))
 
-#...either hourly
-if args.hourly:
-    for i in np.arange(1, days_in_year+1, 1):
-        time_range=get_hourly_time_range(int(args.year), i)
-        preds_gpp = []
-        preds_nee = []
-        ts = []
-        for t in time_range[:]:
-            t0=time.time()
-            print(t)
-            pred = vprm_inst.make_vprm_predictions(t, fit_params_dict=res_dict,
-                                                   regridder_weights=regridder_weights)
-            if pred is None:
-                continue
-            preds_gpp.append(pred['gpp'])
-            preds_nee.append(pred['nee'])
-            ts.append(t)
-            print(time.time()-t0)
-
-        preds_gpp = xr.concat(preds_gpp, 'time')
-        preds_gpp = preds_gpp.assign_coords({'time': ts})
-        outpath = os.path.join(cfg['predictions_path'],
-                               'gpp_h{:02d}v{:02d}_{}_{:03d}.h5'.format(h, v, args.year, i))
-        if os.path.exists(outpath):
-            os.remove(outpath)
-        preds_gpp.to_netcdf(outpath)
-        preds_gpp.close()
-        
-        preds_nee = xr.concat(preds_nee, 'time')
-        preds_nee = preds_nee.assign_coords({'time': ts})
-        outpath = os.path.join(cfg['predictions_path'],
-                               'nee_h{:02d}v{:02d}_{}_{:03d}.h5'.format(h, v,args.year, i))
-        if os.path.exists(outpath):
-            os.remove(outpath)
-        preds_nee.to_netcdf(outpath)
-        preds_nee.close()
-
-#....our weekly
-else:
-
-    ts = []
+for i in np.arange(1, days_in_year+1, 1):
+    time_range=get_hourly_time_range(int(args.year), i)
     preds_gpp = []
     preds_nee = []
-    
-    for w in np.arange(1, 53, 1): 
-        ts.append(w)
-        t_gpp_preds = []
-        t_nee_preds = []
-        for i in np.arange((w-1) * 7 + 1, w * 7 + 1, 1):
-            time_range=get_hourly_time_range(int(args.year), i)
-            for t in time_range[:]:
-                t0=time.time()
-                print(t)
-                pred = vprm_inst.make_vprm_predictions(t, res_dict=res_dict,
-                                                       regridder_weights=regridder_weights)
-                if pred is None:
-                    print('GPP/NEE predictions are 0. Continue')
-                    continue
-                t_gpp_preds.append(pred['gpp'])
-                t_nee_preds.append(pred['nee'])
-                print(time.time()-t0)
-
-        t_gpp_preds = xr.concat(t_gpp_preds, 'time')
-        preds_gpp.append(t_gpp_preds.sum(dim='time'))
-
-        t_nee_preds = xr.concat(t_nee_preds, 'time')
-        preds_nee.append(t_nee_preds.sum(dim='time'))
+    ts = []
+    for t in time_range[:]:
+        t0=time.time()
+        print(t)
+        pred = vprm_inst.make_vprm_predictions(t, fit_params_dict=res_dict,
+                                               regridder_weights=regridder_weights)
+        if pred is None:
+            continue
+        preds_gpp.append(pred['gpp'])
+        preds_nee.append(pred['nee'])
+        ts.append(t)
+        print(time.time()-t0)
 
     preds_gpp = xr.concat(preds_gpp, 'time')
     preds_gpp = preds_gpp.assign_coords({'time': ts})
     outpath = os.path.join(cfg['predictions_path'],
-                          'gpp_h{:02d}v{:02d}_{}.h5'.format(h, v, args.year))
+                           'gpp_h{:02d}v{:02d}_{}_{:03d}.h5'.format(h, v, args.year, i))
     if os.path.exists(outpath):
         os.remove(outpath)
     preds_gpp.to_netcdf(outpath)
     preds_gpp.close()
-
+    
     preds_nee = xr.concat(preds_nee, 'time')
     preds_nee = preds_nee.assign_coords({'time': ts})
     outpath = os.path.join(cfg['predictions_path'],
-                           'nee_h{:02d}v{:02d}_{}.h5'.format(h, v, args.year))
+                           'nee_h{:02d}v{:02d}_{}_{:03d}.h5'.format(h, v,args.year, i))
     if os.path.exists(outpath):
         os.remove(outpath)
     preds_nee.to_netcdf(outpath)
     preds_nee.close()
-            
+

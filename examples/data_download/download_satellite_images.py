@@ -1,9 +1,8 @@
 import sys
 import pathlib
 import os
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..'))
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', 'lib'))
-from sat_manager import VIIRS, sentinel2, modis
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', '..'))
+from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis
 import yaml 
 from datetime import date
 import argparse
@@ -58,9 +57,8 @@ for year in years:
                 print(e)
 
     elif cfg['satellite'] == 'viirs':
-        print('Tile {}'.format(i))
         for i in hvs:
-            print(i)
+            print('Tile {}'.format(i))
             handler = VIIRS()
             try:
                 handler.download(date(year, 1, 1),

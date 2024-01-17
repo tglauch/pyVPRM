@@ -439,6 +439,7 @@ class modis(earthdata):
         return self.sat_img.rio.resolution()
     
     def adjust_obs_timestamps(self, key='sur_refl_day_of_year'):
+        # make the observation date a utc timestamp. Quite slow.
         start_date = self.start_date()
         stop_date = self.stop_date()
         start_day = start_date.timetuple().tm_yday
