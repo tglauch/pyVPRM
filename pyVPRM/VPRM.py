@@ -94,7 +94,8 @@ class vprm:
     
     def to_wrf_output(self, out_grid, weights_for_regridder=None,
                       regridder_save_path=None, driver='xEMSF',
-                      interp_method='conservative'):
+                      interp_method='conservative', n_cpus=None,
+                      mpi=True):
 
         '''
             Generate output in the format that can be used as an input for WRF 
@@ -113,6 +114,9 @@ class vprm:
         
         import xesmf as xe
         
+        if n_cpus is None:
+            n_cpus = self.n_cpus
+
         src_grid = make_xesmf_grid(self.sat_imgs.sat_img)
         if isinstance(out_grid, dict):
             ds_out = make_xesmf_grid(out_grid)
@@ -130,12 +134,18 @@ class vprm:
                     print('If you use ESMF_RegridWeightGen, a regridder_save_path needs to be given')
                     return
                 src_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
-                dest_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
-                src_grid.to_netcdf(src_temp_path)
-                ds_out.to_netcdf(dest_temp_path)
-                os.system('mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m {} -r --netcdf4 --no_log --extrap_method nearestd –src_regional –dest_regional '.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path, regridder_options[interp_method])) # --no_log
-                os.remove(src_temp_path) 
-                os.remove(dest_temp_path)
+                dest_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4()))) 
+                src_grid_esmf = to_esmf_grid(self.sat_imgs.sat_img)
+                ds_out_esmf = to_esmf_grid(out_grid)
+                src_grid_esmf.to_netcdf(src_temp_path)
+                ds_out_esmf.to_netcdf(dest_temp_path)
+                exec_str = 'ESMF_RegridWeightGen --source {} --destination {} --weight {} -m {} -r --netcdf4 --no_log –src_regional –dest_regional '.format(src_temp_path, dest_temp_path, regridder_save_path, regridder_options[interp_method])
+                if mpi is True:
+                    exec_str = 'mpirun -np {} '.format(n_cpus) + exec_str
+                print(exec_str)
+                os.system(exec_str) # --no_log
+               # os.remove(src_temp_path) 
+               # os.remove(dest_temp_path)
                 weights_for_regridder = regridder_save_path
             else:
                 print('Driver needs to be xEMSF or ESMF_RegridWeightGen' )
@@ -409,7 +419,8 @@ class vprm:
     
     def add_land_cover_map(self, land_cover_map, var_name='band_1',
                            save_path=None, filter_size=None,
-                           mode='fractional', regridder_save_path=None):
+                           mode='fractional', regridder_save_path=None,
+                           n_cpus = None, mpi = True):
         '''
             Add the land cover map. Either use a pre-calculated one or do the calculation on the fly.
 
@@ -422,8 +433,11 @@ class vprm:
                 Returns:
                         None
         '''
+        
+        if n_cpus is None:
+            n_cpus = self.n_cpus
         if isinstance(land_cover_map, str):
-            print('Load pre-generated land cover map')
+            print('Load pre-generated land cover map: {}'.format(land_cover_map))
             self.land_cover_type = satellite_data_manager(sat_img=land_cover_map)
         else:
             print('Generating satellite data compatible land cover map')
@@ -442,7 +456,9 @@ class vprm:
                     dest_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
                     src_grid.to_netcdf(src_temp_path)
                     ds_out.to_netcdf(dest_temp_path)
-                    exec_str = 'mpirun -np {} ESMF_RegridWeightGen --source {} --destination {} --weight {} -m conserve -r --netcdf4 --no_log –src_regional –dest_regional '.format(self.n_cpus, src_temp_path, dest_temp_path, regridder_save_path)
+                    exec_str = 'ESMF_RegridWeightGen --source {} --destination {} --weight {} -m conserve -r --netcdf4 --no_log –src_regional –dest_regional '.format(src_temp_path, dest_temp_path, regridder_save_path)
+                    if mpi is True:
+                        exec_str = 'mpirun -np {} '.format(n_cpus) + exec_str
                     print('Run: {}'.format(exec_str))
                     os.system(exec_str) 
                     os.remove(src_temp_path) 
@@ -514,7 +530,7 @@ class vprm:
         return
     
     def lowess(self, keys, lonlats=None, times=False,
-               frac=0.25, it=3):
+               frac=0.25, it=3, n_cpus=None):
         '''
             Performs the lowess smoothing
 
@@ -525,7 +541,9 @@ class vprm:
                         None
         '''
         self.sat_imgs.sat_img.load()
-        
+ 
+        if n_cpus is None:
+            n_cpus = self.n_cpus
         if times == 'daily':
             xvals = np.arange(self.tot_num_days) 
         elif isinstance(times, list):
@@ -552,10 +570,10 @@ class vprm:
         elif lonlats is None: # If smoothing the entire array
             if 'timestamp' in list(self.sat_imgs.sat_img.data_vars):
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
             else:
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=self.n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
 
         else: 
             print('Not implemented')
@@ -961,6 +979,7 @@ class vprm:
 
         img_status = self._set_sat_img_counter(datetime_utc)
         if img_status is False:
+            print('No sat image for {}. Return None.'.format(datetime_utc))
             return None
 
         if (lat != self.buffer['cur_lat']) | (lon != self.buffer['cur_lon']):

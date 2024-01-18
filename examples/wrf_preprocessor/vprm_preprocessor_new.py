@@ -2,11 +2,11 @@ import sys
 import os
 import pathlib
 this_file = pathlib.Path(__file__).parent.resolve()
-sys.path.append(os.path.join(this_file, '..'))
-from lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
+sys.path.append(os.path.join(this_file, '..', '..'))
+from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
-from lib.functions import lat_lon_to_modis, add_corners_to_1d_grid, parse_wrf_grid_file
-from VPRM import vprm
+from pyVPRM.lib.functions import lat_lon_to_modis, add_corners_to_1d_grid, parse_wrf_grid_file
+from pyVPRM.VPRM import vprm
 import yaml
 import glob
 import time
@@ -37,7 +37,8 @@ with open(args.config, "r") as stream:
     except yaml.YAMLError as exc:
         print(exc)
 
-out_grid = parse_wrf_grid_file(cfg['geo_em_file'])
+out_grid = parse_wrf_grid_file(cfg['geo_em_file'], n_chunks=cfg['n_chunks'],
+                              chunk_x=args.chunk_x, chunk_y=args.chunk_y)
 
 hvs = np.unique([lat_lon_to_modis(out_grid['lat_b'].values.flatten()[i], 
                                   out_grid['lon_b'].values.flatten()[i]) 
@@ -53,28 +54,22 @@ days =  [datetime(this_year, 1, 1)+ timedelta(days=i) for i in np.arange(365.)]
 for c, i in enumerate(hvs):
     
     print(i)
-    file_collection_before = sorted([f for f in glob.glob(os.path.join(cfg['sat_image_path'], str(this_year-1),
-                                                               '*h{:02d}v{:02d}*.hdf'.format(i[0], i[1]))) if '.xml' not in f])[-3:]
-    file_collection_this = sorted([f for f in glob.glob(os.path.join(cfg['sat_image_path'], str(this_year),
-                                                                      '*h{:02d}v{:02d}*.hdf'.format(i[0], i[1]))) if '.xml' not in f])
-    file_collection_after = sorted([f for f in glob.glob(os.path.join(cfg['sat_image_path'], str(this_year+1),
-                                                                       '*h{:02d}v{:02d}*.hdf'.format(i[0], i[1]))) if '.xml' not in f])[:3]
-    file_collections = np.concatenate([file_collection_before, file_collection_this,
-                                       file_collection_after])
+    file_collections = glob.glob(os.path.join(cfg['sat_image_path'], 
+                                                 '*h{:02d}v{:02d}*.nc'.format(i[0], i[1])))
     
     if len(file_collections) == 0:
         continue
 
-    new_inst = vprm(vprm_config_path = os.path.join(this_file, '..', 'vprm_configs',
+    new_inst = vprm(vprm_config_path = os.path.join(this_file, '..', '..',
+                                                    'pyVPRM', 'vprm_configs',
                                                     'copernicus_land_cover.yaml') ,
                     n_cpus=args.n_cpus)
     for c0, fpath in enumerate(file_collections):
+        print(fpath)
         if cfg['satellite'] == 'modis':
-            print(fpath)
             handler = modis(sat_image_path=fpath)
             handler.load() 
         elif cfg['satellite'] == 'viirs':
-            print(fpath)
             handler = VIIRS(sat_image_path=fpath)
             handler.load()
         else:
@@ -89,6 +84,7 @@ for c, i in enumerate(hvs):
             b = box(float(np.min(x_a)), float(np.min(y_a)),
                     float(np.max(x_a)), float(np.max(y_a)))
             b = gpd.GeoSeries(Polygon(b), crs=handler.sat_img.rio.crs)
+            b = b.scale(1.2, 1.2)
 
         handler.crop_box(b)
 
@@ -138,61 +134,46 @@ veg_file = os.path.join(cfg['out_path'], 'veg_map_on_modis_grid_{}_{}.nc'.format
 #                        land_cover_on_modis_grid=veg_file)
 # else:   
 print('Generate land cover map')
-regridder_path = os.path.join(cfg['out_path'], 'regridder_{}_{}_lcm.nc'.format(args.chunk_x,
-                                                                               args.chunk_y))
+
 if os.path.exists(veg_file):
     vprm_inst.add_land_cover_map(veg_file)
 
-    
-# if vprm_inst not pre-calculated, load the copernicus land cover tiles from the copernicus_data_path.
-# Download needs to be done manually from here: https://lcviewer.vito.be/download
-# If the land-cover-map on the modis grid needs to be calculated on the fly
-# for checks interactive viewer can be useful https://lcviewer.vito.be/2019
+else:
+    regridder_path = os.path.join(cfg['out_path'], 'regridder_{}_{}_lcm.nc'.format(args.chunk_x,
+                                                                                   args.chunk_y))
+    handler_lt = None
+    copernicus_data_path = cfg['copernicus_path']
 
-handler_lt = None
-copernicus_data_path = cfg['copernicus_path']
-
-if copernicus_data_path is not None:
-    tiles_to_add = []
-    for i, c in enumerate(glob.glob(os.path.join(copernicus_data_path, '*'))):
-        print(c)
-        temp_map = copernicus_land_cover_map(c)
-        temp_map.load()
-        dj = vprm_inst.is_disjoint(temp_map)
-        if dj:
-            continue
-        print('Add {}'.format(c))
-        if handler_lt is None:
-            handler_lt = temp_map
-        else:
-            tiles_to_add.append(temp_map)
-            
-    handler_lt.add_tile(tiles_to_add, reproject=False)
-    
-    trans = Transformer.from_crs(vprm_inst.sat_imgs.sat_img.rio.crs,
-                                  handler_lt.sat_img.rio.crs,
-                                  always_xy=True)
-    xs = add_corners_to_1d_grid(vprm_inst.sat_imgs.sat_img.coords['x'])
-    ys = add_corners_to_1d_grid(vprm_inst.sat_imgs.sat_img.coords['y'])
-    xs, ys = np.meshgrid(xs,ys)
-    x_a, y_a = trans.transform(xs, ys)
-    b = box(float(np.min(x_a)), float(np.min(y_a)),
-            float(np.max(x_a)), float(np.max(y_a)))
-    b = gpd.GeoSeries(Polygon(b), crs=handler_lt.sat_img.rio.crs)
-    handler_lt.crop_box(b)
-    vprm_inst.add_land_cover_map(handler_lt, save_path=veg_file,
-                                 regridder_save_path=regridder_path)
-    del handler_lt
+    if copernicus_data_path is not None:
+        tiles_to_add = []
+        for i, c in enumerate(glob.glob(os.path.join(copernicus_data_path, '*'))):
+            print(c)
+            temp_map = copernicus_land_cover_map(c)
+            temp_map.load()
+            dj = vprm_inst.is_disjoint(temp_map)
+            if dj:
+                continue
+            print('Add {}'.format(c))
+            if handler_lt is None:
+                handler_lt = temp_map
+            else:
+                tiles_to_add.append(temp_map)
+                
+        handler_lt.add_tile(tiles_to_add, reproject=False)
+        geom = box(*vprm_inst.sat_imgs.sat_img.rio.bounds())
+        df = gpd.GeoDataFrame({"id":1,"geometry":[geom]})
+        df = df.set_crs(vprm_inst.sat_imgs.sat_img.rio.crs)
+        df = df.scale(1.2, 1.2)
+        handler_lt.crop_to_polygon(df) 
+        vprm_inst.add_land_cover_map(handler_lt, save_path=veg_file,
+                                     regridder_save_path=regridder_path)
 
 regridder_path = os.path.join(cfg['out_path'], 'regridder_{}_{}.nc'.format(args.chunk_x,
                                                                             args.chunk_y))
-# if os.path.exists(regridder_path):
-#     print('Use existing regridder')
-#     wrf_op = vprm_inst.to_wrf_output(out_grid, weights_for_regridder=regridder_path)
-# else:
 print('Create regridder')
-wrf_op = vprm_inst.to_wrf_output(out_grid, driver = 'xEMSF', #'ESMF_RegridWeightGen', 
-                                 regridder_save_path=regridder_path)
+wrf_op = vprm_inst.to_wrf_output(out_grid, driver = 'xEMSF', # currently only xESMF works here when the WRF grid is 2D 
+                                 regridder_save_path=regridder_path,
+                                 mpi=False)
 
 # Save to NetCDF files
 file_base = 'VPRM_input_'

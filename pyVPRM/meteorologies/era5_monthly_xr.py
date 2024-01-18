@@ -21,8 +21,9 @@ class met_data_handler(met_data_handler_base):
         self.in_era5_grid = True
         self.this_month = 0
         self.bpath = bpath
+        self.ds_in_t = None
+        self.regridder = None
         self.change_date(year, month, day, hour)
-
 
     def regrid(self, lats=None, lons=None, dataset=None, n_cpus=1,
                weights=None, overwrite_regridder=False):
@@ -89,7 +90,13 @@ class met_data_handler(met_data_handler_base):
         if self.this_month != self.month:
             self.data = xr.open_dataset(os.path.join(self.bpath, '{}_{}.nc'.format(self.year, self.month)))
             self.this_month = self.month
-        # If something should be done if a new date is provided
+
+        if self.ds_in_t is None:
+            self.ds_in_t = xr.Dataset({"lat": (['lat'], self.data['lat'].values,
+                                      {"units": "degrees_north"}),
+                                       "lon": (['lon'], self.data['lon'].values,
+                                          {"units": "degrees_east"})})
+            self.ds_in_t = self.ds_in_t.set_coords(['lon', 'lat'])
         return
     
     def _load_data_for_hour(self):

@@ -3,27 +3,25 @@ import sys
 import os
 import pathlib
 sys.path.append('/home/b/b309233/software/VPRM_preprocessor/')
-import yaml 
 from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
 from pyVPRM.VPRM import vprm 
 from pyVPRM.meteorologies import era5_monthly_xr, era5_class_dkrz
+from pyVPRM.lib.functions import lat_lon_to_modis
 import glob
 import time
 import yaml
 import numpy as np
 import xarray as xr
-import rioxarray as rxr
-from pyproj import Transformer
-import xesmf as xe
-import copy
 import rasterio
 import pandas as pd
 import pickle
 import argparse
-from pyVPRM.lib.functions import lat_lon_to_modis
 import calendar
 from datetime import datetime, timedelta
+from shapely.geometry import box
+import geopandas as gpd
+
 
 def get_hourly_time_range(year, day_of_year):
     start_time = datetime(year, 1, 1) + timedelta(days=int(day_of_year)-1)  # Set the starting time based on the day of the year
@@ -62,7 +60,7 @@ with open(args.config, "r") as stream:
 vprm_inst = vprm(vprm_config_path='../../pyVPRM/vprm_configs/copernicus_land_cover.yaml',
                  n_cpus=args.n_cpus)
 files = glob.glob(os.path.join(cfg['sat_image_path'],# str(args.year),
-                               '*h{:02d}v{:02d}*.h*'.format(h, v)))
+                               '*h{:02d}v{:02d}*.nc'.format(h, v)))
 for c, i in enumerate(sorted(files)):
     if '.xml' in i:
         continue
@@ -70,8 +68,8 @@ for c, i in enumerate(sorted(files)):
     if cfg['satellite'] == 'modis':
         handler = modis(sat_image_path=i)
         handler.load()
-        vprm_inst.add_sat_img(handler, b_nir='B02', b_red='B01',
-                              b_blue='B03', b_swir='B06',
+        vprm_inst.add_sat_img(handler, b_nir='sur_refl_b02', b_red='sur_refl_b01',
+                              b_blue='sur_refl_b03', b_swir='sur_refl_b06',
                               which_evi='evi',
                               drop_bands=True,
                               timestamp_key='sur_refl_day_of_year',
@@ -87,7 +85,9 @@ for c, i in enumerate(sorted(files)):
 
 # Pre-Calculations for the VPRM model. This shouldn't change
 vprm_inst.sort_and_merge_by_timestamp()
-vprm_inst.lowess(gap_filled=True, frac=0.2, it=3)
+vprm_inst.lowess(keys=['evi', 'lswi'],
+                 times='daily',
+                 frac=0.2, it=3)
 vprm_inst.clip_values('evi', 0, 1)
 vprm_inst.clip_values('lswi',-1, 1)
 vprm_inst.calc_min_max_evi_lswi()
@@ -108,7 +108,15 @@ for c in glob.glob(os.path.join(cfg['copernicus_path'], '*')):
         lcm.load()
     else:
         lcm.add_tile(thandler, reproject=False)
-vprm_inst.add_land_cover_map(lcm)
+
+geom = box(*vprm_inst.sat_imgs.sat_img.rio.bounds())
+df = gpd.GeoDataFrame({"id":1,"geometry":[geom]})
+df = df.set_crs(vprm_inst.sat_imgs.sat_img.rio.crs)
+df = df.scale(1.3, 1.3)
+lcm.crop_to_polygon(df)
+
+vprm_inst.add_land_cover_map(lcm, regridder_save_path=os.path.join(cfg['predictions_path'],
+                                                                   'regridder.nc'), mpi=False)
 
 # Set meteorology
 era5_inst = era5_monthly_xr.met_data_handler(args.year, 1, 1, 0,
@@ -120,13 +128,12 @@ vprm_inst.set_met(era5_inst)
 with open(cfg['vprm_params_dict'], 'rb') as ifile:
     res_dict = pickle.load(ifile)
     
-    
 # Make NEE/GPP flux predictions
 days_in_year = 365 + calendar.isleap(args.year)
-regridder_weights = os.path.join(cfg['predictions_path'],
-                                 'regridder_weights_{}_{}.nc'.format(h,v))
+met_regridder_weights = os.path.join(cfg['predictions_path'],
+                                    'met_regridder_weights.nc')
 
-for i in np.arange(1, days_in_year+1, 1):
+for i in np.arange(160,161, 1):
     time_range=get_hourly_time_range(int(args.year), i)
     preds_gpp = []
     preds_nee = []
@@ -135,7 +142,8 @@ for i in np.arange(1, days_in_year+1, 1):
         t0=time.time()
         print(t)
         pred = vprm_inst.make_vprm_predictions(t, fit_params_dict=res_dict,
-                                               regridder_weights=regridder_weights)
+                                               met_regridder_weights=met_regridder_weights)
+        print(pred)
         if pred is None:
             continue
         preds_gpp.append(pred['gpp'])

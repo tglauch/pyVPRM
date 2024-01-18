@@ -1,4 +1,4 @@
-from lib.sat_manager import satellite_data_manager
+from pyVPRM.lib.sat_manager import satellite_data_manager
 import rioxarray as rxr
 import numpy as np
 
