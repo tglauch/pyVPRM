@@ -1,0 +1,7 @@
+This script generates a VPRM input for WRF for a region around the ATTO tower in the Amazon using  MODIS satellite data and the corpernicus land cover map 
+
+The data have been preprocessed to save memory space, but this does not chance anything to the analysis procedure, which is commentend in detail in the script.
+
+The file can be run with:
+
+python vprm_preprocessor_new.py --year 2022 --config ./config/preprocessor_config.yaml
