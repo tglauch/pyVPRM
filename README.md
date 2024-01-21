@@ -6,9 +6,9 @@
 
 Among others it can be used for 
 
-1. Fitting the parameters of a VPRM model
+1. Fitting the parameters of a VPRM model against Eddy-Covariance Fluxtower measurements (e.g. FLUXNET or ICOS)
 2. Making CO2 flux predictions for a given region of interest
-3. Generating input files to run VPRM in the Weather Research and Forecasting Model
+3. Generating input files to run VPRM in the Weather Research and Forecasting Model (WRF)
 
 
 # How to use
