@@ -37,9 +37,13 @@ In order to get started there are a number of example scripts with corresponding
 
 # Modular Structure
 
-The pyVPRM implementation has a modular structure to allow for an easy replacement of satellite and land cover maps, as well as the meteorologies. The file structure is as follows
-
-*Satellite Images + Land Cover Map*
+The pyVPRM implementation has a modular structure to allow for an easy replacement of satellite images and land cover maps, as well as the meteorologies. The file structure is as follows
 
 
-*Meteorologies*
+```pyVPRM/lib/sat_manager.py```
+
+The ```satellite_data_manager``` class in this library is the basic data structure for all satellite image and land cover maps calcuations in pyVPRM. It provides function to reproject, transform, merge and crop satellite images. All other classes for specific satellite images or land cover maps, with the respective loading routines, are derived from this base class. 
+
+
+```pyVPRM/lib/meteorologies```
+The classes in this folder provide the interface for the satellite data. This will usually strongly depend on the data availability. You'll likely need to make modifications here or implement your own class. All meteorology classes are derived from the base class in ```met_base_class.py```. An example to implement a new meteorology class can be found in ```era5_class_draft.py```.
