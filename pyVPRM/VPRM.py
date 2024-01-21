@@ -1166,11 +1166,11 @@ class vprm:
         return dj
 
     
-    def add_vprm_insts(self, vprm_insts):          
-
+    def add_vprm_insts(self, vprm_insts, allow_reproject=True):          
+        # Add Check that timestamps align before merging
         if isinstance(self.sat_imgs, satellite_data_manager):
             self.sat_imgs.add_tile([v.sat_imgs for v in vprm_insts],
-                                    reproject=False)
+                                    reproject=allow_reproject)
             self.xs = self.sat_imgs.sat_img.x.values
             self.ys = self.sat_imgs.sat_img.y.values
             keys = list(self.sat_imgs.sat_img.keys())
