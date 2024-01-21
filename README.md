@@ -34,3 +34,12 @@ Remarks:
 - Open access to satellite data: MODIS,VIIRS: https://e4ftl01.cr.usgs.gov | Sentinel-2: https://scihub.copernicus.eu/
 
 In order to get started there are a number of example scripts with corresponding `README` and comments available in the `./examples` folder. 
+
+# Modular Structure
+
+The pyVPRM implementation has a modular structure to allow for an easy replacement of satellite and land cover maps, as well as the meteorologies. The file structure is as follows
+
+*Satellite Images + Land Cover Map*
+
+
+*Meteorologies*
