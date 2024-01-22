@@ -544,9 +544,7 @@ class vprm:
  
         if n_cpus is None:
             n_cpus = self.n_cpus
-        if times == 'daily':
-            xvals = np.arange(self.tot_num_days) 
-        elif isinstance(times, list):
+        if isinstance(times, list):
             times = np.array(sorted(times))
             if (times[-1] > self.timestamp_end) | (times[0] < self.timestamp_start):
                 print('You have provied some timestamps that are not covered from satellite images.\
@@ -554,6 +552,12 @@ class vprm:
             times=times[(times<=self.timestamp_end) & (times>=self.timestamp_start)]
             xvals = [int(np.round((i - self.timestamp_start).total_seconds()/(24*60*60))) 
                      for i in times]
+        elif isinstance(times, str):
+            if times == 'daily':
+                xvals = np.arange(self.tot_num_days) 
+            else:
+              print('{} is not a valid str for times'.format(times))
+              return
         else:
             xvals = self.sat_imgs.sat_img['time']
         print('Lowess timestamps {}'.format(xvals))
