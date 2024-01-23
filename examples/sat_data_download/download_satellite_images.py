@@ -1,5 +1,6 @@
 import os
-from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis
+from pyVPRM.sat_managers.viirs import VIIRS
+from pyVPRM.sat_managers.modis import modis
 import yaml 
 from datetime import date
 import argparse
