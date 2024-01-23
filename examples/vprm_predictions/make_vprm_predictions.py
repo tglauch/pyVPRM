@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-import sys
 import os
-import pathlib
-sys.path.append('/home/b/b309233/software/VPRM_preprocessor/')
 from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
                         copernicus_land_cover_map, satellite_data_manager
 from pyVPRM.VPRM import vprm 
@@ -24,6 +21,7 @@ import geopandas as gpd
 
 
 def get_hourly_time_range(year, day_of_year):
+  
     start_time = datetime(year, 1, 1) + timedelta(days=int(day_of_year)-1)  # Set the starting time based on the day of the year
     end_time = start_time + timedelta(hours=1)  # Add 1 hour to get the end time of the first hour
 
@@ -56,11 +54,13 @@ with open(args.config, "r") as stream:
     except yaml.YAMLError as exc:
         print(exc)
 
-# Initialize VPRM instance and add satellite images
+# Initialize VPRM instance with the copernicus land cover config
 vprm_inst = vprm(vprm_config_path='../../pyVPRM/vprm_configs/copernicus_land_cover.yaml',
                  n_cpus=args.n_cpus)
 files = glob.glob(os.path.join(cfg['sat_image_path'],# str(args.year),
                                '*h{:02d}v{:02d}*.nc'.format(h, v)))
+
+# Add satellite images to the VPRM instance
 for c, i in enumerate(sorted(files)):
     if '.xml' in i:
         continue
@@ -83,21 +83,29 @@ for c, i in enumerate(sorted(files)):
                               which_evi='evi2', 
                               drop_bands=True)
 
-# Pre-Calculations for the VPRM model. This shouldn't change
+# Sort the satellite data by time and run the lowess smoothing
 vprm_inst.sort_and_merge_by_timestamp()
 vprm_inst.lowess(keys=['evi', 'lswi'],
                  times='daily',
                  frac=0.2, it=3)
+
+# Clip EVI and LSWI values to allows ranges
 vprm_inst.clip_values('evi', 0, 1)
 vprm_inst.clip_values('lswi',-1, 1)
+
+# Calculate the minimum and maximum EVI/LSWI
 vprm_inst.calc_min_max_evi_lswi()
 
-# Add land covery map(s)
+
+# Add land covery map(s) by iterating over all maps in the `copernicus path` and picking those that overlap with our satellite images
 lcm = None
 for c in glob.glob(os.path.join(cfg['copernicus_path'], '*')):
+    # Generate a copernicus_land_cover_map instance
     thandler = copernicus_land_cover_map(c)
     thandler.load()
     bounds = vprm_inst.prototype.sat_img.rio.transform_bounds(thandler.sat_img.rio.crs)
+
+    # Check overlap with our satellite images
     dj = rasterio.coords.disjoint_bounds(bounds, thandler.sat_img.rio.bounds())
     if dj:
         print('Do not add {}'.format(c))
@@ -109,12 +117,14 @@ for c in glob.glob(os.path.join(cfg['copernicus_path'], '*')):
     else:
         lcm.add_tile(thandler, reproject=False)
 
+# Crop land cover map to the extend of our satellite images (to speed up computations and save memory)
 geom = box(*vprm_inst.sat_imgs.sat_img.rio.bounds())
 df = gpd.GeoDataFrame({"id":1,"geometry":[geom]})
 df = df.set_crs(vprm_inst.sat_imgs.sat_img.rio.crs)
 df = df.scale(1.3, 1.3)
 lcm.crop_to_polygon(df)
 
+# Add land cover map to the VPRM instance. This wil regrid the land cover map to the satellite grid
 vprm_inst.add_land_cover_map(lcm, regridder_save_path=os.path.join(cfg['predictions_path'],
                                                                    'regridder.nc'), mpi=False)
 
@@ -128,7 +138,7 @@ vprm_inst.set_met(era5_inst)
 with open(cfg['vprm_params_dict'], 'rb') as ifile:
     res_dict = pickle.load(ifile)
     
-# Make NEE/GPP flux predictions
+# Make NEE/GPP flux predictions and save them
 days_in_year = 365 + calendar.isleap(args.year)
 met_regridder_weights = os.path.join(cfg['predictions_path'],
                                     'met_regridder_weights.nc')
