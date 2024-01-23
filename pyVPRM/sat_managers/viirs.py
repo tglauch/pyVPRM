@@ -149,6 +149,9 @@ class VIIRS(earthdata):
             self.sat_img['SurfReflect_I{}'.format(b)].values[mask == int('01', 2)] = np.nan
         return
 
+    def mask_snow(self, bands=None):
+        return
+
     
     def get_cloud_coverage(self):
         print('PercentCloudy', self.meta_data['PercentCloudy'])
