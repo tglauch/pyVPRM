@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
+import sys
 import os
-from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis, earthdata,\
-                        copernicus_land_cover_map, satellite_data_manager
+import pathlib
+this_file = pathlib.Path(__file__).parent.resolve()
+sys.path.append(os.path.join(this_file, '..', '..'))
+from pyVPRM.sat_managers.viirs import VIIRS
+from pyVPRM.sat_managers.modis import modis
+from pyVPRM.sat_managers.copernicus import copernicus_land_cover_map
 from pyVPRM.VPRM import vprm 
 from pyVPRM.meteorologies import era5_monthly_xr, era5_class_dkrz
 from pyVPRM.lib.functions import lat_lon_to_modis
