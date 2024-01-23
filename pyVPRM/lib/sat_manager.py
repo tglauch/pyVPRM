@@ -118,14 +118,18 @@ class satellite_data_manager:
                 self.set_band_names()    
             self.sat_img = self.sat_img.drop(self.bands)
         
-    def reduce_along_lat_lon(self, lon, lat, interp_method='linear', new_dim_name='z'):
+    def reduce_along_lat_lon(self, lon, lat, interp_method='linear', new_dim_name='z', inplace=True):
         if self.t is None:
             self.t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                            self.sat_img.rio.crs)
         x_a, y_a = self.t.transform(lon, lat)
-        self.sat_img = self.sat_img.interp(x=(new_dim_name, x_a), y=(new_dim_name, y_a),
-                                           method=interp_method)
-        return
+        ret = self.sat_img.interp(x=(new_dim_name, x_a), y=(new_dim_name, y_a),
+                                               method=interp_method)
+        if inplace:
+            self.sat_img = ret
+            return
+        else:
+            return ret
     
     def load(self, proj=None, **kwargs):
         # loading using the individual loading functions 
