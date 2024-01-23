@@ -94,7 +94,7 @@ class vprm:
     def to_wrf_output(self, out_grid, weights_for_regridder=None,
                       regridder_save_path=None, driver='xEMSF',
                       interp_method='conservative', n_cpus=None,
-                      mpi=True):
+                      mpi=True, logs=False):
 
         '''
             Generate output in the format that can be used as an input for WRF 
@@ -138,9 +138,11 @@ class vprm:
                 ds_out_esmf = to_esmf_grid(out_grid)
                 src_grid_esmf.to_netcdf(src_temp_path)
                 ds_out_esmf.to_netcdf(dest_temp_path)
-                exec_str = 'ESMF_RegridWeightGen --source {} --destination {} --weight {} -m {} -r --netcdf4 --no_log –src_regional –dest_regional '.format(src_temp_path, dest_temp_path, regridder_save_path, regridder_options[interp_method])
+                exec_str = 'ESMF_RegridWeightGen --source {} --destination {} --weight {} -m {} -r --netcdf4 –src_regional –dest_regional '.format(src_temp_path, dest_temp_path, regridder_save_path, regridder_options[interp_method])
                 if mpi is True:
                     exec_str = 'mpirun -np {} '.format(n_cpus) + exec_str
+                if not logs:
+                     exec_str += ' --no_log '
                 print(exec_str)
                 os.system(exec_str) # --no_log
                # os.remove(src_temp_path) 
@@ -419,7 +421,7 @@ class vprm:
     def add_land_cover_map(self, land_cover_map, var_name='band_1',
                            save_path=None, filter_size=None,
                            mode='fractional', regridder_save_path=None,
-                           n_cpus = None, mpi = True):
+                           n_cpus = None, mpi = True, logs=False):
         '''
             Add the land cover map. Either use a pre-calculated one or do the calculation on the fly.
 
@@ -455,9 +457,11 @@ class vprm:
                     dest_temp_path = os.path.join(os.path.dirname(regridder_save_path), '{}.nc'.format(str(uuid.uuid4())))
                     src_grid.to_netcdf(src_temp_path)
                     ds_out.to_netcdf(dest_temp_path)
-                    exec_str = 'ESMF_RegridWeightGen --source {} --destination {} --weight {} -m conserve -r --netcdf4 --no_log –src_regional –dest_regional '.format(src_temp_path, dest_temp_path, regridder_save_path)
+                    exec_str = 'ESMF_RegridWeightGen --source {} --destination {} --weight {} -m conserve -r --netcdf4 –src_regional –dest_regional '.format(src_temp_path, dest_temp_path, regridder_save_path)
                     if mpi is True:
                         exec_str = 'mpirun -np {} '.format(n_cpus) + exec_str
+                    if not logs:
+                        exec_str += ' --no_log '
                     print('Run: {}'.format(exec_str))
                     os.system(exec_str) 
                     os.remove(src_temp_path) 
