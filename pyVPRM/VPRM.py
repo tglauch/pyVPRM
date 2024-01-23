@@ -4,8 +4,7 @@ import sys
 import os
 import pathlib
 import numpy as np
-from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis,\
-                                   copernicus_land_cover_map, satellite_data_manager
+from pyVPRM.sat_managers.base_manager import satellite_data_manager
 from pyVPRM.lib.functions import add_corners_to_1d_grid, do_lowess_smoothing,\
                                  make_xesmf_grid, to_esmf_grid
 from scipy.ndimage import uniform_filter
