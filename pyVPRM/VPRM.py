@@ -241,7 +241,8 @@ class vprm:
                     which_evi=None,
                     timestamp_key=None,
                     mask_bad_pixels=True,
-                    mask_clouds=True):
+                    mask_clouds=True,
+                    mask_snow=True):
         '''
             Add a new satellite image and calculate EVI and LSWI if desired
 
@@ -297,6 +298,11 @@ class vprm:
                 handler.mask_clouds()
             else:
                 handler.mask_clouds(bands_to_mask)
+        if mask_snow:
+            if bands_to_mask == []:   
+                handler.mask_snow()
+            else:
+                handler.mask_snow(bands_to_mask)
         if drop_bands:
             if isinstance(drop_bands, list):
                 drop_keys = drop_bands
