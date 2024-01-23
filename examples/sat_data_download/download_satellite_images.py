@@ -1,7 +1,4 @@
-import sys
-import pathlib
 import os
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), '..', '..'))
 from pyVPRM.lib.sat_manager import VIIRS, sentinel2, modis
 import yaml 
 from datetime import date
