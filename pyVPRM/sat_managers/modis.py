@@ -169,4 +169,7 @@ class modis(earthdata):
                                  '%Y-%m-%dT%H:%M:%S.%fZ')
         return date0 + (date1 - date0 ) / 2
 
+    def mask_snow(self, bands=None):
+        return
+
     
