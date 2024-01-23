@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-import sys
 import os
-import pathlib
-this_file = pathlib.Path(__file__).parent.resolve()
-sys.path.append(os.path.join(this_file, '..', '..'))
 from pyVPRM.sat_managers.viirs import VIIRS
 from pyVPRM.sat_managers.modis import modis
 from pyVPRM.sat_managers.copernicus import copernicus_land_cover_map
