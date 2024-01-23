@@ -19,6 +19,7 @@ import geopandas as gpd
 from datetime import datetime, timedelta
 from pyproj import Transformer
 
+# Read command line arguments
 p = argparse.ArgumentParser(
         description = "Commend Line Arguments",
         formatter_class = argparse.RawTextHelpFormatter)
@@ -31,6 +32,7 @@ p.add_argument("--chunk_y", type=int, default=1)
 args = p.parse_args()
 print(args)
 
+#Load config file
 this_year = int(args.year)
 with open(args.config, "r") as stream:
     try:
@@ -38,9 +40,13 @@ with open(args.config, "r") as stream:
     except yaml.YAMLError as exc:
         print(exc)
 
+# Use WRF netcdf to generate an xarray instance. With chunk_x and chunk_y 
+# the output grid can be calculated in disjoint peaces
+
 out_grid = parse_wrf_grid_file(cfg['geo_em_file'], n_chunks=cfg['n_chunks'],
                               chunk_x=args.chunk_x, chunk_y=args.chunk_y)
 
+# Calculate the required MODIS tiles for our out grid
 hvs = np.unique([lat_lon_to_modis(out_grid['lat_b'].values.flatten()[i], 
                                   out_grid['lon_b'].values.flatten()[i]) 
                 for i in range(len(out_grid['lat_b'].values.flatten()))],
@@ -50,8 +56,10 @@ insts = []
 
 #Load the data
 
+# days of interest
 days =  [datetime(this_year, 1, 1)+ timedelta(days=i) for i in np.arange(365.)]
 
+# read the data
 for c, i in enumerate(hvs):
     
     print(i)
@@ -75,7 +83,8 @@ for c, i in enumerate(hvs):
             handler.load()
         else:
             print('Set the satellite in the cfg either to modis or viirs.')
-            
+
+        # In order to save memory crop the satellite images to our WRF out grid  
         if c0 == 0:
             trans = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                            handler.sat_img.rio.crs)
@@ -89,6 +98,7 @@ for c, i in enumerate(hvs):
 
         handler.crop_box(b)
 
+        # Add satellite image to VPRM instance
         if cfg['satellite'] == 'modis':
             new_inst.add_sat_img(handler, b_nir='sur_refl_b02', b_red='sur_refl_b01',
                                   b_blue='sur_refl_b03', b_swir='sur_refl_b06',
@@ -106,17 +116,19 @@ for c, i in enumerate(hvs):
     # Sort and merge satellite images
     new_inst.sort_and_merge_by_timestamp()
     
-    # Apply lowess smoothing
+    # Apply lowess smoothing in time
     new_inst.lowess(keys=['evi', 'lswi'],
                    times=days,
                    frac=0.25, it=3) #0.2
 
+    # Clip EVI and LSWI to the allowed range
     new_inst.clip_values('evi', 0, 1)
     new_inst.clip_values('lswi',-1, 1)
     new_inst.sat_imgs.sat_img = new_inst.sat_imgs.sat_img[['evi', 'lswi']]
 
     insts.append(new_inst)
 
+# Merge the VPRM instances for the different tiles
 insts = np.array(insts)
 vprm_inst = insts[0]
 if len(insts) > 1:
@@ -127,18 +139,13 @@ print(vprm_inst.sat_imgs.sat_img)
 # Add the land cover map
 if not os.path.exists(cfg['out_path']):
     os.makedirs(cfg['out_path'])
+
+# Add the land cover map and perform regridding to the satellite grid
+print('Generate land cover map')
 veg_file = os.path.join(cfg['out_path'], 'veg_map_on_modis_grid_{}_{}.nc'.format(args.chunk_x,
                                                                                  args.chunk_y))
-# if os.path.exists(veg_file):
-#     print('Load land cover map')
-#     add_land_cover_map(vprm_inst,
-#                        land_cover_on_modis_grid=veg_file)
-# else:   
-print('Generate land cover map')
-
 if os.path.exists(veg_file):
     vprm_inst.add_land_cover_map(veg_file)
-
 else:
     regridder_path = os.path.join(cfg['out_path'], 'regridder_{}_{}_lcm.nc'.format(args.chunk_x,
                                                                                    args.chunk_y))
@@ -161,6 +168,8 @@ else:
                 tiles_to_add.append(temp_map)
                 
         handler_lt.add_tile(tiles_to_add, reproject=False)
+            
+        # Crop the land cover map to the extend of our (cropped) satellite images to save memory
         geom = box(*vprm_inst.sat_imgs.sat_img.rio.bounds())
         df = gpd.GeoDataFrame({"id":1,"geometry":[geom]})
         df = df.set_crs(vprm_inst.sat_imgs.sat_img.rio.crs)
@@ -171,6 +180,8 @@ else:
 
 regridder_path = os.path.join(cfg['out_path'], 'regridder_{}_{}.nc'.format(args.chunk_x,
                                                                             args.chunk_y))
+
+# Use all the information in the VPRM instance to generate the WRF input files
 print('Create regridder')
 wrf_op = vprm_inst.to_wrf_output(out_grid, driver = 'xEMSF', # currently only xESMF works here when the WRF grid is 2D 
                                  regridder_save_path=regridder_path,
