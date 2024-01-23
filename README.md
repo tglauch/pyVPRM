@@ -33,7 +33,9 @@ Remarks:
 - Open access to land cover maps: Copernicus: https://lcviewer.vito.be/2019 | ESA World Cover: https://viewer.esa-worldcover.org
 - Open access to satellite data: MODIS,VIIRS: https://e4ftl01.cr.usgs.gov | Sentinel-2: https://scihub.copernicus.eu/
 
-In order to get started there are a number of example scripts with corresponding `README` and comments available in the `./examples` folder. 
+## Examples
+
+In order to get started with ```pyVPRM``` there are a number of example scripts with corresponding `README` and comments available in the `./examples` folder. They come with pre-prepared input data, so you do not need to care about getting the data first. Check it out!
 
 # Modular Structure
 
