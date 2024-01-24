@@ -175,7 +175,6 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None,
         else:
             t_timestamp = timestamps
         mask = np.isfinite(array_to_smooth)
-        print(t_timestamp, array_to_smooth)
         if xvals is None:
             xvals = t_timestamp
         ret =  [np.nan]
