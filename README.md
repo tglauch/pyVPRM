@@ -28,8 +28,8 @@ In order to start your own project you need to at least follow theses steps:
 5. Run the calculations
 
 Remarks: 
-- If there is not yet an interface for your satellite data or land cover map, implement a new subclass in `./lib/sat_manager_add.py`
-- For new land cover maps you need to additionaly provide a mapping of the land cover classes to the VPRM classes in a config file which is stored in  `./vprm_configs`
+- If there is not yet an interface for your satellite data or land cover map, implement a new subclass in `pyVPRM/sat_managers/`
+- For new land cover maps you need to additionaly provide a mapping of the land cover classes to the VPRM classes in a config file which is stored in  `pyVPRM/vprm_configs`
 - Open access to land cover maps: Copernicus: https://lcviewer.vito.be/2019 | ESA World Cover: https://viewer.esa-worldcover.org
 - Open access to satellite data: MODIS,VIIRS: https://e4ftl01.cr.usgs.gov | Sentinel-2: https://scihub.copernicus.eu/
 
