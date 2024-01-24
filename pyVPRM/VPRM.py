@@ -381,8 +381,6 @@ class vprm:
                 if prod > x_time_y:
                     biggest = h
                     x_time_y = prod
-            self.xs = biggest.sat_img.x.values
-            self.ys = biggest.sat_img.y.values
             self.prototype = copy.deepcopy(biggest) 
             keys = list(self.prototype.sat_img.keys())
             self.prototype.sat_img = self.prototype.sat_img.drop(keys)
@@ -418,8 +416,6 @@ class vprm:
                                                                    bounds[1],
                                                                    bounds[2],
                                                                    bounds[3])
-        self.xs = self.sat_imgs.sat_img.x.values
-        self.ys = self.sat_imgs.sat_img.y.values
         keys = list(self.sat_imgs.sat_img.keys())
         self.prototype = satellite_data_manager(sat_img=self.sat_imgs.sat_img.drop(keys))
         return
@@ -506,7 +502,9 @@ class vprm:
                 del count_array
                 del f_array
                 del mask
-                t =  land_cover_map.sat_img.sel(x=self.xs, y=self.ys, method="nearest").to_array().values[0]
+                t =  land_cover_map.sat_img.sel(x=self.sat_imgs.sat_img.x.values,
+                                                y=self.sat_imgs.sat_img.y.values,
+                                                method="nearest").to_array().values[0]
                 self.land_cover_type = copy.deepcopy(self.prototype)
                 self.land_cover_type.sat_img = self.land_cover_type.sat_img.assign({var_name: (['y','x'], t)}) 
                 for i in veg_inds:
@@ -583,10 +581,10 @@ class vprm:
         elif lonlats is None: # If smoothing the entire array
             if 'timestamp' in list(self.sat_imgs.sat_img.data_vars):
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.sat_imgs.sat_img.x.values))).T)})
             else:
                 for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.xs))).T)})
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['time'].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.sat_imgs.sat_img.x.values))).T)})
 
         else: 
             print('Not implemented')
@@ -1184,8 +1182,6 @@ class vprm:
         if isinstance(self.sat_imgs, satellite_data_manager):
             self.sat_imgs.add_tile([v.sat_imgs for v in vprm_insts],
                                     reproject=allow_reproject)
-            self.xs = self.sat_imgs.sat_img.x.values
-            self.ys = self.sat_imgs.sat_img.y.values
             keys = list(self.sat_imgs.sat_img.keys())
             self.prototype = satellite_data_manager(sat_img=self.sat_imgs.sat_img.drop(keys))
             
