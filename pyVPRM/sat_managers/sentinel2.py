@@ -137,7 +137,7 @@ class sentinel2(satellite_data_manager):
     def mask_clouds(self, bands=None):
         if bands is None:
             bands=self.bands
-        self.sat_img[bands] = xr.where((self.sat_img['scl']==9) | (self.sat_img['scl']==8),
+        self.sat_img[bands] = xr.where((self.sat_img['scl']==9) | (self.sat_img['scl']==8) | (self.sat_img['scl']==10),
                                        np.nan, self.sat_img[bands])
         return
       
