@@ -225,6 +225,7 @@ class vprm:
         for key in ret_dict.keys():
             ret_dict[key] = ret_dict[key].assign_attrs(title="VPRM input data for WRF: {}".format(key),
                                                        MODIS_version = '061',
+                                                       software_version = '1.1.0',
                                                        author = 'Dr. Theo Glauch',
                                                        institution1 = 'Heidelberg University',
                                                        institution2 = 'Deutsches Zentrum für Luft- und Raumfahrt (DLR)',
