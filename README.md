@@ -2,7 +2,7 @@
 
 # About
 
-`pyVPRM` is a software package to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respriation Model (VPRM). The implementation is highly flexible and can be run with different satellite products (Sentinel-2, MODIS, VIIRS,...), land cover products (Copernicus Land Cover Service, ESA 10-m World Cover Map) and meteorologies. Through its modular structure it is also easily extendable. 
+`pyVPRM` is a software package to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respriation Model (VPRM). It takes into account both, the primary productivity (GPP) as well as the respiration. The net flux between both of them is the net ecosystem exchange (NEE). The implementation is highly flexible and can be run with different satellite products (Sentinel-2, MODIS, VIIRS,...), land cover products (Copernicus Land Cover Service, ESA 10-m World Cover Map) and meteorologies. Through its modular structure it is also easily extendable. 
 
 Among others it can be used for 
 
@@ -35,7 +35,19 @@ Remarks:
 
 ## Examples
 
-In order to get started with ```pyVPRM``` there are a number of example scripts with corresponding `README` and comments available in the `./examples` folder. They come with pre-prepared input data, so you do not need to care about getting the data first. Check it out!
+In order to get started with ```pyVPRM``` there are a number of example scripts with corresponding `README` and comments available in the github respository: https://github.com/tglauch/pyVPRM_examples.git. It contains example scripts for:
+
+- Generating WRF inputs under ``./wrf_preprocessor``
+- Generating VPRM fluxes (GPP / NEE): ``./vprm_predictions``
+- Fitting VPRM parameters: ``./fit_vprm_parameters``
+- Downloading MODIS/VIIRS data using ``pyVPRM``: ``./sat_data_download``
+
+To download the entire example repository run
+```
+git clone https://github.com/tglauch/pyVPRM_examples.git
+```
+
+They repositorty comes with pre-prepared input data, so you do not need to care about getting the data first. Check it out!
 
 # Modular Structure
 
