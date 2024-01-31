@@ -53,7 +53,7 @@ To download the entire example repository run
 git clone https://github.com/tglauch/pyVPRM_examples.git
 ```
 
-They repositorty comes with pre-prepared input data, so you do not need to care about getting the data first. Check it out!
+The repositorty comes with pre-prepared input data, so you do not need to care about getting the data first. Check it out!
 
 # Modular Structure
 
