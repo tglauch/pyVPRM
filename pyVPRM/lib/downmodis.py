@@ -71,27 +71,27 @@ except ImportError:
         URLPARSE = False
         warnings.warn('urlparse not found, it is not possible to use'
                       ' netrc file', ImportError)
-global GDAL
+# global GDAL
 
-try:
-    import osgeo.gdal as gdal
-    GDAL = True
-except ImportError:
-    try:
-        import gdal
-        GDAL = True
-    except ImportError:
-        GDAL = False
-        warnings.warn('Python GDAL library not found, please install'
-                      ' it to check data downloaded with pyModis', ImportError)
-# setup gdal
-if GDAL:
-    gdal.UseExceptions()
-    gdalDriver = gdal.GetDriverByName('HDF4')
-    if not gdalDriver:
-        GDAL = False
-        warnings.warn("GDAL installation has no support for HDF4, "
-                      "please update GDAL", ImportError)
+# try:
+#     import osgeo.gdal as gdal
+#     GDAL = True
+# except ImportError:
+#     try:
+#         import gdal
+#         GDAL = True
+#     except ImportError:
+#         GDAL = False
+#         warnings.warn('Python GDAL library not found, please install'
+#                       ' it to check data downloaded with pyModis', ImportError)
+# # setup gdal
+# if GDAL:
+#     gdal.UseExceptions()
+#     gdalDriver = gdal.GetDriverByName('HDF4')
+#     if not gdalDriver:
+#         GDAL = False
+#         warnings.warn("GDAL installation has no support for HDF4, "
+#                       "please update GDAL", ImportError)
 
 
 def urljoin(*args):
@@ -365,11 +365,11 @@ class downModis:
         for f in os.listdir(self.writeFilePath):
             if os.path.isfile(os.path.join(self.writeFilePath, f)):
                 self.fileInPath.append(f)
-        global GDAL
-        if not GDAL and checkgdal:
-            logging.warning("WARNING: Python GDAL library not found")
-        elif GDAL and not checkgdal:
-            GDAL = False
+       # global GDAL
+       # if not GDAL and checkgdal:
+       #     logging.warning("WARNING: Python GDAL library not found")
+       # elif GDAL and not checkgdal:
+       #     GDAL = False
         self.dirData = []
         # set today and enday dates
         self._getToday()
@@ -673,12 +673,13 @@ class downModis:
 
            :return: 0 if file is correct, 1 for error
         """
-        try:
-            gdal.Open(filHdf)
-            return 0
-        except (RuntimeError) as e:
-            logging.error(e)
-            return 1
+        return 0 
+        #try:
+        #    gdal.Open(filHdf)
+        #    return 0
+        #except (RuntimeError) as e:
+        #    logging.error(e)
+        #    return 1
 
     def downloadFile(self, filDown, filHdf, day):
         """Download a single file
@@ -740,8 +741,9 @@ class downModis:
             # if no xml file, delete the HDF and redownload
             if filHdf.find('.xml') == -1:
                 test = False
-                if GDAL:
-                    test = self.checkFile(filHdf)
+             #   if GDAL:
+             #       test = self.checkFile(filHdf)
+                test = True
                 if test:
                     os.remove(filSave.name)
                     self._downloadFileHTTP(filDown, filHdf, day)
