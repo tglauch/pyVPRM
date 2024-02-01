@@ -21,7 +21,7 @@ To install of ```pyVPRM``` you can simply use PIP:
 pip install git+https://github.com/tglauch/pyVPRM.git
 ```
 
-Note that pyVPRM requires an installation of the Earth System Modelling Framework (ESMF) to use all functionalities that include regridding. On many HPCs specialized for Earth System Modelling and Climate Research ESMF is pre-installed. If you need to install it yourself you find instructions on the ESMF Github here: https://github.com/esmf-org. 
+Note that pyVPRM requires an installation of the Earth System Modelling Framework (ESMF) to use all functionalities that include regridding. On many HPCs specialized for Earth System Modelling and Climate Research ESMF is pre-installed. If you need to install it yourself you find instructions on the ESMF Github here: https://github.com/esmf-org. Installation through conda is possible as explained here here https://github.com/conda-forge/esmf-feedstock.
 
 ## Start your own project
 
