@@ -8,7 +8,7 @@ import zipfile
 import glob
 from pyproj import Transformer
 import geopandas as gpd
-from pymodis import downmodis
+from pyVPRM.lib import downmodis
 import math 
 from pyproj import Proj
 from affine import Affine
