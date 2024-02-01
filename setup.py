@@ -42,6 +42,7 @@ setup(name='pyVPRM',
         'timezonefinder',
         'pygrib',
         'matplotlib',
-        'lxml'],
+        'lxml',
+        'statsmodels'],
     include_package_data=True,
     zip_safe=False)
