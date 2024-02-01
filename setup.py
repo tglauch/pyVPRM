@@ -41,6 +41,7 @@ setup(name='pyVPRM',
         'tzwhere',
         'timezonefinder',
         'pygrib',
-        'matplotlib'],
+        'matplotlib',
+        'lxml'],
     include_package_data=True,
     zip_safe=False)
