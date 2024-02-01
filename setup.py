@@ -40,6 +40,7 @@ setup(name='pyVPRM',
         'pytz',
         'tzwhere',
         'timezonefinder',
-        'pygrib'],
+        'pygrib',
+        'matplotlib'],
     include_package_data=True,
     zip_safe=False)
