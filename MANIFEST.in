@@ -1,1 +1,1 @@
-include *.yaml
+recursive-include *.yaml
