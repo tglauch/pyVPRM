@@ -42,6 +42,7 @@ setup(name='pyVPRM',
         'pygrib',
         'matplotlib',
         'lxml',
+        'requests',
         'statsmodels'],
     include_package_data=True,
     zip_safe=False)
