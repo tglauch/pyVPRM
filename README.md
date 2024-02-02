@@ -26,9 +26,9 @@ Note that pyVPRM requires an installation of the Earth System Modelling Framewor
 ```
 conda config --add channels conda-forge
 conda config --set channel_priority strict
+conda install -c conda-forge dask netCDF4
 conda install esmf
 conda install esmpy
-conda install -c conda-forge dask netCDF4
 ```
 
 ## Start your own project
