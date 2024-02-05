@@ -43,8 +43,7 @@ class modis(earthdata):
                              'sur_refl_b03', 'sur_refl_b04',
                              'sur_refl_b05', 'sur_refl_b06',
                              'sur_refl_b07', 'sur_refl_qc_500m',
-                             'sur_refl_day_of_year', 'sur_refl_state_500m',
-                             'sur_refl_state_500m']
+                             'sur_refl_day_of_year', 'sur_refl_state_500m']
         else:
             self.use_keys = None
         self.load_kwargs = {'variable': self.use_keys}
