@@ -126,8 +126,7 @@ class VIIRS(earthdata):
             end_bit = b * 4 + 3 # End Bit  (inclusive)
             num_bits_to_extract = end_bit - start_bit + 1
             bit_mask = (1 << num_bits_to_extract) - 1
-            self.sat_img['SurfReflect_QC_500m'].values[np.isnan(self.sat_img['SurfReflect_QC_500m'].values)] = int('1' * 15,2)
-            masks[b] = (np.array(self.sat_img['SurfReflect_QC_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit 
+            masks[b] = (np.array(self.sat_img['SurfReflect_QC_500m'].values, dtype=np.uint32) >> start_bit ) & bit_mask
 
         for mask_int in masks.keys():
             masks[mask_int] = (masks[mask_int] != int('0000', 2))
@@ -143,13 +142,23 @@ class VIIRS(earthdata):
         end_bit = 1 # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1
         bit_mask = (1 << num_bits_to_extract) - 1
-        self.sat_img['SurfReflect_State_500m'].values[np.isnan(self.sat_img['SurfReflect_State_500m'].values)] = int('1' * 16,2)
-        mask = (np.array(self.sat_img['SurfReflect_State_500m'].values, dtype=np.uint32) & bit_mask) >> start_bit   
+        mask = (np.array(self.sat_img['SurfReflect_State_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask
         for b in band_nums:
             self.sat_img['SurfReflect_I{}'.format(b)].values[mask == int('01', 2)] = np.nan
         return
 
     def mask_snow(self, bands=None):
+        if bands is None:
+            bands=self.bands
+         
+        band_nums = [int(band[-1]) for band in bands]
+        start_bit = 12 # Start Bit 
+        end_bit = 12 # End Bit  (inclusive)
+        num_bits_to_extract = end_bit - start_bit + 1
+        bit_mask = (1 << num_bits_to_extract) - 1
+        mask = (np.array(self.sat_img['SurfReflect_State_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask
+        for b in band_nums:
+            self.sat_img['SurfReflect_I{}'.format(b)].values[mask == int('1', 2)] = np.nan
         return
 
     
