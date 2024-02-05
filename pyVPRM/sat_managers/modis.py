@@ -79,7 +79,6 @@ class modis(earthdata):
             end_bit = b[1] * 4 + 1 # End Bit  (inclusive)
             num_bits_to_extract = end_bit - start_bit + 1
             bit_mask = (1 << num_bits_to_extract) - 1
-            self.sat_img['sur_refl_qc_500m'].values[np.isnan(self.sat_img['sur_refl_qc_500m'].values)] = int('1' * 31,2)
             masks[b[1]] = (np.array(self.sat_img['sur_refl_qc_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask 
 
         for b in band_nums:
@@ -98,7 +97,6 @@ class modis(earthdata):
         end_bit = 1 # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1
         bit_mask = (1 << num_bits_to_extract) - 1
-        self.sat_img['sur_refl_state_500m'].values[np.isnan(self.sat_img['sur_refl_state_500m'].values)] = int('1' * 16,2)
         mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bin) & bit_mask 
         for b in band_nums:
             self.sat_img[b[0]].values[mask == int('01', 2)] = np.nan
