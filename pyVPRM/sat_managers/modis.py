@@ -68,6 +68,8 @@ class modis(earthdata):
         self.bands = bands 
         
     def mask_bad_pixels(self, bands=None):
+        # For technical details: https://compscistudies.quora.com/Python-Implementing-a-bitmasking-procedure-to-extract-bits
+        
         if bands is None:
             bands=self.bands
          
