@@ -747,7 +747,7 @@ class vprm:
         if land_cover_type == 1:
             key = 'max_lswi_evergreen'
             if key not in self.max_lswi.sat_img.keys():
-                self.max_lswi.sat_img[key] = self.sat_imgs.sat_img['lswi'].max(self.time_key, skipna=True)
+                self.max_lswi.sat_img[key] = self.sat_imgs.sat_img['lswi'].where((self.sat_imgs.sat_img['evi']>self.max_lswi.sat_img['growing_season_th']),np.nan).max(self.time_key, skipna=True)
         else:
             key = 'max_lswi_others'
             if key not in self.max_lswi.sat_img.keys():
