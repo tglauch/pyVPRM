@@ -536,7 +536,7 @@ class vprm:
         self.min_max_evi.sat_img['min_evi'] = shortcut['evi'].min(self.time_key, skipna=True)
         self.min_max_evi.sat_img['max_evi'] = shortcut['evi'].max(self.time_key, skipna=True)
         # Set growing season threshold to 20% of the difference between max and min value. This should be studied in more detail
-        self.min_max_evi.sat_img['growing_season_th'] = shortcut['evi'].min(self.time_key, skipna=True)  + 0.2 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True)) 
+        self.max_lswi.sat_img['growing_season_th'] = shortcut['evi'].min(self.time_key, skipna=True)  + 0.2 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True)) 
         self.min_max_evi.sat_img['th'] = shortcut['evi'].min(self.time_key, skipna=True) + 0.55 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True))             
         return
     
@@ -744,17 +744,21 @@ class vprm:
         # if (self.new is False) & ('w_scale' in self.buffer.keys()):
         #     return self.buffer['w_scale']
         lswi = self.get_lswi(lon, lat, site_name)
-        if land_cover_type == 1: 
-          self.max_lswi.sat_img['max_lswi'] = self.sat_imgs.sat_img['lswi'].max(self.time_key, skipna=True)
+        if land_cover_type == 1:
+            key = 'max_lswi_evergreen'
+            if key not in self.max_lswi.sat_img.keys():
+                self.max_lswi.sat_img[key] = self.sat_imgs.sat_img['lswi'].max(self.time_key, skipna=True)
         else:
-          self.max_lswi.sat_img['max_lswi'] = self.sat_imgs.sat_img['lswi'].where((self.sat_imgs.sat_img['evi']>0.25),np.nan).max(self.time_key, skipna=True)
+            key = 'max_lswi_others'
+            if key not in self.max_lswi.sat_img.keys():
+                self.max_lswi.sat_img[key] = self.sat_imgs.sat_img['lswi'].where((self.sat_imgs.sat_img['evi']>self.max_lswi.sat_img['growing_season_th']),np.nan).max(self.time_key, skipna=True)
                        
         if site_name is not None:
-            max_lswi = float(self.max_lswi.sat_img.sel(site_names=site_name)['max_lswi'])
+            max_lswi = float(self.max_lswi.sat_img.sel(site_names=site_name)[key])
         elif lon is not None:
-            max_lswi = self.max_lswi.value_at_lonlat(lon, lat, key='max_lswi', as_array=False)
+            max_lswi = self.max_lswi.value_at_lonlat(lon, lat, key=key, as_array=False)
         else:
-            max_lswi = self.max_lswi.sat_img['max_lswi']
+            max_lswi = self.max_lswi.sat_img[key]
         self.buffer['w_scale'] = (1+lswi)/(1+max_lswi)
         return self.buffer['w_scale']
     
@@ -1029,7 +1033,8 @@ class vprm:
         Ts_all = self.get_t_scale(lon, lat,
                                  land_cover_type=land_cover_type)
         ret_dict['Ts'] = Ts_all[1]
-        ret_dict['Ws'] = self.get_w_scale(lon, lat)
+        ret_dict['Ws'] = self.get_w_scale(lon, lat,
+                                         land_cover_type=land_cover_typ)
         ret_dict['tcorr'] = Ts_all[0]
         if add_era_variables!=[]:
             for i in add_era_variables:
