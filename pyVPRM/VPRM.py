@@ -358,7 +358,7 @@ class vprm:
 
 
     def reduce_along_lat_lon(self):
-        self.sat_imgs.reduce_along_lat_lon(lon=[i[0] for i in self.lonlats],
+        self.sat_imgs.reduce_along_lon_lat(lon=[i[0] for i in self.lonlats],
                                            lat=[i[1] for i in self.lonlats],
                                            new_dim_name='site_names', 
                                            interp_method='nearest')
