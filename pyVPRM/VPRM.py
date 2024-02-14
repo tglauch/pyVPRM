@@ -1034,7 +1034,7 @@ class vprm:
                                  land_cover_type=land_cover_type)
         ret_dict['Ts'] = Ts_all[1]
         ret_dict['Ws'] = self.get_w_scale(lon, lat,
-                                         land_cover_type=land_cover_typ)
+                                         land_cover_type=land_cover_type)
         ret_dict['tcorr'] = Ts_all[0]
         if add_era_variables!=[]:
             for i in add_era_variables:
