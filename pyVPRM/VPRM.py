@@ -745,9 +745,9 @@ class vprm:
         #     return self.buffer['w_scale']
         lswi = self.get_lswi(lon, lat, site_name)
         if land_cover_type == 1: 
-          self.max_lswi.sat_img['max_lswi'] = vprm_inst.sat_imgs.sat_img['lswi'].max(self.time_key, skipna=True)
+          self.max_lswi.sat_img['max_lswi'] = self.sat_imgs.sat_img['lswi'].max(self.time_key, skipna=True)
         else:
-          self.max_lswi.sat_img['max_lswi'] = vprm_inst.sat_imgs.sat_img['lswi'].where((vprm_inst.sat_imgs.sat_img['evi']>0.25),np.nan).max(self.time_key, skipna=True)
+          self.max_lswi.sat_img['max_lswi'] = self.sat_imgs.sat_img['lswi'].where((self.sat_imgs.sat_img['evi']>0.25),np.nan).max(self.time_key, skipna=True)
                        
         if site_name is not None:
             max_lswi = float(self.max_lswi.sat_img.sel(site_names=site_name)['max_lswi'])
