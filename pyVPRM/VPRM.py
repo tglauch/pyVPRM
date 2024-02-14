@@ -533,9 +533,11 @@ class vprm:
         self.min_max_evi = copy.deepcopy(self.prototype)
         shortcut = self.sat_imgs.sat_img
         # if self.sites is None:
-        self.max_lswi.sat_img['max_lswi'] = shortcut['lswi'].max(self.time_key, skipna=True)
         self.min_max_evi.sat_img['min_evi'] = shortcut['evi'].min(self.time_key, skipna=True)
         self.min_max_evi.sat_img['max_evi'] = shortcut['evi'].max(self.time_key, skipna=True)
+        # Set growing season threshold to 20% of the difference between max and min value
+        growing_season_th = self.min_max_evi.sat_img['min_evi']  + 0.2 * (self.min_max_evi.sat_img['max_evi'] - self.min_max_evi.sat_img['min_evi']) 
+        self.max_lswi.sat_img['max_lswi'] = shortcut['lswi'].max(self.time_key, skipna=True)
         self.min_max_evi.sat_img['th'] = shortcut['evi'].min(self.time_key, skipna=True) + 0.55 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True))             
         return
     
