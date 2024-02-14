@@ -1,7 +1,7 @@
 Evergreen Forest:
     vprm_class: 1
     class_numbers:
-        = -1
+        - -1
     tmin: 0
     topt: 20
     tmax: 40    
