@@ -535,9 +535,8 @@ class vprm:
         # if self.sites is None:
         self.min_max_evi.sat_img['min_evi'] = shortcut['evi'].min(self.time_key, skipna=True)
         self.min_max_evi.sat_img['max_evi'] = shortcut['evi'].max(self.time_key, skipna=True)
-        # Set growing season threshold to 20% of the difference between max and min value
-        growing_season_th = self.min_max_evi.sat_img['min_evi']  + 0.2 * (self.min_max_evi.sat_img['max_evi'] - self.min_max_evi.sat_img['min_evi']) 
-        self.max_lswi.sat_img['max_lswi'] = shortcut['lswi'].max(self.time_key, skipna=True)
+        # Set growing season threshold to 20% of the difference between max and min value. This should be studied in more detail
+        self.min_max_evi.sat_img['growing_season_th'] = shortcut['evi'].min(self.time_key, skipna=True)  + 0.2 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True)) 
         self.min_max_evi.sat_img['th'] = shortcut['evi'].min(self.time_key, skipna=True) + 0.55 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True))             
         return
     
@@ -730,7 +729,8 @@ class vprm:
             ret = self.era5_inst.get_data(key='ssrd') / 0.505 / 3600
         return ret
     
-    def get_w_scale(self, lon=None, lat=None, site_name=None):
+    def get_w_scale(self, lon=None, lat=None, site_name=None,
+                   land_cover_type=None):
         '''
             Get VPRM w_scale
 
@@ -744,6 +744,11 @@ class vprm:
         # if (self.new is False) & ('w_scale' in self.buffer.keys()):
         #     return self.buffer['w_scale']
         lswi = self.get_lswi(lon, lat, site_name)
+        if land_cover_type == 1: 
+          self.max_lswi.sat_img['max_lswi'] = vprm_inst.sat_imgs.sat_img['lswi'].max(self.time_key, skipna=True)
+        else:
+          self.max_lswi.sat_img['max_lswi'] = vprm_inst.sat_imgs.sat_img['lswi'].where((vprm_inst.sat_imgs.sat_img['evi']>0.25),np.nan).max(self.time_key, skipna=True)
+                       
         if site_name is not None:
             max_lswi = float(self.max_lswi.sat_img.sel(site_names=site_name)['max_lswi'])
         elif lon is not None:
