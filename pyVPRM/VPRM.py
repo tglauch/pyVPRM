@@ -48,6 +48,7 @@ class vprm:
                     The lowess smoothed array
         '''
 
+        print('Running with {}'.format(pyVPRM.__version__))
         self.sat_imgs = []
         
         self.sites = sites
