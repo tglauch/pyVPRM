@@ -4,6 +4,7 @@ import sys
 import os
 import pathlib
 import numpy as np
+import pyVPRM
 from pyVPRM.sat_managers.base_manager import satellite_data_manager
 from pyVPRM.lib.functions import add_corners_to_1d_grid, do_lowess_smoothing,\
                                  make_xesmf_grid, to_esmf_grid
@@ -224,8 +225,8 @@ class vprm:
         
         for key in ret_dict.keys():
             ret_dict[key] = ret_dict[key].assign_attrs(title="VPRM input data for WRF: {}".format(key),
-            #                                           MODIS_version = '061',
-                                                       software_version = '1.1.0',
+                                                       #MODIS_version = '061',
+                                                       software_version = pyVPRM.__version__,
                                                        author = 'Dr. Theo Glauch',
                                                        institution1 = 'Heidelberg University',
                                                        institution2 = 'Deutsches Zentrum für Luft- und Raumfahrt (DLR)',
