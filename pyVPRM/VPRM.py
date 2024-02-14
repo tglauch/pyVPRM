@@ -271,22 +271,6 @@ class vprm:
         if not isinstance(handler, satellite_data_manager):
             print('Satellite image needs to be an object of the sattelite_data_manager class')
             return  
-        if which_evi in ['evi', 'evi2']:
-            nir = handler.sat_img[b_nir] 
-            red = handler.sat_img[b_red]
-            swir = handler.sat_img[b_swir] 
-            if which_evi=='evi':
-                blue = handler.sat_img[b_blue] 
-                temp_evi = (evi_params['g'] * ( nir - red)  / (nir + evi_params['c1'] * red - evi_params['c2'] * blue + evi_params['l']))
-            elif which_evi=='evi2':
-                temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l']))
-            temp_evi = xr.where((temp_evi<=0) | (temp_evi>1) , np.nan, temp_evi)
-            temp_lswi = ((nir - swir) / (nir + swir))
-            temp_lswi = xr.where((temp_lswi<-1) | (temp_lswi>1) , np.nan, temp_lswi)
-            handler.sat_img['evi'] = temp_evi
-            handler.sat_img['lswi'] = temp_lswi
-        if timestamp_key is not None:
-            handler.sat_img = handler.sat_img.rename({timestamp_key: 'timestamps'})
         bands_to_mask = []
         for btm in [b_nir, b_red, b_blue, b_swir]:
             if btm is not None:
@@ -306,6 +290,22 @@ class vprm:
                 handler.mask_snow()
             else:
                 handler.mask_snow(bands_to_mask)
+        if which_evi in ['evi', 'evi2']:
+            nir = handler.sat_img[b_nir] 
+            red = handler.sat_img[b_red]
+            swir = handler.sat_img[b_swir] 
+            if which_evi=='evi':
+                blue = handler.sat_img[b_blue] 
+                temp_evi = (evi_params['g'] * ( nir - red)  / (nir + evi_params['c1'] * red - evi_params['c2'] * blue + evi_params['l']))
+            elif which_evi=='evi2':
+                temp_evi = (evi2_params['g'] * ( nir - red )  / (nir +  evi2_params['c'] * red + evi2_params['l']))
+            temp_evi = xr.where((temp_evi<=0) | (temp_evi>1) , np.nan, temp_evi)
+            temp_lswi = ((nir - swir) / (nir + swir))
+            temp_lswi = xr.where((temp_lswi<-1) | (temp_lswi>1) , np.nan, temp_lswi)
+            handler.sat_img['evi'] = temp_evi
+            handler.sat_img['lswi'] = temp_lswi
+        if timestamp_key is not None:
+            handler.sat_img = handler.sat_img.rename({timestamp_key: 'timestamps'})
         if drop_bands:
             if isinstance(drop_bands, list):
                 drop_keys = drop_bands
