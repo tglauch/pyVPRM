@@ -100,7 +100,7 @@ class modis(earthdata):
         bit_mask = (1 << num_bits_to_extract) - 1
         mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask 
         for b in band_nums:
-            self.sat_img[b[0]].values[mask != int('00', 2)] = np.nan
+            self.sat_img[b[0]].values[mask != int('00', 2)] = np.inf
         return
 
     def get_resolution(self):
