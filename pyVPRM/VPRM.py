@@ -419,12 +419,12 @@ class vprm:
             self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'timestamps': (dims, tismp)}) 
           
         if 'evi' in list(self.sat_imgs.sat_img.data_vars):
-          self.sat_imgs.sat_img['evi'] = xr.where((self.sat_imgs.sat_img['evi']==-np.inf),
+          self.sat_imgs.sat_img['evi'] = xr.where((self.sat_imgs.sat_img['evi']==np.inf),
                                                   np.min(self.sat_imgs.sat_img['evi']),
                                                   self.sat_imgs.sat_img['evi'])  
           
         if 'lswi' in list(self.sat_imgs.sat_img.data_vars):
-          self.sat_imgs.sat_img['lswi'] = xr.where((self.sat_imgs.sat_img['lswi']==-np.inf),
+          self.sat_imgs.sat_img['lswi'] = xr.where((self.sat_imgs.sat_img['lswi']==np.inf),
                                                   np.nan, self.sat_imgs.sat_img['lswi']) 
           
         self.time_key = 'time'
