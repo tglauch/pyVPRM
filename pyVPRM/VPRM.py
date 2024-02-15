@@ -401,9 +401,13 @@ class vprm:
             self.prototype = copy.deepcopy(self.sat_imgs[0]) 
             keys = list(self.prototype.sat_img.keys()) 
             self.prototype.sat_img = self.prototype.sat_img.drop(keys)
-        self.sat_imgs.sat_img['evi'] = xr.where((self.sat_imgs.sat_img['evi']==-np.inf),
-                                                np.min(self.sat_imgs.sat_img['evi']),
-                                                self.sat_imgs.sat_img['evi'])                 
+        if 'evi' in self.sat_imgs.sat_img.keys():
+          self.sat_imgs.sat_img['evi'] = xr.where((self.sat_imgs.sat_img['evi']==-np.inf),
+                                                  np.min(self.sat_imgs.sat_img['evi']),
+                                                  self.sat_imgs.sat_img['evi'])  
+        if 'lswi' in self.sat_imgs.sat_img.keys():
+          self.sat_imgs.sat_img['lswi'] = xr.where((self.sat_imgs.sat_img['lswi']==-np.inf),
+                                                  np.nan, self.sat_imgs.sat_img['lswi'])            
         self.sat_imgs = satellite_data_manager(sat_img = xr.concat([k.sat_img for k in self.sat_imgs], 'time'))
         self.sat_imgs.sat_img =  self.sat_imgs.sat_img.sortby(self.sat_imgs.sat_img.time)
         self.timestamps = self.sat_imgs.sat_img.time
