@@ -400,14 +400,7 @@ class vprm:
         else:
             self.prototype = copy.deepcopy(self.sat_imgs[0]) 
             keys = list(self.prototype.sat_img.keys()) 
-            self.prototype.sat_img = self.prototype.sat_img.drop(keys)
-        if 'evi' in self.sat_imgs.sat_img.keys():
-          self.sat_imgs.sat_img['evi'] = xr.where((self.sat_imgs.sat_img['evi']==-np.inf),
-                                                  np.min(self.sat_imgs.sat_img['evi']),
-                                                  self.sat_imgs.sat_img['evi'])  
-        if 'lswi' in self.sat_imgs.sat_img.keys():
-          self.sat_imgs.sat_img['lswi'] = xr.where((self.sat_imgs.sat_img['lswi']==-np.inf),
-                                                  np.nan, self.sat_imgs.sat_img['lswi'])            
+            self.prototype.sat_img = self.prototype.sat_img.drop(keys)         
         self.sat_imgs = satellite_data_manager(sat_img = xr.concat([k.sat_img for k in self.sat_imgs], 'time'))
         self.sat_imgs.sat_img =  self.sat_imgs.sat_img.sortby(self.sat_imgs.sat_img.time)
         self.timestamps = self.sat_imgs.sat_img.time
@@ -419,11 +412,21 @@ class vprm:
         day_steps = [i.days for i in (self.timestamps - self.timestamp_start)]
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time": day_steps})
         self.prototype.sat_img = self.prototype.sat_img.assign_coords({"time": day_steps})
+      
         if 'timestamps' in list(self.sat_imgs.sat_img.keys()):
             tismp = np.round(np.array((self.sat_imgs.sat_img['timestamps'].values  - np.datetime64(self.timestamp_start))/1e9/(24*60*60), dtype=float))
             dims = list(self.sat_imgs.sat_img.data_vars['timestamps'].dims)
             self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'timestamps': (dims, tismp)}) 
-
+          
+        if 'evi' in list(self.sat_imgs.sat_img.data_vars):
+          self.sat_imgs.sat_img['evi'] = xr.where((self.sat_imgs.sat_img['evi']==-np.inf),
+                                                  np.min(self.sat_imgs.sat_img['evi']),
+                                                  self.sat_imgs.sat_img['evi'])  
+          
+        if 'lswi' in list(self.sat_imgs.sat_img.data_vars):
+          self.sat_imgs.sat_img['lswi'] = xr.where((self.sat_imgs.sat_img['lswi']==-np.inf),
+                                                  np.nan, self.sat_imgs.sat_img['lswi']) 
+          
         self.time_key = 'time'
         return
 
