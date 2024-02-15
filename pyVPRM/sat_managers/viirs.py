@@ -155,9 +155,8 @@ class VIIRS(earthdata):
         bit_mask = (1 << num_bits_to_extract) - 1
         mask = (np.array(self.sat_img['SurfReflect_State_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask
         for b in bands:
-            self.sat_img[b].values[mask == int('1', 2)] = -np.inf
+            self.sat_img[b].values[mask == int('1', 2)] = np.inf
         return
-
     
     def get_cloud_coverage(self):
         print('PercentCloudy', self.meta_data['PercentCloudy'])
