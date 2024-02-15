@@ -416,18 +416,16 @@ class vprm:
         if 'timestamps' in list(self.sat_imgs.sat_img.keys()):
             tismp = np.round(np.array((self.sat_imgs.sat_img['timestamps'].values  - np.datetime64(self.timestamp_start))/1e9/(24*60*60), dtype=float))
             dims = list(self.sat_imgs.sat_img.data_vars['timestamps'].dims)
-            self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'timestamps': (dims, tismp)}) 
-          
+            self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({'timestamps': (dims, tismp)})           
+        self.time_key = 'time'
         if 'evi' in list(self.sat_imgs.sat_img.data_vars):
           self.sat_imgs.sat_img['evi'] = xr.where((self.sat_imgs.sat_img['evi']==np.inf),
-                                                  np.min(self.sat_imgs.sat_img['evi']),
-                                                  self.sat_imgs.sat_img['evi'])  
-          
+                                                   self.sat_imgs.sat_img['evi'].min(dim=self.time_key),
+                                                   self.sat_imgs.sat_img['evi'])
+
         if 'lswi' in list(self.sat_imgs.sat_img.data_vars):
           self.sat_imgs.sat_img['lswi'] = xr.where((self.sat_imgs.sat_img['lswi']==np.inf),
-                                                  np.nan, self.sat_imgs.sat_img['lswi']) 
-          
-        self.time_key = 'time'
+                                                  np.nan, self.sat_imgs.sat_img['lswi'])
         return
 
     def clip_to_box(self, sat_to_crop):
