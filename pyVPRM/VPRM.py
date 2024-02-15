@@ -551,7 +551,7 @@ class vprm:
         self.min_max_evi.sat_img['min_evi'] = shortcut['evi'].min(self.time_key, skipna=True)
         self.min_max_evi.sat_img['max_evi'] = shortcut['evi'].max(self.time_key, skipna=True)
         # Set growing season threshold to 20% of the difference between max and min value. This should be studied in more detail
-        self.max_lswi.sat_img['growing_season_th'] = shortcut['evi'].min(self.time_key, skipna=True)  + 0.2 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True)) 
+        self.max_lswi.sat_img['growing_season_th'] = shortcut['evi'].min(self.time_key, skipna=True)  + 0.3 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True)) 
         self.min_max_evi.sat_img['th'] = shortcut['evi'].min(self.time_key, skipna=True) + 0.55 * ( shortcut['evi'].max(self.time_key, skipna=True) - shortcut['evi'].min(self.time_key, skipna=True))             
         return
     
