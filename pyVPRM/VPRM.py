@@ -425,7 +425,8 @@ class vprm:
 
         if 'lswi' in list(self.sat_imgs.sat_img.data_vars):
           self.sat_imgs.sat_img['lswi'] = xr.where((self.sat_imgs.sat_img['lswi']==np.inf),
-                                                  np.nan, self.sat_imgs.sat_img['lswi'])
+                                                    self.sat_imgs.sat_img['lswi'].min(dim=self.time_key),
+                                                    self.sat_imgs.sat_img['lswi'])
         return
 
     def clip_to_box(self, sat_to_crop):
