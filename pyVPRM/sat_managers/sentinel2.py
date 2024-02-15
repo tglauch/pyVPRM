@@ -145,7 +145,7 @@ class sentinel2(satellite_data_manager):
         if bands is None:
             bands=self.bands
         self.sat_img[bands] = xr.where((self.sat_img['scl']==11),
-                                       -np.inf, self.sat_img[bands])
+                                       np.inf, self.sat_img[bands])
         return
     
     def get_recording_time(self):
