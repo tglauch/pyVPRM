@@ -93,14 +93,13 @@ class modis(earthdata):
         if bands is None:
             bands=self.bands
          
-        band_nums = [(band, int(band.split('_b')[1])) for band in bands]
         start_bit = 0 # Start Bit 
         end_bit = 1 # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1
         bit_mask = (1 << num_bits_to_extract) - 1
         mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask 
-        for b in band_nums:
-            self.sat_img[b[0]].values[mask != int('00', 2)] = np.inf
+        for b in bands:
+            self.sat_img[b].values[mask != int('00', 2)] = np.inf
         return
 
     def get_resolution(self):
@@ -172,14 +171,13 @@ class modis(earthdata):
     def mask_snow(self, bands=None):
         if bands is None:
             bands=self.bands
-        band_nums = [(band, int(band.split('_b')[1])) for band in bands]
         start_bit = 12 # Start Bit 
         end_bit = 12 # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1
         bit_mask = (1 << num_bits_to_extract) - 1
         mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit)  & bit_mask 
-        for b in band_nums:
-            self.sat_img[b[0]].values[mask == int('1', 2)] = np.nan
+        for b in bands:
+            self.sat_img[b].values[mask == int('1', 2)] = np.nan
         return
 
     
