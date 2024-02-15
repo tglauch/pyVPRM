@@ -177,7 +177,7 @@ class modis(earthdata):
         bit_mask = (1 << num_bits_to_extract) - 1
         mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit)  & bit_mask 
         for b in bands:
-            self.sat_img[b].values[mask == int('1', 2)] = -np.inf
+            self.sat_img[b].values[mask == int('1', 2)] = np.inf
         return
 
     
