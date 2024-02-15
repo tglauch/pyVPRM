@@ -144,7 +144,7 @@ class VIIRS(earthdata):
         bit_mask = (1 << num_bits_to_extract) - 1
         mask = (np.array(self.sat_img['SurfReflect_State_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask
         for b in band_nums:
-            self.sat_img['SurfReflect_I{}'.format(b)].values[mask != int('00', 2)] = np.nan
+            self.sat_img['SurfReflect_I{}'.format(b)].values[mask != int('00', 2)] = -np.inf
         return
 
     def mask_snow(self, bands=None):
