@@ -271,25 +271,6 @@ class vprm:
         if not isinstance(handler, satellite_data_manager):
             print('Satellite image needs to be an object of the sattelite_data_manager class')
             return  
-        bands_to_mask = []
-        for btm in [b_nir, b_red, b_blue, b_swir]:
-            if btm is not None:
-                  bands_to_mask.append(btm)
-        if mask_bad_pixels:
-            if bands_to_mask == []:   
-                handler.mask_bad_pixels()
-            else:
-                handler.mask_bad_pixels(bands_to_mask)
-        if mask_clouds:
-            if bands_to_mask == []:   
-                handler.mask_clouds()
-            else:
-                handler.mask_clouds(bands_to_mask)
-        if mask_snow:
-            if bands_to_mask == []:   
-                handler.mask_snow()
-            else:
-                handler.mask_snow(bands_to_mask)
         if which_evi in ['evi', 'evi2']:
             nir = handler.sat_img[b_nir] 
             red = handler.sat_img[b_red]
@@ -306,6 +287,28 @@ class vprm:
             handler.sat_img['lswi'] = temp_lswi
         if timestamp_key is not None:
             handler.sat_img = handler.sat_img.rename({timestamp_key: 'timestamps'})
+        bands_to_mask = []
+        if which_evi in ['evi', 'evi2']:
+            bands_to_mask = [which_evi, 'lswi']
+        else:
+          for btm in [b_nir, b_red, b_blue, b_swir]:
+              if btm is not None:
+                    bands_to_mask.append(btm)
+        if mask_bad_pixels:
+            if bands_to_mask == []:   
+                handler.mask_bad_pixels()
+            else:
+                handler.mask_bad_pixels(bands_to_mask)
+        if mask_clouds:
+            if bands_to_mask == []:   
+                handler.mask_clouds()
+            else:
+                handler.mask_clouds(bands_to_mask)
+        if mask_snow:
+            if bands_to_mask == []:   
+                handler.mask_snow()
+            else:
+                handler.mask_snow(bands_to_mask)
         if drop_bands:
             if isinstance(drop_bands, list):
                 drop_keys = drop_bands
