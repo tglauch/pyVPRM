@@ -1191,7 +1191,7 @@ class vprm:
                                             np.random.uniform(par0_init, np.sqrt(par0_init)),
                                             np.random.uniform(alpha_init, np.sqrt(alpha_init)),
                                             np.random.uniform(beta_init, np.sqrt(np.abs(beta_init)))]) 
-                    mse = np.mean((func(data_for_fit, fit_gpp[0][0], fit_gpp[0][1], fit_gpp[0][2], fit_gpp[0][3]) - data_for_fit['gpp'])**2)
+                    mse = np.mean((func(data_for_fit, fit_gpp[0][0], fit_gpp[0][1], fit_gpp[0][2], fit_gpp[0][3]) - data_for_fit['nee'])**2)
                     if mse < best_mse:
                         best_mse = mse
                         best_fit_params = fit_gpp 
