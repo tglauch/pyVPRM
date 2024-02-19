@@ -158,6 +158,8 @@ def to_esmf_grid(sat_img):
 
 def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, 
                         frac=0.25, it=3):
+### ToDo: Choose frac adaptively from the data. 
+                          
     '''
         Performs lowess smoothing on a 2-D-array, where the first dimension is the time.
 
