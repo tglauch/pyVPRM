@@ -228,6 +228,7 @@ class vprm:
             ret_dict[key] = ret_dict[key].assign_attrs(title="VPRM input data for WRF: {}".format(key),
                                                        #MODIS_version = '061',
                                                        software_version = pyVPRM.__version__,
+                                                       software_github = 'https://github.com/tglauch/pyVPRM',
                                                        author = 'Dr. Theo Glauch',
                                                        institution1 = 'Heidelberg University',
                                                        institution2 = 'Deutsches Zentrum für Luft- und Raumfahrt (DLR)',
