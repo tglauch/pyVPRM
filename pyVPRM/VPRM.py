@@ -572,6 +572,8 @@ class vprm:
  
         if n_cpus is None:
             n_cpus = self.n_cpus
+        if isinstance(times, pd.core.indexes.datetimes.DatetimeIndex):
+            times = list(times)
         if isinstance(times, list):
             times = np.array(sorted(times))
             if (times[-1] > self.timestamp_end) | (times[0] < self.timestamp_start):
