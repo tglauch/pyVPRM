@@ -593,7 +593,7 @@ class vprm:
         print('Lowess timestamps {}'.format(xvals))
 
         if self.sites is not None:  # Is flux tower sites are given        
-            if 'timestamp' in list(self.sat_imgs.sat_img.data_vars):
+            if 'timestamps' in list(self.sat_imgs.sat_img.data_vars):
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'site_names'], np.array([do_lowess_smoothing(self.sat_imgs.sat_img.sel(site_names=i)[key].values, timestamps=self.sat_imgs.sat_img.sel(site_names=i)['timestamps'].values, xvals=xvals, frac=frac, it=it) for i in self.sat_imgs.sat_img.site_names.values]).T)})      
             else:
@@ -602,7 +602,7 @@ class vprm:
 
             
         elif lonlats is None: # If smoothing the entire array
-            if 'timestamp' in list(self.sat_imgs.sat_img.data_vars):
+            if 'timestamps' in list(self.sat_imgs.sat_img.data_vars):
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign({key: (['time_gap_filled', 'y', 'x'], np.array(Parallel(n_jobs=n_cpus, max_nbytes=None)(delayed(do_lowess_smoothing)(self.sat_imgs.sat_img[key][:,:,i].values, timestamps=self.sat_imgs.sat_img['timestamps'][:,:,i].values, xvals=xvals, frac=frac, it=it) for i, x_coord in enumerate(self.sat_imgs.sat_img.x.values))).T)})
             else:
