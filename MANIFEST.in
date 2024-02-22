@@ -1,2 +1,3 @@
 include pyVPRM/vprm_configs/copernicus_land_cover.yaml
 include pyVPRM/vprm_configs/esa_world_cover.yaml
+include pyVPRM/vprm_configs/synmap.yaml
