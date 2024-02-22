@@ -466,7 +466,8 @@ class vprm:
             print('Generating satellite data compatible land cover map')
             
             for key in self.map_to_vprm_class.keys():
-                land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_to_vprm_class[key]
+                land_cover_map.sat_img[var_name] = xr.where(land_cover_map.sat_img[var_name]==key, self.map_to_vprm_class[key], land_cover_map.sat_img[var_name]) 
+               # land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_to_vprm_class[key]
                 
             if mode == 'fractional':
                 import xesmf as xe
