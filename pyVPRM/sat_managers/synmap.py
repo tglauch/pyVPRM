@@ -2,7 +2,7 @@ from pyVPRM.sat_managers.base_manager import satellite_data_manager
 import rioxarray as rxr
 import numpy as np
 
-class city_land_cover_map(satellite_data_manager):
+class synmap(satellite_data_manager):
     
     def __init__(self, sat_image_path):
         super().__init__()   
