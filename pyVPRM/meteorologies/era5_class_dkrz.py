@@ -162,7 +162,7 @@ class met_data_handler(met_data_handler_base):
                 bfolder = os.path.dirname(weights)
                 src_temp_path = os.path.join(bfolder, '{}.nc'.format(str(uuid.uuid4())))
                 dest_temp_path = os.path.join(bfolder , '{}.nc'.format(str(uuid.uuid4())))
-                self.ds_in_t.to_netcdf(src_temp_path)
+                self.ds_out.to_netcdf(src_temp_path)
                 t_ds_out.to_netcdf(dest_temp_path)
                 cmd = 'mpirun -np {}  ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log'.format(n_cpus, src_temp_path, dest_temp_path, weights)
                 print(cmd)
