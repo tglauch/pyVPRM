@@ -344,7 +344,10 @@ class earthdata(satellite_data_manager):
             fs = modisDown.getFilesList(d)
             cde = modisDown.checkDataExist(fs)
             print('Download {}: {}'.format(d, cde))
-            modisDown.dayDownload(d, cde)
+            for f in fs:
+                os.system('wget --user {} --password {} --directory-prefix {} {} '.format(modisDown.user, modisDown.password, modisDown.writeFilePath,
+                                                                                          os.path.join(modisDown.url, modisDown.path, d, f)))
+            #modisDown.dayDownload(d, cde)
         return
     
     def _to_standard_format(self):
