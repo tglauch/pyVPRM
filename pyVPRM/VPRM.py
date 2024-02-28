@@ -1156,9 +1156,11 @@ class vprm:
             best_mse = np.inf    
             for i in range(100):
                 func = lambda x, a, b: a * x['tcorr'] + b
-                fit_respiration = curve_fit(func, data_for_fit, data_for_fit['respiration'], maxfev=5000,
-                                            p0=[np.random.uniform(-0.5, 0.5),
-                                                np.random.uniform(-0.5, 0.5)]) 
+                mask = (data_for_fit['par'] == 0)
+                fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
+                                            maxfev=5000,
+                                            p0=[np.random.uniform(0, 0.5),
+                                                np.random.uniform(0, 0.5)]) 
                 mse = np.mean((func(data_for_fit, fit_respiration[0][0], fit_respiration[0][1]) - data_for_fit['respiration'])**2)
                 if mse < best_mse:
                     best_mse = mse
@@ -1166,43 +1168,35 @@ class vprm:
                 best_fit_params_dict[key] = {'alpha': best_fit_params[0][0],
                                              'beta': best_fit_params[0][1]}
 
-            #GPP
-            best_mse = np.inf
-            for i in range(100):  
-                func = lambda x, lamb, par0: (lamb * data_for_fit['Ws'] * data_for_fit['Ts'] * data_for_fit['Ps']) * data_for_fit['evi'] * data_for_fit['par'] / (1 + data_for_fit['par']/par0) 
-                fit_gpp = curve_fit(func,
-                                    data_for_fit, data_for_fit['gpp'], maxfev=5000,
-                                    p0=[np.random.uniform(0,1), np.random.uniform(0,1000)]) 
-                mse = np.mean((func(data_for_fit, fit_gpp[0][0], fit_gpp[0][1]) - data_for_fit['gpp'])**2)
-                if mse < best_mse:
-                    best_mse = mse
-                    best_fit_params = fit_gpp 
-                best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
-                best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
+            # #GPP
+            # best_mse = np.inf
+            # for i in range(100):  
+            #     func = lambda x, lamb, par0: (lamb * data_for_fit['Ws'] * data_for_fit['Ts'] * data_for_fit['Ps']) * data_for_fit['evi'] * data_for_fit['par'] / (1 + data_for_fit['par']/par0) 
+            #     fit_gpp = curve_fit(func,
+            #                         data_for_fit, data_for_fit['gpp'], maxfev=5000,
+            #                         p0=[np.random.uniform(0,1), np.random.uniform(0,1000)]) 
+            #     mse = np.mean((func(data_for_fit, fit_gpp[0][0], fit_gpp[0][1]) - data_for_fit['gpp'])**2)
+            #     if mse < best_mse:
+            #         best_mse = mse
+            #         best_fit_params = fit_gpp 
+            #     best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
+            #     best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
                 
             #NEE
             if fit_nee:
                 best_mse = np.inf
-                lamb_init = best_fit_params_dict[key]['lamb']
-                par0_init = best_fit_params_dict[key]['par0']
-                alpha_init = best_fit_params_dict[key]['alpha']
-                beta_init = best_fit_params_dict[key]['beta']
                 for i in range(100):  
-                    func = lambda x, lamb, par0, a, b: -1 * (lamb * data_for_fit['Ws'] * data_for_fit['Ts'] * data_for_fit['Ps']) * data_for_fit['evi'] * data_for_fit['par'] / (1 + data_for_fit['par']/par0) + a * x['tcorr'] + b
-                    fit_gpp = curve_fit(func,
+                    func = lambda x, lamb, par0: -1 * (lamb * data_for_fit['Ws'] * data_for_fit['Ts'] * data_for_fit['Ps']) * data_for_fit['evi'] * data_for_fit['par'] / (1 + data_for_fit['par']/par0) + best_fit_params_dict[key]['alpha'] * x['tcorr'] + best_fit_params_dict[key]['beta']
+                    fit_nee = curve_fit(func,
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
-                                        p0=[np.random.uniform(lamb_init, np.sqrt(lamb_init)),
-                                            np.random.uniform(par0_init, np.sqrt(par0_init)),
-                                            np.random.uniform(alpha_init, np.sqrt(alpha_init)),
-                                            np.random.uniform(beta_init, np.sqrt(np.abs(beta_init)))]) 
+                                        p0=[np.random.uniform(0, 0.5),
+                                            np.random.uniform(100, 1000)]) 
                     mse = np.mean((func(data_for_fit, fit_gpp[0][0], fit_gpp[0][1], fit_gpp[0][2], fit_gpp[0][3]) - data_for_fit['nee'])**2)
                     if mse < best_mse:
                         best_mse = mse
-                        best_fit_params = fit_gpp 
+                        best_fit_params = fit_nee
                     best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
                     best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
-                    best_fit_params_dict[key]['alpha'] = best_fit_params[0][2]
-                    best_fit_params_dict[key]['beta'] = best_fit_params[0][3]
 
         return best_fit_params_dict
 
