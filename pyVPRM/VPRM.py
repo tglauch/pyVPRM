@@ -1154,13 +1154,13 @@ class vprm:
 
             # Respiration
             best_mse = np.inf    
-            for i in range(100):
-                func = lambda x, a, b: a * x['tcorr'] + b
+            for i in range(200):
+                func = lambda x, a, b: np.maximum(a * x['tcorr'] + b, 0)
                 mask = (data_for_fit['par'] == 0)
                 fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
                                             maxfev=5000,
-                                            p0=[np.random.uniform(0, 0.5),
-                                                np.random.uniform(0, 0.5)]) 
+                                            p0=[np.random.uniform(-0.5, 0.5),
+                                                np.random.uniform(-0.5, 0.5)]) 
                 mse = np.mean((func(data_for_fit[mask], fit_respiration[0][0], fit_respiration[0][1]) - data_for_fit['respiration'][mask])**2)
                 if mse < best_mse:
                     best_mse = mse
@@ -1185,7 +1185,7 @@ class vprm:
             #NEE
             if fit_nee:
                 best_mse = np.inf
-                for i in range(100):  
+                for i in range(200):  
                     func = lambda x, lamb, par0: -1 * (lamb * data_for_fit['Ws'] * data_for_fit['Ts'] * data_for_fit['Ps']) * data_for_fit['evi'] * data_for_fit['par'] / (1 + data_for_fit['par']/par0) + best_fit_params_dict[key]['alpha'] * x['tcorr'] + best_fit_params_dict[key]['beta']
                     fit_nee = curve_fit(func,
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
