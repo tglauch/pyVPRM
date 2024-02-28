@@ -1161,7 +1161,7 @@ class vprm:
                                             maxfev=5000,
                                             p0=[np.random.uniform(0, 0.5),
                                                 np.random.uniform(0, 0.5)]) 
-                mse = np.mean((func(data_for_fit, fit_respiration[0][0], fit_respiration[0][1]) - data_for_fit['respiration'])**2)
+                mse = np.mean((func(data_for_fit[mask], fit_respiration[0][0], fit_respiration[0][1]) - data_for_fit['respiration'][mask])**2)
                 if mse < best_mse:
                     best_mse = mse
                     best_fit_params = fit_respiration
@@ -1191,7 +1191,7 @@ class vprm:
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
                                         p0=[np.random.uniform(0, 0.5),
                                             np.random.uniform(100, 1000)]) 
-                    mse = np.mean((func(data_for_fit, fit_gpp[0][0], fit_gpp[0][1], fit_gpp[0][2], fit_gpp[0][3]) - data_for_fit['nee'])**2)
+                    mse = np.mean((func(data_for_fit, fit_nee[0][0], fit_nee[0][1]) - data_for_fit['nee'])**2)
                     if mse < best_mse:
                         best_mse = mse
                         best_fit_params = fit_nee
