@@ -1101,7 +1101,7 @@ class vprm:
             if inputs is None:
                 return None
             gpps.append(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/fit_params_dict[i]['par0'])))
-            respirations.append(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['alpha'] * inputs['tcorr'] + fit_params_dict[i]['beta']))
+            respirations.append(np.maximum(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['alpha'] * inputs['tcorr'] + fit_params_dict[i]['beta'])))
         ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
         ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
         return ret_res
