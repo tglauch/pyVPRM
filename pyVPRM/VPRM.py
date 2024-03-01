@@ -1101,7 +1101,7 @@ class vprm:
             if inputs is None:
                 return None
             gpps.append(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/fit_params_dict[i]['par0'])))
-            respirations.append(np.maximum(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['alpha'] * inputs['tcorr'] + fit_params_dict[i]['beta'])))
+            respirations.append(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['alpha'] * np.maximum(self.temp_coefficients[i][0], inputs['tcorr']) + fit_params_dict[i]['beta']))
         ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
         ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
         return ret_res
@@ -1155,7 +1155,7 @@ class vprm:
             # Respiration
             best_mse = np.inf    
             for i in range(200):
-                func = lambda x, a, b: np.maximum(a * x['tcorr'] + b, 0)
+                func = lambda x, a, b: a * np.maximum(x['tcorr'], ##todo) + b
                 mask = (data_for_fit['par'] == 0)
                 fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
                                             maxfev=5000,
