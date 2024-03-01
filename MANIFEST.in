@@ -1,3 +1,6 @@
 include pyVPRM/vprm_configs/copernicus_land_cover.yaml
 include pyVPRM/vprm_configs/esa_world_cover.yaml
 include pyVPRM/vprm_configs/synmap.yaml
+include pyVPRM/lib/fluxnet_info/fluxnet_sites.pkl
+include pyVPRM/lib/fluxnet_info/site_infos.txt
+
