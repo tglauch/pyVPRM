@@ -1118,6 +1118,7 @@ class vprm:
     def fit_vprm_data(self, data_list, variable_dict,
                       same_length=True,
                       fit_nee=True,
+                      fit_resp=True,
                       best_fit_params_dict=None):
         '''
             Run a VPRM fit
@@ -1155,7 +1156,7 @@ class vprm:
             data_for_fit = pd.concat(data_for_fit)
 
             # Respiration
-            if 'alpha' not in best_fit_params_dict[key].keys():
+            if fit_resp:
               best_mse = np.inf    
               for i in range(200):
                   func = lambda x, a, b: np.maximum(a * x['tcorr'] + b, 0)
