@@ -1101,7 +1101,7 @@ class vprm:
             if inputs is None:
                 return None
             gpps.append(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/fit_params_dict[i]['par0'])))
-            respirations.append(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['alpha'] * np.maximum(self.temp_coefficients[i][0], inputs['tcorr']) + fit_params_dict[i]['beta']))
+            respirations.append(np.maximum(self.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['alpha'] * inputs['tcorr'] + fit_params_dict[i]['beta']), 0))
         ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
         ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
         return ret_res
@@ -1117,7 +1117,8 @@ class vprm:
 
     def fit_vprm_data(self, data_list, variable_dict,
                       same_length=True,
-                      fit_nee=True):
+                      fit_nee=True,
+                      best_fit_params_dict=None):
         '''
             Run a VPRM fit
             Parameters:
@@ -1138,7 +1139,8 @@ class vprm:
                 fit_dict[lt].append(i)
             else:
                 fit_dict[lt] = [i]
-        best_fit_params_dict = dict()
+        if best_fit_params_dict is None:
+            best_fit_params_dict = dict()
         for key in fit_dict.keys():
             min_len = np.min([i.get_len() for i in fit_dict[key]])
             print(key, min_len)
@@ -1153,20 +1155,21 @@ class vprm:
             data_for_fit = pd.concat(data_for_fit)
 
             # Respiration
-            best_mse = np.inf    
-            for i in range(200):
-                func = lambda x, a, b: a * np.maximum(x['tcorr'], ##todo) + b
-                mask = (data_for_fit['par'] == 0)
-                fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
-                                            maxfev=5000,
-                                            p0=[np.random.uniform(-0.5, 0.5),
-                                                np.random.uniform(-0.5, 0.5)]) 
-                mse = np.mean((func(data_for_fit[mask], fit_respiration[0][0], fit_respiration[0][1]) - data_for_fit['respiration'][mask])**2)
-                if mse < best_mse:
-                    best_mse = mse
-                    best_fit_params = fit_respiration
-                best_fit_params_dict[key] = {'alpha': best_fit_params[0][0],
-                                             'beta': best_fit_params[0][1]}
+            if 'alpha' not in best_fit_params_dict[key].keys():
+              best_mse = np.inf    
+              for i in range(200):
+                  func = lambda x, a, b: np.maximum(a * x['tcorr'] + b, 0)
+                  mask = (data_for_fit['par'] == 0)
+                  fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
+                                              maxfev=5000,
+                                              p0=[np.random.uniform(-0.5, 0.5),
+                                                  np.random.uniform(-0.5, 0.5)]) 
+                  mse = np.mean((func(data_for_fit[mask], fit_respiration[0][0], fit_respiration[0][1]) - data_for_fit['respiration'][mask])**2)
+                  if mse < best_mse:
+                      best_mse = mse
+                      best_fit_params = fit_respiration
+                  best_fit_params_dict[key] = {'alpha': best_fit_params[0][0],
+                                               'beta': best_fit_params[0][1]}
 
             # #GPP
             # best_mse = np.inf
