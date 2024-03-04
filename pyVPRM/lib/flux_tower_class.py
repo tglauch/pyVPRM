@@ -52,7 +52,34 @@ class flux_tower_data:
         for i in add_dict.keys():
             self.flux_data[i] = add_dict[i]
         return
-        
+
+class brazil_flux_data(flux_tower_data):
+    # https://daac.ornl.gov/cgi-bin/dsviewer.pl?ds_id=1842
+    
+    def __init__(self, data_path, ssrd_key=None,
+                 t2m_key=None, use_vars=None,
+                 t_start=None, t_stop=None):
+        site_info_dict = dict()
+        site_info_dict['K67'] = dict(lat=-2.857, lon= -54.959,
+                                     veg_class='TRO')
+        site_info_dict['K77'] = dict(lat=-3.0202, lon= -54.8885,
+                                     veg_class='GRA')
+        site_info_dict['K83'] = dict(lat=-3.017, lon= -54.9707,
+                                     veg_class='TRO')
+        site_info_dict['K34'] = dict(lat=-2.6091, lon= -60.2093,
+                                     veg_class='TRO')
+        site_info_dict['CAX'] = dict(lat=-1.7483, lon= -51.4536,
+                                     veg_class='TRO')
+        site_info_dict['FNS'] = dict(lat=-10.7618, lon= -62.3572,
+                                     veg_class='GRA')
+        site_info_dict['RJA'] = dict(lat=-10.078, lon= -61.9331,
+                                     veg_class='TRO')
+        site_info_dict['BAN'] = dict(lat=-9.824416667, lon= -50.1591111,
+                                     veg_class='TRO') # transitional forest
+        site_info_dict['RPG'] = dict(lat=-21.61947222, lon= -47.6498889,
+                                     veg_class='EF')
+
+
 class fluxnet(flux_tower_data):
     
     def __init__(self, data_path,
