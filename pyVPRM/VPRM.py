@@ -1067,7 +1067,7 @@ class vprm:
     
     def make_vprm_predictions(self, date, fit_params_dict=None,
                               met_regridder_weights=None,
-                              no_flux_veg_types=[0, 5, 8]):
+                              no_flux_veg_types=[0, 8]):
         '''
             Using the VPRM fit parameters make predictions on the entire satellite image.
 
