@@ -138,8 +138,6 @@ class satellite_data_manager:
         self.individual_loading(**kwargs)
         if proj is not None:
             self.reproject(proj=proj)     
-        self.t = Transformer.from_crs('+proj=longlat +datum=WGS84',
-                                self.sat_img.rio.crs)
         return
         
     def get_band_names(self):
