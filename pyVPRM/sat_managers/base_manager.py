@@ -118,7 +118,7 @@ class satellite_data_manager:
                 self.set_band_names()    
             self.sat_img = self.sat_img.drop(self.bands)
         
-    def reduce_along_lon_lat(self, lon, lat, interp_method='linear', new_dim_name='z', inplace=True):
+    def reduce_along_lon_lat(self, lon, lat, interp_method='nearest', new_dim_name='z', inplace=True):
         if self.t is None:
             self.t = Transformer.from_crs('+proj=longlat +datum=WGS84',
                                            self.sat_img.rio.crs)
