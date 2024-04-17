@@ -90,6 +90,7 @@ class met_data_handler(met_data_handler_base):
         if self.this_month != self.month:
             self.data = xr.open_dataset(os.path.join(self.bpath, '{}_{}.nc'.format(self.year, self.month)))
             self.this_month = self.month
+            self.in_era5_grid = True
 
         if self.ds_in_t is None:
             self.ds_in_t = xr.Dataset({"lat": (['lat'], self.data['lat'].values,
