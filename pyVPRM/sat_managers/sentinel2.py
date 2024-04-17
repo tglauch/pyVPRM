@@ -130,7 +130,7 @@ class sentinel2(satellite_data_manager):
     def mask_bad_pixels(self, bands=None):
         if bands is None:
             bands=self.bands   
-        self.sat_img[bands] = xr.where((self.sat_img['scl']==0) | (self.sat_img['scl']==1) ,
+        self.sat_img[bands] = xr.where((self.sat_img['scl']==0) | (self.sat_img['scl']==1) | (self.sat_img['scl']==2) | (self.sat_img['scl']==3) ,
                                        np.nan,self.sat_img[bands])
         return
     
