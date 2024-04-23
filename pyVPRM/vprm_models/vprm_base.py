@@ -15,12 +15,13 @@ class vprm_base:
     Base class for all meteorologies
     '''
     
-    def __init__(self, met, vprm_pre):
+    def __init__(self, met, vprm_pre, fit_params_dict):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
         self.buffer = dict()
         self.buffer['cur_lat'] = None
         self.buffer['cur_lon'] = None
+        self.fit_params_dict = fit_params_dict
         return
 
     def load_weather_data(self, hour, day, month, year, era_keys):
@@ -108,8 +109,10 @@ class vprm_base:
         else:
          #   land_type = self.land_cover_type.sat_img['land_cover_type']
             th = self.vprm_pre.min_max_evi.sat_img['th']
-        if land_cover_type == 1:
+        if land_cover_type == 1: #Always above threshold. So p_scale is 1 
             th = -np.inf
+        if land_cover_type in [5,7]: #Never above threshold. So p_scale always (1+lswi)/2
+            th = np.inf
         if site_name is not None:
             if (evi > th):    
                 p_scale = 1
@@ -154,20 +157,26 @@ class vprm_base:
         lswi = self.get_lswi(lon, lat, site_name)
         if land_cover_type == 1:
             key = 'max_lswi_evergreen'
-            if key not in self.max_lswi.sat_img.keys():
+            if key not in self.vprm_pre.max_lswi.sat_img.keys():
                 self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.max_lswi.sat_img['growing_season_th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
         else:
             key = 'max_lswi_others'
-            if key not in self.max_lswi.sat_img.keys():
+            if key not in self.vprm_pre.max_lswi.sat_img.keys():
                 self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.max_lswi.sat_img['growing_season_th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
                        
         if site_name is not None:
             max_lswi = float(self.vprm_pre.max_lswi.sat_img.sel(site_names=site_name)[key])
+            min_evi = float(self.vprm_pre.min_lswi.sat_img.sel(site_names=site_name)['min_lswi']) 
         elif lon is not None:
             max_lswi = self.vprm_pre.max_lswi.value_at_lonlat(lon, lat, key=key, as_array=False)
+            min_evi = self.vprm_pre.min_lswi.value_at_lonlat(lon, lat, key='min_lswi', as_array=False)
         else:
             max_lswi = self.vprm_pre.max_lswi.sat_img[key]
-        self.buffer['w_scale'] = (1+lswi)/(1+max_lswi)
+            min_lswi = self.vprm_pre.min_lswi.sat_img['min_lswi']
+        if land_cover_type in [4,7]:
+            self.buffer['w_scale'] = (lswi - min_lswi) / (max_lswi - min_lswi)
+        else:
+            self.buffer['w_scale'] = (1+lswi)/(1+max_lswi)
         return self.buffer['w_scale']
     
 
@@ -315,16 +324,13 @@ class vprm_base:
                     ret_dict[i] = self.era5_inst.get_data(key=i).values.flatten()
         return ret_dict  
     
-    def make_vprm_predictions(self, date, fit_params_dict=None,
-                              met_regridder_weights=None,
+    def make_vprm_predictions(self, date, met_regridder_weights=None,
                               no_flux_veg_types=[0, 8]):
         '''
             Using the VPRM fit parameters make predictions on the entire satellite image.
 
                 Parameters:
                     date (datetime object): The date for the prediction
-                    fit_params_dict (dict) : Dict with fit parameters ('lamb', 'par0', 'alpha', 'beta') 
-                                      for the different vegetation types.
                     regridder_weights (str): Path to the weights file for regridding from ERA5 
                                              to the satellite grid
                     no_flux_veg_types (list of ints): flux type ids that get a default GPP/NEE of 0
@@ -333,10 +339,6 @@ class vprm_base:
                         None
         '''
         
-        if self.res == None:
-            if fit_params_dict is None:
-                print('Need to provide a dictionary with the fit parameters')
-                return 
         if met_regridder_weights is not None:
             if not os.path.exists(os.path.dirname(met_regridder_weights)):
                 os.makedirs(os.path.dirname(met_regridder_weights))
@@ -350,8 +352,8 @@ class vprm_base:
             inputs = self._get_vprm_variables(i, date, regridder_weights=met_regridder_weights)
             if inputs is None:
                 return None
-            gpps.append(self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/fit_params_dict[i]['par0'])))
-            respirations.append(np.maximum(self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i}) * (fit_params_dict[i]['alpha'] * inputs['tcorr'] + fit_params_dict[i]['beta']), 0))
+            gpps.append(self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i}) * (self.fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.fit_params_dict[i]['par0'])))
+            respirations.append(np.maximum(self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i}) * (self.fit_params_dict[i]['alpha'] * inputs['tcorr'] + self.fit_params_dict[i]['beta']), 0))
         ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
         ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
         return ret_res

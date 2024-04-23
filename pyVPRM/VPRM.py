@@ -548,9 +548,11 @@ class vprm:
                         None
         '''
         self.max_lswi = copy.deepcopy(self.prototype)
+        self.min_lswi = copy.deepcopy(self.prototype)
         self.min_max_evi = copy.deepcopy(self.prototype)
         shortcut = self.sat_imgs.sat_img
         # if self.sites is None:
+        self.min_lswi.sat_img['min_lswi'] = shortcut['lswi'].min(self.time_key, skipna=True)
         self.min_max_evi.sat_img['min_evi'] = shortcut['evi'].min(self.time_key, skipna=True)
         self.min_max_evi.sat_img['max_evi'] = shortcut['evi'].max(self.time_key, skipna=True)
         # Set growing season threshold to 20% of the difference between max and min value. This should be studied in more detail
