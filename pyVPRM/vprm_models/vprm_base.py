@@ -15,7 +15,7 @@ class vprm_base:
     Base class for all meteorologies
     '''
     
-    def __init__(self, met, vprm_pre, fit_params_dict):
+    def __init__(self, vprm_pre, met=None, fit_params_dict=None):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
         self.buffer = dict()
@@ -357,15 +357,7 @@ class vprm_base:
         ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
         ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
         return ret_res
-        
 
-    def save(self, save_path):
-        '''
-            Save the LSWI and EVI satellite image. ToDo
-        '''
-        self.sat_imgs.save(save_path)
-        return
-    
 
     def fit_vprm_data(self, data_list, variable_dict,
                       same_length=True,
