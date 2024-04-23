@@ -21,7 +21,7 @@ class vprm_modified(vprm_base):
         return
 
 
-def get_w2_scale(self, lon=None, lat=None, site_name=None,
+    def get_w2_scale(self, lon=None, lat=None, site_name=None,
                    land_cover_type=None):
         '''
             Get VPRM w_scale
