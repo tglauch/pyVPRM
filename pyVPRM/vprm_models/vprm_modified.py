@@ -47,10 +47,10 @@ class vprm_modified(vprm_base):
                        
         if site_name is not None:
             max_lswi = float(self.vprm_pre.max_lswi.sat_img.sel(site_names=site_name)[key])
-            min_evi = float(self.vprm_pre.min_lswi.sat_img.sel(site_names=site_name)['min_lswi']) 
+            min_lswi = float(self.vprm_pre.min_lswi.sat_img.sel(site_names=site_name)['min_lswi']) 
         elif lon is not None:
             max_lswi = self.vprm_pre.max_lswi.value_at_lonlat(lon, lat, key=key, as_array=False)
-            min_evi = self.vprm_pre.min_lswi.value_at_lonlat(lon, lat, key='min_lswi', as_array=False)
+            min_lswi = self.vprm_pre.min_lswi.value_at_lonlat(lon, lat, key='min_lswi', as_array=False)
         else:
             max_lswi = self.vprm_pre.max_lswi.sat_img[key]
             min_lswi = self.vprm_pre.min_lswi.sat_img['min_lswi']
@@ -107,7 +107,7 @@ class vprm_modified(vprm_base):
 
     def data_for_fitting(self):
         self.vprm_pre.sat_imgs.sat_img.load()
-        for s in self.sites:
+        for s in self.vprm_pre.sites:
             self.new = True
             site_name  = s.get_site_name()
             ret_dict = dict()
@@ -126,15 +126,16 @@ class vprm_modified(vprm_base):
                 ret_dict['Ps'].append(self.get_p_scale(site_name=site_name,
                                                        land_cover_type=s.get_land_type()))
                 ret_dict['par'].append(self.get_par(ssrd=row['ssrd']))
-                ret_dict['Ts'].append(self.get_t_scale(land_cover_type=s.get_land_type()))
+                ret_dict['Ts'].append(self.get_t_scale(temperature=row['t2m'],
+                                                       land_cover_type=s.get_land_type()))
                 ret_dict['tcorr'].append(self.get_temperature(temperature=row['t2m']))
-                wscales = self.get_w_scale(site_name=site_name)
+                wscales = self.get_w2_scale(site_name=site_name)
                 ret_dict['Ws'].append(wscales[0])
                 ret_dict['Ws2'].append(wscales[1])
                 ret_dict['lswi'].append(self.get_lswi(site_name=site_name))
             s.drop_rows_by_index(drop_rows)
             s.add_columns(ret_dict)
-        return self.sites
+        return self.vprm_pre.sites
 
     def _get_vprm_variables(self, land_cover_type, datetime_utc=None, lat=None, lon=None,
                             add_era_variables=[], regridder_weights=None):
@@ -192,7 +193,7 @@ class vprm_modified(vprm_base):
         ret_dict['par'] = self.get_par(lon, lat)
         ret_dict['Ts'] = self.get_t_scale(lon, lat,
                                  land_cover_type=land_cover_type)
-        wscales = self.get_w_scale(lon, lat,
+        wscales = self.get_w2_scale(lon, lat,
                                    land_cover_type=land_cover_type)
         ret_dict['Ws'] = wscales[0]
         ret_dict['Ws2'] = wscales[2]
