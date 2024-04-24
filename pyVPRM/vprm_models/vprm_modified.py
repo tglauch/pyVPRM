@@ -293,7 +293,7 @@ class vprm_modified(vprm_base):
             if fit_resp:
               best_mse = np.inf    
               for i in range(200):
-                  func = lambda x, a, b: np.maximum(a * x['tcorr'] + b, 0)
+                  #func = lambda x, a, b: np.maximum(a * x['tcorr'] + b, 0)
                   mask = (data_for_fit['par'] == 0)
                   fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
                                               maxfev=5000,
