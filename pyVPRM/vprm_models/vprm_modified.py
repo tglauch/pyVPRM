@@ -309,8 +309,8 @@ class vprm_modified(vprm_base):
             if fit_resp:
               best_mse = np.inf    
               for i in list(itertools.product(np.linspace(-5, 15, 20), np.linspace(0., 1., 20))):
-                  inputs['tdash'] = copy.deepcopy(inputs['tcorr'])
-                  inputs['tdash'][inputs['tdash']<i[0]] = i[0] - i[1] * (i[0] - inputs['tdash']) 
+                  data_for_fit['tdash'] = copy.deepcopy(data_for_fit['tcorr'])
+                  data_for_fit['tdash'][data_for_fit['tdash']<i[0]] = i[0] - i[1] * (i[0] - data_for_fit['tdash']) 
                   func = lambda x, b, a1, a2, g, t1, t2, t3: np.maximum(b + a1 * x['tdash'] + a2 * x['tdash']**2 +\
                                                                         g * x['evi']  +  t1 * x['Ws2'] +\
                                                                         t2 * x['Ws2'] * x['tdash'] + t3 * x['Ws2'] * x['tdash']**2,
