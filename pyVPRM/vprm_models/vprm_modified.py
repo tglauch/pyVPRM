@@ -336,15 +336,15 @@ class vprm_modified(vprm_base):
                       best_mse = mse
                       best_fit_params = fit_respiration
                       best_fit_respiration = func_values
-                  best_fit_params_dict[key] = {'beta': best_fit_params[0][0],
-                                               'alpha1': best_fit_params[0][1],
-                                               'alpha2': best_fit_params[0][2],
-                                               'gamma': best_fit_params[0][3],
-                                               'theta1': best_fit_params[0][4],
-                                               'theta2': best_fit_params[0][5],
-                                               'theta3': best_fit_params[0][6],
-                                               'tcrit': i[0],
-                                               'tmult': i[1]}
+              best_fit_params_dict[key] = {'beta': best_fit_params[0][0],
+                                           'alpha1': best_fit_params[0][1],
+                                           'alpha2': best_fit_params[0][2],
+                                           'gamma': best_fit_params[0][3],
+                                           'theta1': best_fit_params[0][4],
+                                           'theta2': best_fit_params[0][5],
+                                           'theta3': best_fit_params[0][6],
+                                           'tcrit': i[0],
+                                           'tmult': i[1]}
             if fit_nee:
                 best_mse = np.inf
                 for i in range(200):  
@@ -357,7 +357,7 @@ class vprm_modified(vprm_base):
                     if mse < best_mse:
                         best_mse = mse
                         best_fit_params = fit_nee
-                    best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
-                    best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
+                best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
+                best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
 
         return best_fit_params_dict
