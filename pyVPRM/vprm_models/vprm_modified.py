@@ -11,6 +11,7 @@ import datetime
 from pyVPRM.vprm_models.vprm_base import vprm_base
 import pandas as pd
 import itertools
+from scipy.optimize import curve_fit
 
 
 class vprm_modified(vprm_base):
