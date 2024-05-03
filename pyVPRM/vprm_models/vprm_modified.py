@@ -17,7 +17,7 @@ class vprm_modified(vprm_base):
     Base class for all meteorologies
     '''
     
-    def __init__(self, vprm_pre, met=None, fit_params_dict=None):
+    def __init__(self, vprm_pre=None, met=None, fit_params_dict=None):
         super().__init__(vprm_pre, met, fit_params_dict)
         return
 
