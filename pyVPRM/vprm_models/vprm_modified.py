@@ -326,11 +326,11 @@ class vprm_modified(vprm_base):
                                                   np.random.uniform(-0.5, 0.5),
                                                   np.random.uniform(-0.5, 0.5),
                                                   np.random.uniform(-0.5, 0.5)]) 
-                  func_values = func(data_for_fit[mask], fit_respiration[0][0], fit_respiration[0][1],
+                  func_values = func(data_for_fit, fit_respiration[0][0], fit_respiration[0][1],
                                      fit_respiration[0][2], fit_respiration[0][3],
                                      fit_respiration[0][4], fit_respiration[0][5],
                                      fit_respiration[0][6])
-                  mse = np.mean((func_values  - data_for_fit['respiration'][mask])**2)
+                  mse = np.mean((func_values[mask]  - data_for_fit['respiration'][mask])**2)
                   if mse < best_mse:
                       best_mse = mse
                       best_fit_params = fit_respiration
