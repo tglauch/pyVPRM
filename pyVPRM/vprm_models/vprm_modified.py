@@ -347,7 +347,7 @@ class vprm_modified(vprm_base):
             if fit_nee:
                 best_mse = np.inf
                 for i in range(200):  
-                    func = lambda x, lamb, par0: -1 * (lamb * x['Ws'] * x['Ts'] * x['Ps']) * x['evi'] * x['par'] / (1 + x['par']/par0) + best_fit_params_dict[key]['alpha'] * x['tcorr'] + best_fit_respiration
+                    func = lambda x, lamb, par0: -1 * (lamb * x['Ws'] * x['Ts'] * x['Ps']) * x['evi'] * x['par'] / (1 + x['par']/par0) + best_fit_respiration
                     fit_nee = curve_fit(func,
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
                                         p0=[np.random.uniform(0, 0.5),
