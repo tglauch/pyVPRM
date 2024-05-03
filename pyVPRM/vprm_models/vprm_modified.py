@@ -308,8 +308,8 @@ class vprm_modified(vprm_base):
             # Respiration
             if fit_resp:
               best_mse = np.inf    
-              for i in list(itertools.product(np.linspace(-5, 15, 20), np.linspace(0., 1, 20))):
-                  inputs['tdash'] = inputs['tcorr']
+              for i in list(itertools.product(np.linspace(-5, 15, 20), np.linspace(0., 1., 20))):
+                  inputs['tdash'] = copy.deepcopy(inputs['tcorr'])
                   inputs['tdash'][inputs['tdash']<i[0]] = i[0] - i[1] * (i[0] - inputs['tdash']) 
                   func = lambda x, b, a1, a2, g, t1, t2, t3: np.maximum(b + a1 * x['tdash'] + a2 * x['tdash']**2 +\
                                                                         g * x['evi']  +  t1 * x['Ws2'] +\
@@ -319,6 +319,11 @@ class vprm_modified(vprm_base):
                   fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
                                               maxfev=5000,
                                               p0=[np.random.uniform(-0.5, 0.5),
+                                                  np.random.uniform(-0.5, 0.5),
+                                                  np.random.uniform(-0.5, 0.5),
+                                                  np.random.uniform(-0.5, 0.5),
+                                                  np.random.uniform(-0.5, 0.5),
+                                                  np.random.uniform(-0.5, 0.5),
                                                   np.random.uniform(-0.5, 0.5)]) 
                   func_values = func(data_for_fit[mask], fit_respiration[0][0], fit_respiration[0][1],
                                      fit_respiration[0][2], fit_respiration[0][3],
