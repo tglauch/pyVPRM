@@ -10,6 +10,7 @@ import uuid
 import datetime
 from pyVPRM.vprm_models.vprm_base import vprm_base
 import pandas as pd
+import itertools
 
 
 class vprm_modified(vprm_base):
