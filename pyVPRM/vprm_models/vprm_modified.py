@@ -251,6 +251,8 @@ class vprm_modified(vprm_base):
                 lcf = self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i})
                 if inputs is None:
                     return None
+            else:
+                lcf=1
 
             gpps.append( lcf * (self.fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.fit_params_dict[i]['par0'])))
             respirations.append(np.maximum(lcf * (self.fit_params_dict[i]['beta'] +\
