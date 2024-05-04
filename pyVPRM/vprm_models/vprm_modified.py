@@ -253,7 +253,7 @@ class vprm_modified(vprm_base):
                     return None
             else:
                 lcf=1
-                if 'tdash' not in idata.keys():
+                if 'tdash' not in inputs.keys():
                     inputs['tdash'] = inputs['tcorr']
                     inputs['tdash'][inputs['tdash']< self.fit_params_dict[i]['tcrit']] = self.fit_params_dict[i]['tcrit'] - self.fit_params_dict[i]['tmult'] * (self.fit_params_dict[i]['tcrit'] - inputs['tdash']) 
 
