@@ -15,7 +15,7 @@ class vprm_base:
     Base class for all meteorologies
     '''
     
-    def __init__(self, vprm_pre, met=None, fit_params_dict=None):
+    def __init__(self, vprm_pre=None, met=None, fit_params_dict=None):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
         self.buffer = dict()
@@ -324,8 +324,9 @@ class vprm_base:
                     ret_dict[i] = self.era5_inst.get_data(key=i).values.flatten()
         return ret_dict  
     
-    def make_vprm_predictions(self, date, met_regridder_weights=None,
-                              no_flux_veg_types=[0, 8]):
+    def make_vprm_predictions(self, date=None, met_regridder_weights=None,
+                              inputs=None, no_flux_veg_types=[0, 8],
+                              land_cover_type=None):
         '''
             Using the VPRM fit parameters make predictions on the entire satellite image.
 
@@ -338,21 +339,31 @@ class vprm_base:
                 Returns:
                         None
         '''
-        
-        if met_regridder_weights is not None:
-            if not os.path.exists(os.path.dirname(met_regridder_weights)):
-                os.makedirs(os.path.dirname(met_regridder_weights))
-        
+                
         ret_res = dict()
         gpps = []
         respirations = []
+
+        if inputs is None:
+            if met_regridder_weights is not None:
+                if not os.path.exists(os.path.dirname(met_regridder_weights)):
+                    os.makedirs(os.path.dirname(met_regridder_weights))
+            lc_classes = self.vprm_pre.land_cover_type.sat_img.vprm_classes.values
+        else:
+            lc_classes = [land_cover_type]
+            
         for i in self.vprm_pre.land_cover_type.sat_img.vprm_classes.values:
             if i in no_flux_veg_types:
                 continue
             inputs = self._get_vprm_variables(i, date, regridder_weights=met_regridder_weights)
             if inputs is None:
-                return None
-            gpps.append(self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i}) * (self.fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.fit_params_dict[i]['par0'])))
+                inputs = self._get_vprm_variables(i, date, regridder_weights=met_regridder_weights)
+                lcf = self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i})
+                if inputs is None:
+                    return None
+            else:
+                lcf=1
+            gpps.append(lcf * (self.fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.fit_params_dict[i]['par0'])))
             respirations.append(np.maximum(self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i}) * (self.fit_params_dict[i]['alpha'] * inputs['tcorr'] + self.fit_params_dict[i]['beta']), 0))
         ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
         ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
