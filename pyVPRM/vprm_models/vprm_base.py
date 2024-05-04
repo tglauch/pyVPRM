@@ -364,8 +364,13 @@ class vprm_base:
                 lcf=1
             gpps.append(lcf * (self.fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.fit_params_dict[i]['par0'])))
             respirations.append(np.maximum(lcf * (self.fit_params_dict[i]['alpha'] * inputs['tcorr'] + self.fit_params_dict[i]['beta']), 0))
-        ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
-        ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
+
+        if isinstance(gpps[0], pd.core.series.Series):
+            ret_res['gpp'] = gpps[0]
+            ret_res['nee'] = -gpps[0] + respirations[0] 
+        else:        
+            ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
+            ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
         return ret_res
 
 
