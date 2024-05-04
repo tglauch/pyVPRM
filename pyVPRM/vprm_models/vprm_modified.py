@@ -253,6 +253,9 @@ class vprm_modified(vprm_base):
                     return None
             else:
                 lcf=1
+                if 'tdash' not in idata.keys():
+                    idata['tdash'] = idata['tcorr']
+                    idata['tdash'][idata['tdash']< self.fit_params_dict[i]['tcrit']] = self.fit_params_dict[i]['tcrit'] - self.fit_params_dict[i]['tmult'] * (self.fit_params_dict[i]['tcrit'] - idata['tdash']) 
 
             gpps.append( lcf * (self.fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.fit_params_dict[i]['par0'])))
             respirations.append(np.maximum(lcf * (self.fit_params_dict[i]['beta'] +\
