@@ -335,6 +335,7 @@ class vprm_modified(vprm_base):
                   if mse < best_mse:
                       best_mse = mse
                       best_fit_params = fit_respiration
+                      best_fit_temperatures = [i[0], i[1]] 
                       best_fit_respiration = func_values
               best_fit_params_dict[key] = {'beta': best_fit_params[0][0],
                                            'alpha1': best_fit_params[0][1],
@@ -343,8 +344,8 @@ class vprm_modified(vprm_base):
                                            'theta1': best_fit_params[0][4],
                                            'theta2': best_fit_params[0][5],
                                            'theta3': best_fit_params[0][6],
-                                           'tcrit': i[0],
-                                           'tmult': i[1]}
+                                           'tcrit': best_fit_temperatures[0],
+                                           'tmult': best_fit_temperatures[1]}
             if fit_nee:
                 best_mse = np.inf
                 for i in range(200):  
