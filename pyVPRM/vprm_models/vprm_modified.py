@@ -331,7 +331,7 @@ class vprm_modified(vprm_base):
                                      fit_respiration[0][4], fit_respiration[0][5],
                                      fit_respiration[0][6])
                   mse = np.mean((func_values[mask]  - data_for_fit['respiration'][mask])**2)
-                  print(i[0], i[1], mse)
+                  print(i[0], i[1], best_mse, mse)
                   if mse < best_mse:
                       best_mse = mse
                       best_fit_params = fit_respiration
