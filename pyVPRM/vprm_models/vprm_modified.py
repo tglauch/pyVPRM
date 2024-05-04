@@ -214,7 +214,7 @@ class vprm_modified(vprm_base):
         return ret_dict  
 
 
-    def make_vprm_predictions(self, date, met_regridder_weights=None,
+    def make_vprm_predictions(self, date=None, met_regridder_weights=None,
                               no_flux_veg_types=[0, 8], inputs=None,
                               land_cover_type=None):
         '''
