@@ -8,7 +8,9 @@ import pygrib
 import copy
 import uuid
 import datetime
-
+import pandas as pd
+import itertools
+from scipy.optimize import curve_fit
 
 class vprm_base:
     '''
