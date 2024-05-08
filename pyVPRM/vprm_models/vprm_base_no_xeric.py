@@ -223,7 +223,7 @@ class vprm_base_no_xeric:
 
     def data_for_fitting(self):
         self.vprm_pre.sat_imgs.sat_img.load()
-        for s in self.sites:
+        for s in self.vprm_pre.sites:
             self.new = True
             site_name  = s.get_site_name()
             ret_dict = dict()
@@ -250,7 +250,7 @@ class vprm_base_no_xeric:
                 ret_dict['lswi'].append(self.get_lswi(site_name=site_name))
             s.drop_rows_by_index(drop_rows)
             s.add_columns(ret_dict)
-        return self.sites
+        return self.vprm_pre.sites
     
     def _get_vprm_variables(self, land_cover_type, datetime_utc=None, lat=None, lon=None,
                             add_era_variables=[], regridder_weights=None):
