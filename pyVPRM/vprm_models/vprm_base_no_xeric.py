@@ -12,7 +12,7 @@ import pandas as pd
 import itertools
 from scipy.optimize import curve_fit
 
-class vprm_base:
+class vprm_base_no_xeric:
     '''
     Base class for all meteorologies
     '''
