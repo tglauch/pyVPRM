@@ -370,7 +370,11 @@ class vprm_modified(vprm_base):
                                             best_fit_params_dict[key]['theta1'],
                                             best_fit_params_dict[key]['theta2'],
                                             best_fit_params_dict[key]['theta3']]) 
-                    mse = np.mean((func(data_for_fit, fit_nee[0][0], fit_nee[0][1]) - data_for_fit['nee'])**2)
+                    mse = np.mean((func(data_for_fit, fit_nee[0][0], fit_nee[0][1],
+                                        fit_nee[0][2], fit_nee[0][3],
+                                        fit_nee[0][4], fit_nee[0][5],
+                                        fit_nee[0][6], fit_nee[0][7],
+                                        fit_nee[0][8]) - data_for_fit['nee'])**2)
                     if mse < best_mse:
                         best_mse = mse
                         best_fit_params = fit_nee
