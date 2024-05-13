@@ -313,17 +313,17 @@ class vprm_modified(vprm_base):
 
             # Respiration
             if fit_resp:
-                best_mse = np.inf    
-                for i in list(itertools.product(np.linspace(-5, 20, 40), np.linspace(0., 1., 40))):
-                    for c in range(10):
+                best_mse = np.inf   
+                func_resp = lambda x, b, a1, a2, g, t1, t2, t3: np.maximum(b + a1 * x['tdash'] + a2 * x['tdash']**2 +\
+                                                                      g * x['evi']  +  t1 * x['Ws2'] +\
+                                                                      t2 * x['Ws2'] * x['tdash'] + t3 * x['Ws2'] * x['tdash']**2,
+                                                                      0)
+                for i in list(itertools.product(np.linspace(-5, 20, 10), np.linspace(0., 1., 10))):
+                    for c in range(3):
                         data_for_fit['tdash'] = copy.deepcopy(data_for_fit['tcorr'])
                         data_for_fit['tdash'][data_for_fit['tdash']<i[0]] = i[0] - i[1] * (i[0] - data_for_fit['tdash']) 
-                        func = lambda x, b, a1, a2, g, t1, t2, t3: np.maximum(b + a1 * x['tdash'] + a2 * x['tdash']**2 +\
-                                                                              g * x['evi']  +  t1 * x['Ws2'] +\
-                                                                              t2 * x['Ws2'] * x['tdash'] + t3 * x['Ws2'] * x['tdash']**2,
-                                                                              0)
                         mask = (data_for_fit['par'] == 0)
-                        fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
+                        fit_respiration = curve_fit(func_resp, data_for_fit[mask], data_for_fit['respiration'][mask],
                                                     maxfev=5000,
                                                     p0=[np.random.uniform(-0.5, 0.5),
                                                         np.random.uniform(-0.5, 0.5),
@@ -332,10 +332,10 @@ class vprm_modified(vprm_base):
                                                         np.random.uniform(-0.5, 0.5),
                                                         np.random.uniform(-0.5, 0.5),
                                                         np.random.uniform(-0.5, 0.5)]) 
-                        func_values = func(data_for_fit, fit_respiration[0][0], fit_respiration[0][1],
-                                           fit_respiration[0][2], fit_respiration[0][3],
-                                           fit_respiration[0][4], fit_respiration[0][5],
-                                           fit_respiration[0][6])
+                        func_values = func_resp(data_for_fit, fit_respiration[0][0], fit_respiration[0][1],
+                                                fit_respiration[0][2], fit_respiration[0][3],
+                                                fit_respiration[0][4], fit_respiration[0][5],
+                                                fit_respiration[0][6])
                         mse = np.mean((func_values[mask]  - data_for_fit['respiration'][mask])**2)
                         if mse < best_mse:
                             best_mse = mse
@@ -355,18 +355,34 @@ class vprm_modified(vprm_base):
                                              'tmult': best_fit_temperatures[1]}
             if fit_nee:
                 best_mse = np.inf
+                data_for_fit['tdash'] = copy.deepcopy(data_for_fit['tcorr'])
+                data_for_fit['tdash'][data_for_fit['tdash']<best_fit_params_dict['tcrit']] = best_fit_params_dict['tcrit'] - best_fit_params_dict['tmult'] * (best_fit_params_dict['tcrit'] - data_for_fit['tdash']) 
                 for i in range(200):  
-                    func = lambda x, lamb, par0: -1 * (lamb * x['Ws'] * x['Ts'] * x['Ps']) * x['evi'] * x['par'] / (1 + x['par']/par0) + best_fit_respiration
+                    func = lambda x, lamb, par0, b, a1, a2, g, t1, t2, t3: -1 * (lamb * x['Ws'] * x['Ts'] * x['Ps']) * x['evi'] * x['par'] / (1 + x['par']/par0) + best_fit_respiration + func_resp(x, b, a1, a2, g, t1, t2, t3)
                     fit_nee = curve_fit(func,
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
                                         p0=[np.random.uniform(0, 0.5),
-                                            np.random.uniform(100, 1000)]) 
+                                            np.random.uniform(100, 1000),
+                                            best_fit_params_dict['beta'],
+                                            best_fit_params_dict['alpha1'],
+                                            best_fit_params_dict['alpha2'],
+                                            best_fit_params_dict['gamma'],
+                                            best_fit_params_dict['theta1'],
+                                            best_fit_params_dict['theta2'],
+                                            best_fit_params_dict['theta3']]) 
                     mse = np.mean((func(data_for_fit, fit_nee[0][0], fit_nee[0][1]) - data_for_fit['nee'])**2)
                     if mse < best_mse:
                         best_mse = mse
                         best_fit_params = fit_nee
                 best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
                 best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
+                best_fit_params_dict[key]['beta'] = best_fit_params[0][2]
+                best_fit_params_dict[key]['alpha1'] = best_fit_params[0][3]
+                best_fit_params_dict[key]['alpha2'] = best_fit_params[0][4]
+                best_fit_params_dict[key]['gamma'] = best_fit_params[0][5]
+                best_fit_params_dict[key]['theta1'] = best_fit_params[0][6]
+                best_fit_params_dict[key]['theta2'] = best_fit_params[0][7]
+                best_fit_params_dict[key]['theta3'] = best_fit_params[0][8]
                 print('Best MSE NEE: {}'.format(best_mse))
 
         return best_fit_params_dict
