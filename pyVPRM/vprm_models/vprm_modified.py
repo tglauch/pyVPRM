@@ -356,20 +356,20 @@ class vprm_modified(vprm_base):
             if fit_nee:
                 best_mse = np.inf
                 data_for_fit['tdash'] = copy.deepcopy(data_for_fit['tcorr'])
-                data_for_fit['tdash'][data_for_fit['tdash']<best_fit_params_dict['tcrit']] = best_fit_params_dict['tcrit'] - best_fit_params_dict['tmult'] * (best_fit_params_dict['tcrit'] - data_for_fit['tdash']) 
+                data_for_fit['tdash'][data_for_fit['tdash']<best_fit_params_dict[key]['tcrit']] = best_fit_params_dict[key]['tcrit'] - best_fit_params_dict[key]['tmult'] * (best_fit_params_dict[key]['tcrit'] - data_for_fit['tdash']) 
                 for i in range(200):  
                     func = lambda x, lamb, par0, b, a1, a2, g, t1, t2, t3: -1 * (lamb * x['Ws'] * x['Ts'] * x['Ps']) * x['evi'] * x['par'] / (1 + x['par']/par0) + best_fit_respiration + func_resp(x, b, a1, a2, g, t1, t2, t3)
                     fit_nee = curve_fit(func,
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
                                         p0=[np.random.uniform(0, 0.5),
                                             np.random.uniform(100, 1000),
-                                            best_fit_params_dict['beta'],
-                                            best_fit_params_dict['alpha1'],
-                                            best_fit_params_dict['alpha2'],
-                                            best_fit_params_dict['gamma'],
-                                            best_fit_params_dict['theta1'],
-                                            best_fit_params_dict['theta2'],
-                                            best_fit_params_dict['theta3']]) 
+                                            best_fit_params_dict[key]['beta'],
+                                            best_fit_params_dict[key]['alpha1'],
+                                            best_fit_params_dict[key]['alpha2'],
+                                            best_fit_params_dict[key]['gamma'],
+                                            best_fit_params_dict[key]['theta1'],
+                                            best_fit_params_dict[key]['theta2'],
+                                            best_fit_params_dict[key]['theta3']]) 
                     mse = np.mean((func(data_for_fit, fit_nee[0][0], fit_nee[0][1]) - data_for_fit['nee'])**2)
                     if mse < best_mse:
                         best_mse = mse
