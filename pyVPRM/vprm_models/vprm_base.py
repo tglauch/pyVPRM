@@ -430,8 +430,10 @@ class vprm_base:
                   if mse < best_mse:
                       best_mse = mse
                       best_fit_params = fit_respiration
-                  best_fit_params_dict[key] = {'alpha': best_fit_params[0][0],
-                                               'beta': best_fit_params[0][1]}
+              best_fit_params_dict[key] = {'alpha': best_fit_params[0][0],
+                                           'beta': best_fit_params[0][1]}
+              print('Best MSE Respiration: {}'.format(best_mse))
+
 
             # #GPP
             # best_mse = np.inf
@@ -460,7 +462,9 @@ class vprm_base:
                     if mse < best_mse:
                         best_mse = mse
                         best_fit_params = fit_nee
-                    best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
-                    best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
+                best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
+                best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
+                print('Best MSE NEE: {}'.format(best_mse))
+
 
         return best_fit_params_dict
