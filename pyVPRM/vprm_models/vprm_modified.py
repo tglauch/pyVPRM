@@ -313,49 +313,49 @@ class vprm_modified(vprm_base):
 
             # Respiration
             if fit_resp:
-              best_mse = np.inf    
-              for i in list(itertools.product(np.linspace(-5, 20, 40), np.linspace(0., 1., 40))):
-                  for c in range(10):
-                      data_for_fit['tdash'] = copy.deepcopy(data_for_fit['tcorr'])
-                      data_for_fit['tdash'][data_for_fit['tdash']<i[0]] = i[0] - i[1] * (i[0] - data_for_fit['tdash']) 
-                      func = lambda x, b, a1, a2, g, t1, t2, t3: np.maximum(b + a1 * x['tdash'] + a2 * x['tdash']**2 +\
-                                                                            g * x['evi']  +  t1 * x['Ws2'] +\
-                                                                            t2 * x['Ws2'] * x['tdash'] + t3 * x['Ws2'] * x['tdash']**2,
-                                                                            0)
-                      mask = (data_for_fit['par'] == 0)
-                      fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
-                                                  maxfev=5000,
-                                                  p0=[np.random.uniform(-0.5, 0.5),
-                                                      np.random.uniform(-0.5, 0.5),
-                                                      np.random.uniform(-0.5, 0.5),
-                                                      np.random.uniform(-0.5, 0.5),
-                                                      np.random.uniform(-0.5, 0.5),
-                                                      np.random.uniform(-0.5, 0.5),
-                                                      np.random.uniform(-0.5, 0.5)]) 
-                      func_values = func(data_for_fit, fit_respiration[0][0], fit_respiration[0][1],
-                                         fit_respiration[0][2], fit_respiration[0][3],
-                                         fit_respiration[0][4], fit_respiration[0][5],
-                                         fit_respiration[0][6])
-                      mse = np.mean((func_values[mask]  - data_for_fit['respiration'][mask])**2)
-                      if mse < best_mse:
-                          best_mse = mse
-                          best_fit_params = fit_respiration
-                          best_fit_temperatures = [i[0], i[1]] 
-                          best_fit_respiration = func_values
+                best_mse = np.inf    
+                for i in list(itertools.product(np.linspace(-5, 20, 40), np.linspace(0., 1., 40))):
+                    for c in range(10):
+                        data_for_fit['tdash'] = copy.deepcopy(data_for_fit['tcorr'])
+                        data_for_fit['tdash'][data_for_fit['tdash']<i[0]] = i[0] - i[1] * (i[0] - data_for_fit['tdash']) 
+                        func = lambda x, b, a1, a2, g, t1, t2, t3: np.maximum(b + a1 * x['tdash'] + a2 * x['tdash']**2 +\
+                                                                              g * x['evi']  +  t1 * x['Ws2'] +\
+                                                                              t2 * x['Ws2'] * x['tdash'] + t3 * x['Ws2'] * x['tdash']**2,
+                                                                              0)
+                        mask = (data_for_fit['par'] == 0)
+                        fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
+                                                    maxfev=5000,
+                                                    p0=[np.random.uniform(-0.5, 0.5),
+                                                        np.random.uniform(-0.5, 0.5),
+                                                        np.random.uniform(-0.5, 0.5),
+                                                        np.random.uniform(-0.5, 0.5),
+                                                        np.random.uniform(-0.5, 0.5),
+                                                        np.random.uniform(-0.5, 0.5),
+                                                        np.random.uniform(-0.5, 0.5)]) 
+                        func_values = func(data_for_fit, fit_respiration[0][0], fit_respiration[0][1],
+                                           fit_respiration[0][2], fit_respiration[0][3],
+                                           fit_respiration[0][4], fit_respiration[0][5],
+                                           fit_respiration[0][6])
+                        mse = np.mean((func_values[mask]  - data_for_fit['respiration'][mask])**2)
+                        if mse < best_mse:
+                            best_mse = mse
+                            best_fit_params = fit_respiration
+                            best_fit_temperatures = [i[0], i[1]] 
+                            best_fit_respiration = func_values
                       
-              print('Best MSE Respiration: {}'.format(best_mse))
-              best_fit_params_dict[key] = {'beta': best_fit_params[0][0],
-                                           'alpha1': best_fit_params[0][1],
-                                           'alpha2': best_fit_params[0][2],
-                                           'gamma': best_fit_params[0][3],
-                                           'theta1': best_fit_params[0][4],
-                                           'theta2': best_fit_params[0][5],
-                                           'theta3': best_fit_params[0][6],
-                                           'tcrit': best_fit_temperatures[0],
-                                           'tmult': best_fit_temperatures[1]}
+                print('Best MSE Respiration: {}'.format(best_mse))
+                best_fit_params_dict[key] = {'beta': best_fit_params[0][0],
+                                             'alpha1': best_fit_params[0][1],
+                                             'alpha2': best_fit_params[0][2],
+                                             'gamma': best_fit_params[0][3],
+                                             'theta1': best_fit_params[0][4],
+                                             'theta2': best_fit_params[0][5],
+                                             'theta3': best_fit_params[0][6],
+                                             'tcrit': best_fit_temperatures[0],
+                                             'tmult': best_fit_temperatures[1]}
             if fit_nee:
                 best_mse = np.inf
-                for i in range(200):  
+                for i in range(10):  
                     func = lambda x, lamb, par0: -1 * (lamb * x['Ws'] * x['Ts'] * x['Ps']) * x['evi'] * x['par'] / (1 + x['par']/par0) + best_fit_respiration
                     fit_nee = curve_fit(func,
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
