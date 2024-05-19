@@ -345,8 +345,11 @@ class vprm_base:
         ret_res = dict()
         gpps = []
         respirations = []
-
         if inputs is None:
+            mode = '2d'
+        else:
+            mode = '1d'
+        if mode == '2d':
             if met_regridder_weights is not None:
                 if not os.path.exists(os.path.dirname(met_regridder_weights)):
                     os.makedirs(os.path.dirname(met_regridder_weights))
@@ -357,7 +360,7 @@ class vprm_base:
         for i in lc_classes:
             if i in no_flux_veg_types:
                 continue
-            if inputs is None:
+            if mode == '2d':
                 inputs = self._get_vprm_variables(i, date, regridder_weights=met_regridder_weights)
                 lcf = self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i})
                 if inputs is None:
