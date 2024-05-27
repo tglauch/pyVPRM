@@ -379,8 +379,12 @@ class vprm_base:
         else:
                 ret_res['gpp'] = xr.concat(gpps, dim='veg_classes')
                 ret_res['gpp'] = ret_res['gpp'].assign_coords({'veg_classes':  lc_classes})
+            
                 ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='veg_classes')
                 ret_res['nee'] = ret_res['nee'].assign_coords({'veg_classes':  lc_classes})
+            
+                ret_res['nee'] = ret_res['nee'].to_dataset(name='NEE')
+                ret_res['gpp'] = ret_res['gpp'].to_dataset(name='GPP')
         return ret_res
 
 
