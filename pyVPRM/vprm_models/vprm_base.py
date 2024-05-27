@@ -377,8 +377,10 @@ class vprm_base:
                 ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
                 ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
         else:
-                ret_res['gpp'] = xr.concat(gpps, dim='z')
-                ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z')
+                ret_res['gpp'] = xr.concat(gpps, dim='veg_classes')
+                ret_res['gpp'] = ret_res['gpp'].assign_coords({'veg_classes':  lc_classes})
+                ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='veg_classes')
+                ret_res['nee'] = ret_res['nee'].assign_coords({'veg_classes':  lc_classes})
         return ret_res
 
 
