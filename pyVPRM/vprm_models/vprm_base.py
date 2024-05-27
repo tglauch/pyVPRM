@@ -328,7 +328,7 @@ class vprm_base:
     
     def make_vprm_predictions(self, date=None, met_regridder_weights=None,
                               inputs=None, no_flux_veg_types=[0, 8],
-                              land_cover_type=None):
+                              land_cover_type=None, concatenate_fluxes=True):
         '''
             Using the VPRM fit parameters make predictions on the entire satellite image.
 
@@ -369,13 +369,16 @@ class vprm_base:
                 lcf=1
             gpps.append(lcf * (self.fit_params_dict[i]['lamb'] * inputs['Ps'] * inputs['Ws'] * inputs['Ts'] * inputs['evi'] * inputs['par'] / (1 + inputs['par']/self.fit_params_dict[i]['par0'])))
             respirations.append(np.maximum(lcf * (self.fit_params_dict[i]['alpha'] * inputs['tcorr'] + self.fit_params_dict[i]['beta']), 0))
-
-        if isinstance(gpps[0], pd.core.series.Series):
-            ret_res['gpp'] = gpps[0]
-            ret_res['nee'] = -gpps[0] + respirations[0] 
-        else:        
-            ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
-            ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
+        if concatenate_fluxes:
+            if isinstance(gpps[0], pd.core.series.Series):
+                ret_res['gpp'] = gpps[0]
+                ret_res['nee'] = -gpps[0] + respirations[0] 
+            else:        
+                ret_res['gpp'] = xr.concat(gpps, dim='z').sum(dim='z')
+                ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z').sum(dim='z')
+        else:
+                ret_res['gpp'] = xr.concat(gpps, dim='z')
+                ret_res['nee'] = -ret_res['gpp'] + xr.concat(respirations, dim='z')
         return ret_res
 
 
