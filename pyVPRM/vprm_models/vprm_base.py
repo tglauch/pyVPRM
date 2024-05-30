@@ -256,7 +256,8 @@ class vprm_base:
                                           temperature=row['t2m'])
                 ret_dict['Ts'].append(Ts_all[1])
                 ret_dict['tcorr'].append(Ts_all[0])
-                ret_dict['Ws'].append(self.get_w_scale(site_name=site_name))
+                ret_dict['Ws'].append(self.get_w_scale(site_name=site_name,
+                                                      land_cover_type=s.get_land_type()))
                 ret_dict['lswi'].append(self.get_lswi(site_name=site_name))
             s.drop_rows_by_index(drop_rows)
             s.add_columns(ret_dict)
