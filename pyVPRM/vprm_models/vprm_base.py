@@ -168,13 +168,18 @@ class vprm_base:
                        
         if site_name is not None:
             max_lswi = float(self.vprm_pre.max_lswi.sat_img.sel(site_names=site_name)[key])
-            min_evi = float(self.vprm_pre.min_lswi.sat_img.sel(site_names=site_name)['min_lswi']) 
+            min_lswi = float(self.vprm_pre.min_lswi.sat_img.sel(site_names=site_name)['min_lswi']) 
+            diff = max_lswi - min_lswi
         elif lon is not None:
             max_lswi = self.vprm_pre.max_lswi.value_at_lonlat(lon, lat, key=key, as_array=False)
-            min_evi = self.vprm_pre.min_lswi.value_at_lonlat(lon, lat, key='min_lswi', as_array=False)
+            min_lswi = self.vprm_pre.min_lswi.value_at_lonlat(lon, lat, key='min_lswi', as_array=False)
+            diff = max_lswi - min_lswi
+            diff = xr.where(diff<0.01, 0.01, diff)
         else:
             max_lswi = self.vprm_pre.max_lswi.sat_img[key]
             min_lswi = self.vprm_pre.min_lswi.sat_img['min_lswi']
+            diff = max_lswi - min_lswi
+            diff = xr.where(diff<0.01, 0.01, diff)
         if land_cover_type in [4,7]:
             self.buffer['w_scale'] = (lswi - min_lswi) / (max_lswi - min_lswi)
         else:
