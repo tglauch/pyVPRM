@@ -364,10 +364,10 @@ class vprm_base:
             lc_classes = self.vprm_pre.land_cover_type.sat_img.vprm_classes.values
         else:
             lc_classes = [land_cover_type]
+
+        lc_classes = [i for i in lc_classes if i not in no_flux_veg_types ]
             
         for i in lc_classes:
-            if i in no_flux_veg_types:
-                continue
             if mode == '2d':
                 inputs = self._get_vprm_variables(i, date, regridder_weights=met_regridder_weights)
                 lcf = self.vprm_pre.land_cover_type.sat_img.sel({'vprm_classes': i})
