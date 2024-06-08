@@ -34,8 +34,8 @@ from pyVPRM.sat_managers.base_manager import earthdata
 class VIIRS(earthdata):
     #Class to download and load VIIRS data
 
-    def __init__(self, datapath=None, sat_image_path=None):
-        super().__init__(datapath, sat_image_path)
+    def __init__(self, datapath=None, sat_image_path=None, sat_img=None):
+        super().__init__(datapath, sat_image_path, sat_img)
         self.use_keys = []
         self.load_kwargs = {'variable': self.use_keys}
         self.sat = 'VIIRS'
