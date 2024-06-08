@@ -297,8 +297,8 @@ class earthdata(satellite_data_manager):
     # earthdata server, especially MODIS and VIIRS
 
         
-    def __init__(self, datapath=None, sat_image_path=None):
-        super().__init__(datapath, sat_image_path)
+    def __init__(self, datapath=None, sat_image_path=None, sat_img=None):
+        super().__init__(datapath, sat_image_path, sat_img)
         return
 
             
