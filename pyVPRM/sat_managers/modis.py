@@ -35,9 +35,9 @@ class modis(earthdata):
     #Class to download and load MODIS data
     
     
-    def __init__(self, datapath=None, sat_image_path=None, product='MOD09A1.061'):
+    def __init__(self, datapath=None, sat_image_path=None, sat_img=None, product='MOD09A1.061'):
 
-        super().__init__(datapath, sat_image_path)
+        super().__init__(datapath, sat_image_path, sat_img)
         if product == 'MOD09A1.061':
             self.use_keys = ['sur_refl_b01', 'sur_refl_b02',
                              'sur_refl_b03', 'sur_refl_b04',
