@@ -51,7 +51,6 @@ class modis(earthdata):
         self.product = product
         self.path = "MOLT"
         self.resolution = None
-        self.bands = None
         
     def start_date(self):
         return parser.parse(self.sat_img.attrs['GRANULEBEGINNINGDATETIME'].split(',')[0]).replace(tzinfo=None)
