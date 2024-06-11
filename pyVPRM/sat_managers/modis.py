@@ -101,9 +101,28 @@ class modis(earthdata):
         end_bit = 1 # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1
         bit_mask = (1 << num_bits_to_extract) - 1
-        mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask 
+        mask1 = (((np.array(vprm_inst.sat_imgs.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask) != int('00', 2))
+        
+        start_bit = 2 # Start Bit 
+        end_bit = 2 # End Bit  (inclusive)
+        num_bits_to_extract = end_bit - start_bit + 1
+        bit_mask = (1 << num_bits_to_extract) - 1
+        mask2 = (((np.array(vprm_inst.sat_imgs.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask) != int('0', 2))
+        
+        start_bit = 8 # Start Bit 
+        end_bit = 9 # End Bit  (inclusive)
+        num_bits_to_extract = end_bit - start_bit + 1
+        bit_mask = (1 << num_bits_to_extract) - 1
+        mask3 = (((np.array(vprm_inst.sat_imgs.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask) != int('00', 2))
+        
+        # start_bit = 0 # Start Bit 
+        # end_bit = 1 # End Bit  (inclusive)
+        # num_bits_to_extract = end_bit - start_bit + 1
+        # bit_mask = (1 << num_bits_to_extract) - 1
+        # mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask 
+        
         for b in bands:
-            self.sat_img[b].values[mask != int('00', 2)] = np.nan
+            self.sat_img[b].values[(mask1 | mask2 | mask3)] = np.nan
         return
 
     def get_resolution(self):
