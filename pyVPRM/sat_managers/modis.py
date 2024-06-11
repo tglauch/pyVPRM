@@ -90,7 +90,8 @@ class modis(earthdata):
             masks[b[1]] = (masks[b[1]] != int('0000', 2)) #& (masks[mask_int] != '0111')  &\
                              # (masks[mask_int] != '1000') & (masks[mask_int] != '1010') &\
                              # (masks[mask_int] != '1100')
-            self.sat_img[b[0]].values[masks[b[1]]] = np.nan
+            self.sat_img[b[0]] = xr.where(masks[b[1]], np.nan, self.sat_img[b[0]])
+            #self.sat_img[b[0]].values[masks[b[1]]] = np.nan
         return
 
     def mask_clouds(self, bands=None):
@@ -124,7 +125,8 @@ class modis(earthdata):
         # mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask 
         
         for b in bands:
-            self.sat_img[b].values[(mask1 | mask2 | mask3)] = np.nan
+            self.sat_img[b] = xr.where((mask1 | mask2 | mask3), np.nan, self.sat_img[b])
+           # self.sat_img[b].values[(mask1 | mask2 | mask3)] = np.nan
         return
 
     def get_resolution(self):
@@ -204,7 +206,8 @@ class modis(earthdata):
         bit_mask = (1 << num_bits_to_extract) - 1
         mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit)  & bit_mask 
         for b in bands:
-            self.sat_img[b].values[mask == int('1', 2)] = np.inf
+            self.sat_img[b] = xr.where(mask == int('1', 2), np.inf, self.sat_img[b])
+            #self.sat_img[b].values[mask == int('1', 2)] = np.inf
         return
 
     
