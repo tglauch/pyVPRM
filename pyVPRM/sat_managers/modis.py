@@ -92,7 +92,9 @@ class modis(earthdata):
     def mask_clouds(self, bands=None):
         if bands is None:
             bands=self.bands
-         
+            if self.bands is not None:
+                self.bands = [i for i in list(self.sat_img.keys()) if 'sur_refl_b' in i]
+
         start_bit = 0 # Start Bit 
         end_bit = 1 # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1
@@ -171,6 +173,8 @@ class modis(earthdata):
     def mask_snow(self, bands=None):
         if bands is None:
             bands=self.bands
+            if self.bands is not None:
+                self.bands = [i for i in list(self.sat_img.keys()) if 'sur_refl_b' in i]
         start_bit = 12 # Start Bit 
         end_bit = 12 # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1
