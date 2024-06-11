@@ -60,13 +60,15 @@ class satellite_data_manager:
     # Base class for all satellite images
     
     def __init__(self, datapath=None, sat_image_path=None, sat_img=None):
+        self.bands = None
         self.outpath = datapath
         self.sat_image_path = sat_image_path  
         self.sat_img = sat_img
         if isinstance(self.sat_img, str):
             self.sat_img = xr.open_dataset(self.sat_img)
+            self.bands = list(self.sat_img.keys())
         self.t = None
-        self.bands = None
+        
         return
     
     def value_at_lonlat(self, lon, lat, as_array=True, key=None,
