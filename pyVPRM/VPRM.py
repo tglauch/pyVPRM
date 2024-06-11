@@ -268,6 +268,7 @@ class vprm:
 
         evi_params = {'g': 2.5, 'c1': 6., 'c2': 7.5, 'l': 1}
         evi2_params = {'g': 2.5, 'l': 1 , 'c': 2.4}
+  
         if not isinstance(handler, satellite_data_manager):
             print('Satellite image needs to be an object of the sattelite_data_manager class')
             return  
@@ -280,6 +281,7 @@ class vprm:
                 handler.mask_bad_pixels()
             else:
                 handler.mask_bad_pixels(bands_to_mask)
+  
         if which_evi in ['evi', 'evi2']:
             nir = handler.sat_img[b_nir] 
             red = handler.sat_img[b_red]
