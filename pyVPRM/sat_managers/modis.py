@@ -73,6 +73,8 @@ class modis(earthdata):
         
         if bands is None:
             bands=self.bands
+            if self.bands is not None:
+                self.bands = [i for i in list(self.sat_img.keys()) if 'sur_refl_b' in i]
          
         band_nums = [(band, int(band.split('_b')[1])) for band in bands]
         masks = dict()
