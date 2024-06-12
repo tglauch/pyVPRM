@@ -130,7 +130,8 @@ class VIIRS(earthdata):
 
         for mask_int in masks.keys():
             masks[mask_int] = (masks[mask_int] != int('0000', 2))
-            self.sat_img['SurfReflect_I{}'.format(mask_int)].values[masks[mask_int]] = np.nan
+            self.sat_img['SurfReflect_I{}'.format(mask_int)] = xr.where(masks[mask_int], np.nan, self.sat_img['SurfReflect_I{}'.format(mask_int)])
+            #self.sat_img['SurfReflect_I{}'.format(mask_int)].values[masks[mask_int]] = np.nan
         return
 
     def mask_clouds(self, bands=None):
