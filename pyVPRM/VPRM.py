@@ -306,16 +306,16 @@ class vprm:
           for btm in [b_nir, b_red, b_blue, b_swir]:
               if btm is not None:
                     bands_to_mask.append(btm)
-        if mask_clouds:
-            if bands_to_mask == []:   
-                handler.mask_clouds()
-            else:
-                handler.mask_clouds(bands_to_mask)
         if mask_snow:
             if bands_to_mask == []:   
                 handler.mask_snow()
             else:
                 handler.mask_snow(bands_to_mask)
+        if mask_clouds:
+            if bands_to_mask == []:   
+                handler.mask_clouds()
+            else:
+                handler.mask_clouds(bands_to_mask)
         if drop_bands:
             if isinstance(drop_bands, list):
                 drop_keys = drop_bands
