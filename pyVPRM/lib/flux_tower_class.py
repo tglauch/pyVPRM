@@ -6,7 +6,7 @@ from dateutil import parser
 import numpy as np 
 import os
 from timezonefinder import TimezoneFinder 
-from datetime import datetime
+from datetime import datetime, timedelta
 import pathlib
 
 class flux_tower_data:
@@ -59,26 +59,74 @@ class brazil_flux_data(flux_tower_data):
     def __init__(self, data_path, ssrd_key=None,
                  t2m_key=None, use_vars=None,
                  t_start=None, t_stop=None):
+
+        site_name = data_path.split('/')[-1].split('_')[0]
+        self.data_path = data_path
+
+        super().__init__(t_start, t_stop, ssrd_key, t2m_key,
+                         site_name)
+
+        if use_vars is None:
+            self.vars = variables = ['Year_LBAMIP', 'DoY_LBAMIP', 'Hour_LBAMIP',
+                                     'NEE', 'NEEf', 'par', 'mrs', 'sco2',
+                                     'GEP_model', 'NEE_model', 'Re_model',
+                                     'Tair_LBAMIP', 'Qair_LBAMIP', 'SWdown_LBAMIP',
+                                     'Wind_LBAMIP','GF_Tair_LBAMIP', 'tsoil1',
+                                     'tsoil2', 'par_fill', 'ust'  ]
         site_info_dict = dict()
         site_info_dict['K67'] = dict(lat=-2.857, lon= -54.959,
-                                     veg_class='TRO')
+                                     veg_class='EF')
         site_info_dict['K77'] = dict(lat=-3.0202, lon= -54.8885,
                                      veg_class='GRA')
         site_info_dict['K83'] = dict(lat=-3.017, lon= -54.9707,
-                                     veg_class='TRO')
+                                     veg_class='EF')
         site_info_dict['K34'] = dict(lat=-2.6091, lon= -60.2093,
-                                     veg_class='TRO')
+                                     veg_class='EF')
         site_info_dict['CAX'] = dict(lat=-1.7483, lon= -51.4536,
-                                     veg_class='TRO')
+                                     veg_class='EF')
         site_info_dict['FNS'] = dict(lat=-10.7618, lon= -62.3572,
                                      veg_class='GRA')
         site_info_dict['RJA'] = dict(lat=-10.078, lon= -61.9331,
-                                     veg_class='TRO')
+                                     veg_class='EF')
         site_info_dict['BAN'] = dict(lat=-9.824416667, lon= -50.1591111,
-                                     veg_class='TRO') # transitional forest
+                                     veg_class='EF') # transitional forest
         site_info_dict['RPG'] = dict(lat=-21.61947222, lon= -47.6498889,
                                      veg_class='EF')
+        self.lat = site_info_dict[site_name]['lat']
+        self.lon = site_info_dict[site_name]['lon']
 
+    def add_tower_data(self):
+        idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars,
+                            delim_whitespace=True, skiprows=[1])
+        idata.rename({self.ssrd_key: 'ssrd', self.t2m_key: 't2m'}, inplace=True, axis=1)
+        tf = TimezoneFinder()
+        timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
+        # tzw = tzwhere.tzwhere()
+        # timezone_str = tzw.tzNameAt(self.lat, self.lon) 
+        timezone = pytz.timezone(timezone_str)
+        dt = parser.parse('200001010000') # pick a date that is definitely standard time and not DST 
+        datetime_u = []
+        for i, row in idata.iterrows():
+            datetime_u.append(datetime(int(row['Year_LBAMIP']), 1, 1) +
+                              timedelta(row['DoY_LBAMIP'] - 1) +
+                              timedelta(hours=row['Hour_LBAMIP'])  -  
+                              timezone.utcoffset(dt))
+        datetime_u = np.array(datetime_u)
+        idata['datetime_utc'] = datetime_u
+        if (self.tstart is not None) & (self.tstop is not None):
+            mask = (datetime_u >= self.tstart) & (datetime_u <= self.tstop)
+            flux_data = idata[mask]
+        else:
+            flux_data = idata
+        this_len = len(flux_data)
+        if this_len < 2:
+            print('No data for {} in given time range'.format(self.site_name))
+            years = np.unique([t.year for t in datetime_u])
+            print('Data only available for the following years {}'.format(years))
+            return False
+        else:
+            self.flux_data = flux_data
+            return True
 
 class fluxnet(flux_tower_data):
     
