@@ -10,6 +10,8 @@ Among others it can be used for
 2. Making CO2 flux predictions for a given region of interest
 3. Generating input files to run VPRM in the Weather Research and Forecasting Model (WRF)
 
+In case of any questions please write an E-Mail to theo.glauch@dlr.de
+
 
 # How to use
 
