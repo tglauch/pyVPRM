@@ -53,7 +53,7 @@ class flux_tower_data:
             self.flux_data[i] = add_dict[i]
         return
 
-    def cut_to_timewindow(tstart, tstop, key='datetime_utc'):
+    def cut_to_timewindow(self, tstart, tstop, key='datetime_utc'):
         mask = (self.flux_data[key] >= self.tstart) & (self.flux_data[key]<= self.tstop)
         self.flux_data = self.flux_data[mask]
         return
@@ -146,18 +146,18 @@ class ameri_fluxnet(flux_tower_data):
                          site_name)
         
         self.vars = use_vars
-        idat = pd.read_csv(glob.glob(os.path.join(self.data_path , '*.csv'))[0], skiprows=2)
         idat_info = pd.read_excel(glob.glob(os.path.join(self.data_path, '*.xlsx'))[0])
         self.lat = float(idat_info[idat_info['VARIABLE']=='LOCATION_LAT']['DATAVALUE'])
         self.lon = float(idat_info[idat_info['VARIABLE']=='LOCATION_LONG']['DATAVALUE'])
-        self.land_cover_type = site_info.loc[site_info['SITE_ID']==site_name]['IGBP'].values
+        self.land_cover_type = str(idat_info.loc[idat_info['VARIABLE']=='IGBP']['DATAVALUE'])
         return
 
     def add_tower_data(self):
         if self.vars is None:
-            idata = pd.read_csv(self.data_path)
+            idata =  pd.read_csv(glob.glob(os.path.join(self.data_path , '*.csv'))[0], skiprows=2)
         else:
-            idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars)            
+            idata =  pd.read_csv(glob.glob(os.path.join(self.data_path , '*.csv'))[0], skiprows=2,
+                                 usecols=lambda x: x in self.vars)          
         idata.rename({self.ssrd_key: 'ssrd', self.t2m_key: 't2m'}, inplace=True, axis=1)
         tf = TimezoneFinder()
         timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
