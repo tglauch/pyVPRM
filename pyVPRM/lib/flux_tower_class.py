@@ -54,7 +54,7 @@ class flux_tower_data:
         return
 
     def cut_to_timewindow(self, tstart, tstop, key='datetime_utc'):
-        mask = (self.flux_data[key] >= self.tstart) & (self.flux_data[key]<= self.tstop)
+        mask = (self.flux_data[key] >= tstart) & (self.flux_data[key]<= tstop)
         self.flux_data = self.flux_data[mask]
         return
 
