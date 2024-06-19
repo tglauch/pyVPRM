@@ -53,6 +53,11 @@ class flux_tower_data:
             self.flux_data[i] = add_dict[i]
         return
 
+    def cut_to_timewindow(tstart, tstop, key='datetime_utc'):
+        mask = (self.flux_data[key] >= self.tstart) & (self.flux_data[key]<= self.tstop)
+        self.flux_data = self.flux_data[mask]
+        return
+
 class brazil_flux_data(flux_tower_data):
     # https://daac.ornl.gov/cgi-bin/dsviewer.pl?ds_id=1842
     
@@ -127,6 +132,59 @@ class brazil_flux_data(flux_tower_data):
         else:
             self.flux_data = flux_data
             return True
+
+class ameri_fluxnet(flux_tower_data):
+    
+    def __init__(self, data_path,
+                 ssrd_key=None, t2m_key=None, use_vars=None,
+                 t_start=None, t_stop=None):
+        
+        site_name = glob.glob(os.path.join(data_path, '*.csv'))[0].split('/')[-1].split('AMF_')[1].split('_')[0]
+        self.data_path = data_path
+    
+        super().__init__(t_start, t_stop, ssrd_key, t2m_key,
+                         site_name)
+        
+        self.vars = use_vars
+        idat = pd.read_csv(glob.glob(os.path.join(self.data_path , '*.csv'))[0], skiprows=2)
+        idat_info = pd.read_excel(glob.glob(os.path.join(self.data_path, '*.xlsx'))[0])
+        self.lat = float(idat_info[idat_info['VARIABLE']=='LOCATION_LAT']['DATAVALUE'])
+        self.lon = float(idat_info[idat_info['VARIABLE']=='LOCATION_LONG']['DATAVALUE'])
+        self.land_cover_type = site_info.loc[site_info['SITE_ID']==site_name]['IGBP'].values
+        return
+
+    def add_tower_data(self):
+        if self.vars is None:
+            idata = pd.read_csv(self.data_path)
+        else:
+            idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars)            
+        idata.rename({self.ssrd_key: 'ssrd', self.t2m_key: 't2m'}, inplace=True, axis=1)
+        tf = TimezoneFinder()
+        timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
+        # tzw = tzwhere.tzwhere()
+        # timezone_str = tzw.tzNameAt(self.lat, self.lon) 
+        timezone = pytz.timezone(timezone_str)
+        dt = parser.parse('200001010000') # pick a date that is definitely standard time and not DST 
+        datetime_u = []
+        for i, row in idata.iterrows():
+            datetime_u.append(parser.parse(str(int(row['TIMESTAMP_END'])))  -  timezone.utcoffset(dt))
+        datetime_u = np.array(datetime_u)
+        idata['datetime_utc'] = datetime_u
+        if (self.tstart is not None) & (self.tstop is not None):
+            mask = (datetime_u >= self.tstart) & (datetime_u <= self.tstop)
+            flux_data = idata[mask]
+        else:
+            flux_data = idata
+        this_len = len(flux_data)
+        if this_len < 2:
+            print('No data for {} in given time range'.format(self.site_name))
+            years = np.unique([t.year for t in datetime_u])
+            print('Data only available for the following years {}'.format(years))
+            return False
+        else:
+            self.flux_data = flux_data
+            return True
+
 
 class fluxnet(flux_tower_data):
     
