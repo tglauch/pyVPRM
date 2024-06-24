@@ -72,7 +72,7 @@ class vprm_base:
         if temperature is not None:
             t = temperature
         elif lon is not None:
-            t = self.era5_inst.get_data(lonlat=(lon, lat), key='t2m') - 273.15 # to grad celsius
+            t = float(self.era5_inst.get_data(lonlat=(lon, lat), key='t2m')) - 273.15 # to grad celsius
         else:
             t = self.era5_inst.get_data(key='t2m') - 273.15
         ret = (((t - tmin) * (t - tmax)) / ((t-tmin)*(t-tmax) - (t - topt)**2))
@@ -136,7 +136,7 @@ class vprm_base:
         if ssrd is not None:
             ret = ssrd / 0.505
         elif lon is not None:
-            ret = self.era5_inst.get_data(lonlat=(lon, lat), key='ssrd') / 0.505 / 3600
+            ret = float(self.era5_inst.get_data(lonlat=(lon, lat), key='ssrd')) / 0.505 / 3600
         else:
             ret = self.era5_inst.get_data(key='ssrd') / 0.505 / 3600
         return ret
