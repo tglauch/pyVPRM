@@ -442,11 +442,11 @@ class vprm_base:
               for i in range(200):
                   func = lambda x, a, b: np.maximum(a * x['tcorr'] + b, 0)
                   mask = (data_for_fit['par'] == 0)
-                  fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['respiration'][mask],
+                  fit_respiration = curve_fit(func, data_for_fit[mask], data_for_fit['nee'][mask],
                                               maxfev=5000,
                                               p0=[np.random.uniform(-0.5, 0.5),
                                                   np.random.uniform(-0.5, 0.5)]) 
-                  mse = np.mean((func(data_for_fit[mask], fit_respiration[0][0], fit_respiration[0][1]) - data_for_fit['respiration'][mask])**2)
+                  mse = np.mean((func(data_for_fit[mask], fit_respiration[0][0], fit_respiration[0][1]) - data_for_fit['nee'][mask])**2)
                   if mse < best_mse:
                       best_mse = mse
                       best_fit_params = fit_respiration
