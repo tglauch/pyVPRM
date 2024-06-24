@@ -20,6 +20,7 @@ class met_data_handler(met_data_handler_base):
        #  keys_dict above
         self.in_era5_grid = True
         self.this_month = 0
+        self.this_year = 0
         self.bpath = bpath
         self.ds_in_t = None
         self.regridder = None
@@ -87,9 +88,10 @@ class met_data_handler(met_data_handler_base):
         return self.data
         
     def _init_data_for_day(self):
-        if self.this_month != self.month:
+        if (self.this_month != self.month) | (self.this_year != self.year):
             self.data = xr.open_dataset(os.path.join(self.bpath, '{}_{}.nc'.format(self.year, self.month)))
             self.this_month = self.month
+            self.this_year= self.year
             self.in_era5_grid = True
 
         if self.ds_in_t is None:
