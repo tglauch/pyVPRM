@@ -253,9 +253,20 @@ class vprm_base:
                 ret_dict['evi'].append(self.get_evi(site_name=site_name))
                 ret_dict['Ps'].append(self.get_p_scale(site_name=site_name,
                                                        land_cover_type=s.get_land_type()))
-                ret_dict['par'].append(self.get_par(ssrd=row['ssrd']))
-                Ts_all = self.get_t_scale(land_cover_type=s.get_land_type(),
-                                          temperature=row['t2m'])
+                if self.era5_inst is None:
+                    ret_dict['par'].append(self.get_par(ssrd=row['ssrd']))
+                else:
+                    lonlat = s.get_lonlat()
+                    ret_dict['par'].append(self.get_par(lon=lonlat[0],
+                                                        lat=lonlat[1]))
+                if self.era5_inst is None:
+                    Ts_all = self.get_t_scale(land_cover_type=s.get_land_type(),
+                                              temperature=row['t2m'])
+                else:
+                    lonlat = s.get_lonlat()
+                    Ts_all = self.get_t_scale(land_cover_type=s.get_land_type(),
+                                             lon=lonlat[0],
+                                             lat=lonlat[1])  
                 ret_dict['Ts'].append(Ts_all[1])
                 ret_dict['tcorr'].append(Ts_all[0])
                 ret_dict['Ws'].append(self.get_w_scale(site_name=site_name,
