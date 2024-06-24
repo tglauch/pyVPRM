@@ -245,7 +245,16 @@ class vprm_base:
                 ret_dict[k] = []
             drop_rows = []
             for index, row in s.get_data().iterrows():
-                img_status = self.vprm_pre._set_sat_img_counter(row['datetime_utc'])
+                datetime_utc = row['datetime_utc']
+                img_status = self.vprm_pre._set_sat_img_counter(datetime_utc)
+                if self.era5_inst is not None:
+                    era_keys = ['ssrd', 't2m'] 
+                    hour = datetime_utc.hour
+                    day = datetime_utc.day
+                    month = datetime_utc.month
+                    year = datetime_utc.year
+                    self.load_weather_data(hour, day, month,
+                                           year, era_keys=era_keys)
                 #print(self.counter)
                 if img_status == False:
                     drop_rows.append(index)
