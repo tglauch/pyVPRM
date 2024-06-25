@@ -131,6 +131,7 @@ class brazil_flux_data(flux_tower_data):
             return False
         else:
             self.flux_data = flux_data
+            self.flux_data[t2m_key] = self.flux_data[t2m_key] - 273.15
             return True
 
 class ameri_fluxnet(flux_tower_data):
