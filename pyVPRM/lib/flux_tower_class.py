@@ -132,7 +132,7 @@ class brazil_flux_data(flux_tower_data):
         else:
             self.flux_data = flux_data
             if self.t2m_key is not None:
-                self.flux_data[self.t2m_key] = self.flux_data[self.t2m_key] - 273.15
+                self.flux_data['t2m'] = self.flux_data['t2m'] - 273.15
             return True
 
 class ameri_fluxnet(flux_tower_data):
