@@ -495,14 +495,14 @@ class vprm_base:
                 best_mse = np.inf
                 for i in range(200):  
                     func = lambda x, lamb, par0: -1 * (lamb * x['Ws'] * x['Ts'] * x['Ps']) * x['evi'] * x['par'] / (1 + x['par']/par0) + best_fit_params_dict[key]['alpha'] * x['tcorr'] + best_fit_params_dict[key]['beta']
-                    fit_nee = curve_fit(func,
+                    fit_nee_res = curve_fit(func,
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
                                         p0=[np.random.uniform(0, 0.5),
                                             np.random.uniform(100, 1000)]) 
-                    mse = np.mean((func(data_for_fit, fit_nee[0][0], fit_nee[0][1]) - data_for_fit['nee'])**2)
+                    mse = np.mean((func(data_for_fit, fit_nee_res[0][0], fit_nee_res[0][1]) - data_for_fit['nee'])**2)
                     if mse < best_mse:
                         best_mse = mse
-                        best_fit_params = fit_nee
+                        best_fit_params = fit_nee_res
                 best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
                 best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
                 print('Best MSE NEE: {}'.format(best_mse))
@@ -510,15 +510,15 @@ class vprm_base:
                 best_mse = np.inf
                 for i in range(200):  
                     func = lambda x, lamb, par0, a, b: -1 * (lamb * x['Ws'] * x['Ts'] * x['Ps']) * x['evi'] * x['par'] / (1 + x['par']/par0) + np.maximum(a * x['tcorr'] + b, 0)
-                    fit_nee = curve_fit(func,
+                    fit_nee_res = curve_fit(func,
                                         data_for_fit, data_for_fit['nee'], maxfev=5000,
                                         p0=[np.random.uniform(0, 0.5),
                                             np.random.uniform(100, 1000),
                                             0.3, 0]) 
-                    mse = np.mean((func(data_for_fit, fit_nee[0][0], fit_nee[0][1], fit_nee[0][2], fit_nee[0][3]) - data_for_fit['nee'])**2)
+                    mse = np.mean((func(data_for_fit, fit_nee_res[0][0], fit_nee_res[0][1], fit_nee_res[0][2], fit_nee_res[0][3]) - data_for_fit['nee'])**2)
                     if mse < best_mse:
                         best_mse = mse
-                        best_fit_params = fit_nee
+                        best_fit_params = fit_nee_res
                 best_fit_params_dict[key] = {'lamb':  best_fit_params[0][0],
                                              'par0': best_fit_params[0][1],
                                              'alpha': best_fit_params[0][2],
