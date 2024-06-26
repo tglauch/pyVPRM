@@ -519,9 +519,9 @@ class vprm_base:
                     if mse < best_mse:
                         best_mse = mse
                         best_fit_params = fit_nee
-                best_fit_params_dict[key]['lamb'] = best_fit_params[0][0]
-                best_fit_params_dict[key]['par0'] = best_fit_params[0][1]
-                best_fit_params_dict[key]['alpha'] = best_fit_params[0][2]
-                best_fit_params_dict[key]['beta'] = best_fit_params[0][3]
+                best_fit_params_dict[key] = {'lamb':  best_fit_params[0][0],
+                                             'par0': best_fit_params[0][1],
+                                             'alpha': best_fit_params[0][2],
+                                             'beta': best_fit_params[0][3]}
                 print('Best MSE NEE: {}'.format(best_mse))
         return best_fit_params_dict
