@@ -8,6 +8,7 @@ import os
 from timezonefinder import TimezoneFinder 
 from datetime import datetime, timedelta
 import pathlib
+import glob
 
 class flux_tower_data:
     # Class to store flux tower data in unique format
