@@ -79,6 +79,8 @@ class brazil_flux_data(flux_tower_data):
                                      'Tair_LBAMIP', 'Qair_LBAMIP', 'SWdown_LBAMIP',
                                      'Wind_LBAMIP','GF_Tair_LBAMIP', 'tsoil1',
                                      'tsoil2', 'par_fill', 'ust'  ]
+        if use_vars is 'all':
+            self.vars = 'all'
         site_info_dict = dict()
         site_info_dict['K67'] = dict(lat=-2.857, lon= -54.959,
                                      veg_class='EF')
@@ -102,7 +104,10 @@ class brazil_flux_data(flux_tower_data):
         self.lon = site_info_dict[site_name]['lon']
 
     def add_tower_data(self):
-        idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars,
+        if self.vars == 'all':
+            idata = pd.read_csv(self.data_path, delim_whitespace=True, skiprows=[1])
+        else:
+            idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars,
                             delim_whitespace=True, skiprows=[1])
         idata.rename({self.ssrd_key: 'ssrd', self.t2m_key: 't2m'}, inplace=True, axis=1)
         tf = TimezoneFinder()
@@ -147,8 +152,10 @@ class ameri_fluxnet(flux_tower_data):
     
         super().__init__(t_start, t_stop, ssrd_key, t2m_key,
                          site_name)
-        
-        self.vars = use_vars
+        if (use_vars is None) | (use_vars is 'all'):
+            self.vars = 'all'
+        else:
+            self.vars = use_vars
         idat_info = pd.read_excel(glob.glob(os.path.join(self.data_path, '*.xlsx'))[0])
         self.lat = float(idat_info[idat_info['VARIABLE']=='LOCATION_LAT']['DATAVALUE'])
         self.lon = float(idat_info[idat_info['VARIABLE']=='LOCATION_LONG']['DATAVALUE'])
@@ -156,7 +163,7 @@ class ameri_fluxnet(flux_tower_data):
         return
 
     def add_tower_data(self):
-        if self.vars is None:
+        if self.vars is 'all':
             idata =  pd.read_csv(glob.glob(os.path.join(self.data_path , '*.csv'))[0], skiprows=2)
         else:
             idata =  pd.read_csv(glob.glob(os.path.join(self.data_path , '*.csv'))[0], skiprows=2,
@@ -207,6 +214,8 @@ class fluxnet(flux_tower_data):
                                     'TIMESTAMP_START', 'TIMESTAMP_END', 'WD', 'WS', 
                                     'SW_IN_F', 'TA_F', 'USTAR', 'RECO_NT_VUT_REF', 'RECO_DT_VUT_REF',
                                      'TA_F_QC', 'SW_IN_F_QC']
+        elif use_vars is 'all':
+            self.vars = 'all'
         else:
             self.vars = use_vars
         
@@ -217,7 +226,10 @@ class fluxnet(flux_tower_data):
         return
 
     def add_tower_data(self):
-        idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars)
+        if self.vars is 'all':
+            idata = pd.read_csv(self.data_path)
+        else:
+            idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars)            
         idata.rename({self.ssrd_key: 'ssrd', self.t2m_key: 't2m'}, inplace=True, axis=1)
         tf = TimezoneFinder()
         timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
@@ -261,6 +273,8 @@ class icos(flux_tower_data):
                                     'TIMESTAMP_START', 'TIMESTAMP_END', 'WD', 'WS', 
                                     'SW_IN_F', 'TA_F', 'USTAR', 'RECO_NT_VUT_REF', 'RECO_DT_VUT_REF',
                                      'TA_F_QC', 'SW_IN_F_QC']
+        elif use_vars is 'all':
+            self.vars = 'all'
         else:
             self.vars = use_vars
             
@@ -273,8 +287,11 @@ class icos(flux_tower_data):
         return
 
     def add_tower_data(self):
-        idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars,
-                            on_bad_lines='skip')
+        if self.vars is 'all':
+            idata = pd.read_csv(self.data_path, on_bad_lines='skip')
+        else:
+            idata = pd.read_csv(self.data_path, usecols=lambda x: x in self.vars,
+                                on_bad_lines='skip')            
         idata.rename({self.ssrd_key: 'ssrd', self.t2m_key: 't2m'}, inplace=True, axis=1)
         tf = TimezoneFinder()
         timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
