@@ -158,34 +158,36 @@ class vprm_base:
         #     return self.buffer['w_scale']
         lswi = self.get_lswi(lon, lat, site_name)
         if land_cover_type == 1:
+            # How to calculate Max LSWI for Evergreen? What's the growing season?
             key = 'max_lswi_evergreen'
             if key not in self.vprm_pre.max_lswi.sat_img.keys():
-                self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.max_lswi.sat_img['growing_season_th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
+                self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.max_lswi.sat_img['th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
         else:
             key = 'max_lswi_others'
             if key not in self.vprm_pre.max_lswi.sat_img.keys():
-                self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.max_lswi.sat_img['growing_season_th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
+                self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.max_lswi.sat_img['th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
                        
         if site_name is not None:
             max_lswi = float(self.vprm_pre.max_lswi.sat_img.sel(site_names=site_name)[key])
             min_lswi = float(self.vprm_pre.min_lswi.sat_img.sel(site_names=site_name)['min_lswi']) 
-            #diff = max_lswi - min_lswi
+            diff = max_lswi - min_lswi
         elif lon is not None:
-            max_lswi = self.vprm_pre.max_lswi.value_at_lonlat(lon, lat, key=key, as_array=False)
-            min_lswi = self.vprm_pre.min_lswi.value_at_lonlat(lon, lat, key='min_lswi', as_array=False)
-            #diff = max_lswi - min_lswi
-            #diff = xr.where(diff<0.01, 0.01, diff)
+            max_lswi = float(self.vprm_pre.max_lswi.value_at_lonlat(lon, lat, key=key, as_array=False))
+            min_lswi = float(self.vprm_pre.min_lswi.value_at_lonlat(lon, lat, key='min_lswi', as_array=False))
+            diff = max_lswi - min_lswi
+            if diff < 0.01:
+                diff = 0.01
         else:
             max_lswi = self.vprm_pre.max_lswi.sat_img[key]
             min_lswi = self.vprm_pre.min_lswi.sat_img['min_lswi']
-            #diff = max_lswi - min_lswi
-            #diff = xr.where(diff<0.01, 0.01, diff)
+            diff = max_lswi - min_lswi
+            diff = xr.where(diff<0.01, 0.01, diff)
             
-        # Doesn't show any improvements, but increases instability
-        # if land_cover_type in [4,7]:
-        #     self.buffer['w_scale'] = (lswi - min_lswi) / (max_lswi - min_lswi)
-        # else:
-        self.buffer['w_scale'] = (1+lswi)/(1+max_lswi)
+        Doesn't show any improvements, but increases instability
+        if land_cover_type in [4,7]:
+            self.buffer['w_scale'] = (lswi - min_lswi) / (max_lswi - min_lswi)
+        else:
+            self.buffer['w_scale'] = (1+lswi)/(1+max_lswi)
         return self.buffer['w_scale']
     
 
