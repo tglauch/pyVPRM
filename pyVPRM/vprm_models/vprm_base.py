@@ -161,11 +161,11 @@ class vprm_base:
             # How to calculate Max LSWI for Evergreen? What's the growing season?
             key = 'max_lswi_evergreen'
             if key not in self.vprm_pre.max_lswi.sat_img.keys():
-                self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.max_lswi.sat_img['th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
+                self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.min_max_evi.sat_img['th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
         else:
             key = 'max_lswi_others'
             if key not in self.vprm_pre.max_lswi.sat_img.keys():
-                self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.max_lswi.sat_img['th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
+                self.vprm_pre.max_lswi.sat_img[key] = self.vprm_pre.sat_imgs.sat_img['lswi'].where((self.vprm_pre.sat_imgs.sat_img['evi']>self.vprm_pre.min_max_evi.sat_img['th']),np.nan).max(self.vprm_pre.time_key, skipna=True)
                        
         if site_name is not None:
             max_lswi = float(self.vprm_pre.max_lswi.sat_img.sel(site_names=site_name)[key])
@@ -183,7 +183,7 @@ class vprm_base:
             diff = max_lswi - min_lswi
             diff = xr.where(diff<0.01, 0.01, diff)
             
-        Doesn't show any improvements, but increases instability
+        # Doesn't show any improvements, but increases instability
         if land_cover_type in [4,7]:
             self.buffer['w_scale'] = (lswi - min_lswi) / (max_lswi - min_lswi)
         else:
