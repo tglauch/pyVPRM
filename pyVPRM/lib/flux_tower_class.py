@@ -85,7 +85,7 @@ class brazil_flux_data(flux_tower_data):
         site_info_dict['K67'] = dict(lat=-2.857, lon= -54.959,
                                      veg_class='EF')
         site_info_dict['K77'] = dict(lat=-3.0202, lon= -54.8885,
-                                     veg_class='GRA')
+                                     veg_class='CRO')
         site_info_dict['K83'] = dict(lat=-3.017, lon= -54.9707,
                                      veg_class='EF')
         site_info_dict['K34'] = dict(lat=-2.6091, lon= -60.2093,
@@ -98,8 +98,8 @@ class brazil_flux_data(flux_tower_data):
                                      veg_class='EF')
         site_info_dict['BAN'] = dict(lat=-9.824416667, lon= -50.1591111,
                                      veg_class='EF') # transitional forest
-        site_info_dict['RPG'] = dict(lat=-21.61947222, lon= -47.6498889,
-                                     veg_class='EF')
+        site_info_dict['PDG'] = dict(lat=-21.61947222, lon= -47.6498889,
+                                     veg_class='SH')
         self.lat = site_info_dict[site_name]['lat']
         self.lon = site_info_dict[site_name]['lon']
 
