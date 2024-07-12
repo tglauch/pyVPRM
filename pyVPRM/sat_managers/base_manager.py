@@ -242,7 +242,7 @@ class satellite_data_manager:
         self.sat_img = self.sat_img.rio.clip(box,all_touched=True,
                                              from_disk=from_disk).squeeze()        
     
-    def crop(self, lonlat, radius):
+    def crop(self, lonlat, radius, from_disk=False):
         # crop the satellite images in place using a given radius around a given 
         # longitude and latitude
         
@@ -258,7 +258,7 @@ class satellite_data_manager:
 
         self.sat_img = self.sat_img.rio.clip([box(*circle_poly.total_bounds)],
                                              all_touched=True,
-                                             from_disk=False).squeeze()
+                                             from_disk=from_disk).squeeze()
         return
     
     def crop_to_polygon(self, polygon, from_disk=False):
