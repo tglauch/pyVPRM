@@ -13,10 +13,11 @@ Among others it can be used for
 
 In case of any questions please write an E-Mail to theo.glauch@dlr.de.
 
- <figure>
-  <img src="https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a" width=30% height=50%>
-  <figcaption>Example Net Ecosystem Exchange for Europe</figcaption>
+
+<figure>
+<img src="https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a" width=30% height=50%>
 </figure> 
+Example Net Ecosystem Exchange for Europe
 
 
 
