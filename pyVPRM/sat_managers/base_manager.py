@@ -235,12 +235,12 @@ class satellite_data_manager:
         self.sat_img = merge.merge_datasets(to_merge)
         return
     
-    def crop_box(self, box):
+    def crop_box(self, box, from_disk=False):
         if not box.crs == self.sat_img.rio.crs:
             # If the crs is not equal reproject the data
             box = box.to_crs(self.sat_img.rio.crs)
         self.sat_img = self.sat_img.rio.clip(box,all_touched=True,
-                                             from_disk=False).squeeze()        
+                                             from_disk=from_disk).squeeze()        
     
     def crop(self, lonlat, radius):
         # crop the satellite images in place using a given radius around a given 
