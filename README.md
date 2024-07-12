@@ -14,6 +14,7 @@ Among others it can be used for
 In case of any questions please write an E-Mail to theo.glauch@dlr.de
 
 <img src="https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a" width=45% height=50%>
+Example output for a European Domain
 
 # How to use
 
