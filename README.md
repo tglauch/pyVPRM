@@ -11,10 +11,14 @@ Among others it can be used for
 2. Making CO2 flux predictions for a given region of interest
 3. Generating input files to run VPRM in the Weather Research and Forecasting Model (WRF)
 
-In case of any questions please write an E-Mail to theo.glauch@dlr.de
+In case of any questions please write an E-Mail to theo.glauch@dlr.de.
 
-<img src="https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a" width=45% height=50%>
-Example output for a European Domain
+ <figure>
+  <img src="https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a" width=30% height=50%>
+  <figcaption>Example Net Ecosystem Exchange for Europe</figcaption>
+</figure> 
+
+
 
 # How to use
 
