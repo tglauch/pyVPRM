@@ -261,13 +261,13 @@ class satellite_data_manager:
                                              from_disk=False).squeeze()
         return
     
-    def crop_to_polygon(self, polygon):
+    def crop_to_polygon(self, polygon, from_disk=False):
         if not polygon.crs == self.sat_img.rio.crs:
             polygon = polygon.to_crs(self.sat_img.rio.crs)
 
         self.sat_img = self.sat_img.rio.clip(polygon.geometry,
                                              all_touched=True,
-                                             from_disk=False).squeeze()   
+                                             from_disk=from_disk).squeeze()   
         return
 
     def crop_to_number_of_pixels(self, lonlat, num_pixels, key, reproject=False):
