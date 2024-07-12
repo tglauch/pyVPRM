@@ -1,6 +1,7 @@
 <img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d" width=50% height=50%>
 
-# About
+# About![plot_120_12](https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a)
+
 
 `pyVPRM` is a software package to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respriation Model (VPRM). It takes into account both, the primary productivity (GPP) as well as the respiration. The net flux between both of them is the net ecosystem exchange (NEE). The implementation is flexible and can be run with different satellite products (Sentinel-2, MODIS, VIIRS,...), land cover products (Copernicus Land Cover Service, ESA 10-m World Cover Map, MapBiomas) and climate models like the ECMWFS ERA5 Reanalysis. Through its modular structure it is also easily extendable. 
 
