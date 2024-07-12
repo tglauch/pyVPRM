@@ -5,7 +5,7 @@ def readme():
         return f.read()
 
 setup(name='pyVPRM',
-    version='1.1.0',
+    version='2.0',
     description='Vegetation Photosynthesis and Respiration Model',
     long_description='A tool to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respiration Model',
     classifiers=[
