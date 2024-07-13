@@ -17,11 +17,15 @@ class mapbiomas(satellite_data_manager):
         return self.resolution
         
     def individual_loading(self):
-        try: 
-            self.sat_img = rxr.open_rasterio(self.sat_image_path, 
-                             masked=True, band_as_variable=True,
-                                            cache=False).squeeze()
-        except:
-            self.sat_img = rxr.open_rasterio(self.sat_image_path, 
-                             masked=True, cache=False).squeeze()
+        self.sat_img = xr.open_dataset(self.sat_image_path)
+        self.sat_img = self.sat_img.rename({'band_data': 'band_1'})
+        self.sat_img['band_1'] = xr.where(np.isnan(self.sat_img['band_1']), 8,
+                                          self.sat_img['band_1'])
+        # try: 
+        #     self.sat_img = rxr.open_rasterio(self.sat_image_path, 
+        #                      masked=True, band_as_variable=True,
+        #                                     cache=False).squeeze()
+        # except:
+        #     self.sat_img = rxr.open_rasterio(self.sat_image_path, 
+        #                      masked=True, cache=False).squeeze()
         self.keys = np.array(list(self.sat_img.data_vars))
