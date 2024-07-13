@@ -18,6 +18,7 @@ class mapbiomas(satellite_data_manager):
         
     def individual_loading(self):
         self.sat_img = xr.open_dataset(self.sat_image_path)
+        self.sat_img = self.sat_img.rio.write_crs('WGS84')
         self.sat_img = self.sat_img.rename({'band_data': 'band_1'})
         self.sat_img['band_1'] = xr.where(np.isnan(self.sat_img['band_1']), 8,
                                           self.sat_img['band_1'])
