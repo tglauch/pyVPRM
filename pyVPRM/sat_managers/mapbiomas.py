@@ -1,6 +1,7 @@
 from pyVPRM.sat_managers.base_manager import satellite_data_manager
 import rioxarray as rxr
 import numpy as np
+import xarray as xr
 
 class mapbiomas(satellite_data_manager):
     # Class to load the copernicus land cover map 
