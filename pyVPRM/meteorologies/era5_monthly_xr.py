@@ -14,7 +14,7 @@ from pyVPRM.meteorologies.met_base_class import met_data_handler_base
 
 class met_data_handler(met_data_handler_base):
     
-    def __init__(self, year, month, day, hour, bpath, keys=[]):
+    def __init__(self, year, month, day, hour, bpath, mpi=False keys=[]):
         super().__init__() 
        # Init with year, month, day, hour and the required era5 keys as given in the 
        #  keys_dict above
@@ -24,6 +24,7 @@ class met_data_handler(met_data_handler_base):
         self.bpath = bpath
         self.ds_in_t = None
         self.regridder = None
+        self.mpi=mpi
         self.change_date(year, month, day, hour)
 
     def regrid(self, lats=None, lons=None, dataset=None, n_cpus=1,
@@ -52,7 +53,9 @@ class met_data_handler(met_data_handler_base):
                 dest_temp_path = os.path.join(bfolder , '{}.nc'.format(str(uuid.uuid4())))
                 self.ds_in_t.to_netcdf(src_temp_path)
                 t_ds_out.to_netcdf(dest_temp_path)
-                cmd = 'mpirun -np {}  ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log'.format(n_cpus, src_temp_path, dest_temp_path, weights)
+                cmd = 'ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log'.format(src_temp_path, dest_temp_path, weights)
+                if self.mpi:
+                    cmd = 'mpirun -np {} '.format(n_cpus) + cmd
                 print(cmd)
                 os.system(cmd)  
                 os.remove(src_temp_path) 
