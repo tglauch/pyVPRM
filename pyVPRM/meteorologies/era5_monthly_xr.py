@@ -14,7 +14,7 @@ from pyVPRM.meteorologies.met_base_class import met_data_handler_base
 
 class met_data_handler(met_data_handler_base):
     
-    def __init__(self, year, month, day, hour, bpath, mpi=False keys=[]):
+    def __init__(self, year, month, day, hour, bpath, mpi=False, keys=[]):
         super().__init__() 
        # Init with year, month, day, hour and the required era5 keys as given in the 
        #  keys_dict above
