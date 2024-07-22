@@ -158,7 +158,7 @@ class VIIRS(earthdata):
 
         for b in bands:
             self.sat_img[b] = xr.where((mask1 | mask2 | mask3), np.nan, self.sat_img[b])
-            self.sat_img[b].values[mask != int('00', 2)] = np.nan
+            #self.sat_img[b].values[mask != int('00', 2)] = np.nan
         return
 
     def mask_snow(self, bands=None):
