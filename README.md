@@ -13,14 +13,14 @@ Among others it can be used for
 
 In case of any questions please write an E-Mail to theo.glauch@dlr.de.
 
-## Example Net Ecosystem Exchange for Europe generated using pyVPRM
+## Example Net Ecosystem Fluxes generated with pyVPRM
 
 <figure>
-<img src="https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a", height=50%>
+<img src="https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a", height=300pt>
 </figure> 
 
 <figure>
-<img src="https://github.com/user-attachments/assets/48c412b2-cf5f-4573-9db8-e60909893218", height=50%>
+<img src="https://github.com/user-attachments/assets/48c412b2-cf5f-4573-9db8-e60909893218", height=300pt>
 </figure> 
 
 
