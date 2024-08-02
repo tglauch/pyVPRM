@@ -31,7 +31,8 @@ keys_dict = {'ssrd': [169, 'sf12'],#surface solar radiation downwards(J/m**2)
              'swvl1': [39, 'sf00'],# soil water level 1
              'swvl2': [40, 'sf00'],# soil water level 2
              'swvl3': [41, 'sf00'],# soil water level 3
-             'swvl4': [42, 'sf00'],# soil water level 3             
+             'swvl4': [42, 'sf00'],# soil water level 3   
+             '2d': [168, 'sf00'], # 2-m dewpoint temperature
              'tp': [228, 'sf12'], #total precipitation over given time
 #             'ssr': [176, 'sf12'], #net surface solar radiation (J/m**2)
 #             'str': [177, 'sf12'],#net surface thermal radiation (J/m**2)
