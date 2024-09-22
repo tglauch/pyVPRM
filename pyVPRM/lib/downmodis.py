@@ -172,7 +172,7 @@ class modisHtmlParser(HTMLParser):
 
     def get_dates(self):
         """Return a list of directories with date"""
-        regex = re.compile("(\d{4})[/.-](\d{2})[/.-](\d{2})$")
+        regex = re.compile(r"(\d{4})[/.-](\d{2})[/.-](\d{2})$")
         alldata = set([elem for elem in self.fileids if regex.match(elem)])
         return sorted(list(alldata))
 
