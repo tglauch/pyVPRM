@@ -30,7 +30,7 @@ import xarray as xr
 from datetime import datetime, timedelta, date
 import numpy as np
 from pyVPRM.sat_managers.base_manager import earthdata
-
+from loguru import logger
 
 class VIIRS(earthdata):
     # Class to download and load VIIRS data
@@ -52,7 +52,7 @@ class VIIRS(earthdata):
         return
 
     def set_band_names(self):
-        print("Trying to set reflectance bands assuming standard naming for VIIRS")
+        logger.info("Trying to set reflectance bands assuming standard naming for VIIRS")
         bands = []
         for k in list(self.sat_img.data_vars):
             if ("SurfReflect_I" not in k) & ("SurfReflect_M" not in k):
@@ -211,7 +211,7 @@ class VIIRS(earthdata):
         return
 
     def get_cloud_coverage(self):
-        print("PercentCloudy", self.meta_data["PercentCloudy"])
+        logger.info("PercentCloudy", self.meta_data["PercentCloudy"])
         return self.meta_data["PercentCloudy"]
 
     def get_recording_time(self):

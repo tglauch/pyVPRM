@@ -8,6 +8,7 @@ import copy
 import datetime
 from pyVPRM.meteorologies.met_base_class import met_data_handler_base
 import pandas as pd
+from loguru import logger
 
 key_map = {"time": "TIMESTAMP_START", "ssrd": "SW_IN", "t2m": "TA"}
 
@@ -52,4 +53,4 @@ if __name__ == "__main__":
     era5_handler = ERA5(year, month, day)
     era5_handler.change_date(hour)
     ret = era5_handler.get_data()
-    print(ret)
+    logger.info(ret)

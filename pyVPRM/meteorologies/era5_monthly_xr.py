@@ -11,7 +11,7 @@ import xesmf as xe
 import uuid
 import datetime
 from pyVPRM.meteorologies.met_base_class import met_data_handler_base
-
+from loguru import logger
 
 class met_data_handler(met_data_handler_base):
 
@@ -58,7 +58,7 @@ class met_data_handler(met_data_handler_base):
                 t_ds_out = dataset
 
             if (weights is not None) & os.path.exists(str(weights)):
-                print("Load weights from {}".format(weights))
+                logger.info("Load weights from {}".format(weights))
             else:
                 bfolder = os.path.dirname(weights)
                 src_temp_path = os.path.join(bfolder, "{}.nc".format(str(uuid.uuid4())))
@@ -72,7 +72,7 @@ class met_data_handler(met_data_handler_base):
                 )
                 if self.mpi:
                     cmd = "mpirun -np {} ".format(n_cpus) + cmd
-                print(cmd)
+                logger.info(cmd)
                 os.system(cmd)
                 os.remove(src_temp_path)
                 os.remove(dest_temp_path)
@@ -146,4 +146,4 @@ if __name__ == "__main__":
     era5_handler = class_name(year, month, day)
     era5_handler.change_date(hour)
     ret = era5_handler.get_data()
-    print(ret)
+    logger.info(ret)

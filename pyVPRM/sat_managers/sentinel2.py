@@ -30,7 +30,7 @@ import xarray as xr
 from datetime import datetime, timedelta, date
 import numpy as np
 from pyVPRM.sat_managers.base_manager import satellite_data_manager
-
+from loguru import logger
 
 class sentinel2(satellite_data_manager):
     # Class to download an load sentinel 2 data
@@ -49,7 +49,7 @@ class sentinel2(satellite_data_manager):
         return
 
     def set_band_names(self):
-        print("Trying to set reflectance bands assuming standard naming for Sentinel-2")
+        logger.info("Trying to set reflectance bands assuming standard naming for Sentinel-2")
         bands = []
         for i in list(self.sat_img.data_vars):
             if (
@@ -147,7 +147,7 @@ class sentinel2(satellite_data_manager):
             "MEDIUM_PROBA_CLOUDS_PERCENTAGE",
             "HIGH_PROBA_CLOUDS_PERCENTAGE",
         ]:
-            print(i, self.meta_data[i])
+            logger.info(i, self.meta_data[i])
         return
 
     def mask_bad_pixels(self, bands=None):

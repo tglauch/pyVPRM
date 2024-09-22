@@ -11,7 +11,7 @@ import datetime
 import pandas as pd
 import itertools
 from scipy.optimize import curve_fit
-
+from loguru import logger
 
 class vprm_base:
     """
@@ -42,7 +42,7 @@ class vprm_base:
                     None
         """
         if self.era5_inst is None:
-            print(
+            logger.info(
                 "Not meteorology given. Provide meteorology instance using the set_met method first."
             )
 
