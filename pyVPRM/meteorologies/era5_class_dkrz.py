@@ -10,6 +10,7 @@ import copy
 import uuid
 import datetime
 from pyVPRM.meteorologies.met_base_class import met_data_handler_base
+from loguru import logger
 
 map_function = lambda lon: (lon - 360) if (lon > 180) else lon
 
@@ -158,7 +159,7 @@ class met_data_handler(met_data_handler_base):
                     self.file_handlers[key]["current"][t + 1].month
                     for t in range(self.file_handlers[key]["current"].messages)
                 ]:
-                    print("No data for given month")
+                    logger.info("No data for given month")
                     return
 
                 for c in range(self.file_handlers[key]["current"].messages):
@@ -210,7 +211,7 @@ class met_data_handler(met_data_handler_base):
                 t_ds_out = dataset
 
             if (weights is not None) & os.path.exists(str(weights)):
-                print("Load weights from {}".format(weights))
+                logger.info("Load weights from {}".format(weights))
             else:
                 bfolder = os.path.dirname(weights)
                 src_temp_path = os.path.join(bfolder, "{}.nc".format(str(uuid.uuid4())))
@@ -222,7 +223,7 @@ class met_data_handler(met_data_handler_base):
                 cmd = "mpirun -np {}  ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log".format(
                     n_cpus, src_temp_path, dest_temp_path, weights
                 )
-                print(cmd)
+                logger.info(cmd)
                 os.system(cmd)
                 os.remove(src_temp_path)
                 os.remove(dest_temp_path)
@@ -247,7 +248,7 @@ class met_data_handler(met_data_handler_base):
                 "current"
             ].select(**selection_args)
         except Exception as e:
-            print("No era5 data found for {}".format(selection_args))
+            logger.info("No era5 data found for {}".format(selection_args))
             return None
 
     def get_data(self, lonlat=None, key=None):
@@ -275,4 +276,4 @@ if __name__ == "__main__":
     era5_handler = met_data_handler(year, month, day)
     era5_handler.change_date(hour)
     ret = era5_handler.get_data()
-    print(ret)
+    logger.info(ret)

@@ -12,7 +12,7 @@ from pyVPRM.vprm_models.vprm_base import vprm_base
 import pandas as pd
 import itertools
 from scipy.optimize import curve_fit
-
+from loguru import logger
 
 class vprm_modified(vprm_base):
     """
@@ -143,7 +143,7 @@ class vprm_modified(vprm_base):
             drop_rows = []
             for index, row in s.get_data().iterrows():
                 img_status = self.vprm_pre._set_sat_img_counter(row["datetime_utc"])
-                # print(self.counter)
+                # logger.info(self.counter)
                 if img_status == False:
                     drop_rows.append(index)
                     continue
@@ -202,7 +202,7 @@ class vprm_modified(vprm_base):
 
         img_status = self.vprm_pre._set_sat_img_counter(datetime_utc)
         if img_status is False:
-            print("No sat image for {}. Return None.".format(datetime_utc))
+            logger.info("No sat image for {}. Return None.".format(datetime_utc))
             return None
 
         if (lat != self.buffer["cur_lat"]) | (lon != self.buffer["cur_lon"]):
@@ -375,7 +375,7 @@ class vprm_modified(vprm_base):
             best_fit_params_dict = dict()
         for key in fit_dict.keys():
             min_len = np.min([i.get_len() for i in fit_dict[key]])
-            print(key, min_len)
+            logger.info(key, min_len)
             data_for_fit = []
             for s in fit_dict[key]:
                 t_data = s.get_data()
@@ -446,7 +446,7 @@ class vprm_modified(vprm_base):
                             best_fit_temperatures = [i[0], i[1]]
                             best_fit_respiration = func_values
 
-                print("Best MSE Respiration: {}".format(best_mse))
+                logger.info("Best MSE Respiration: {}".format(best_mse))
                 best_fit_params_dict[key] = {
                     "beta": best_fit_params[0][0],
                     "alpha1": best_fit_params[0][1],
@@ -525,6 +525,6 @@ class vprm_modified(vprm_base):
                 best_fit_params_dict[key]["theta1"] = best_fit_params[0][6]
                 best_fit_params_dict[key]["theta2"] = best_fit_params[0][7]
                 best_fit_params_dict[key]["theta3"] = best_fit_params[0][8]
-                print("Best MSE NEE: {}".format(best_mse))
+                logger.info("Best MSE NEE: {}".format(best_mse))
 
         return best_fit_params_dict

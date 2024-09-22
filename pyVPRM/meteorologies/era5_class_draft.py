@@ -11,7 +11,7 @@ import xesmf as xe
 import uuid
 import datetime
 from pyVPRM.meteorologies.met_base_class import met_data_handler_base
-
+from loguru import logger
 
 class met_data_handler(met_data_handler_base):
 
@@ -57,4 +57,4 @@ if __name__ == "__main__":
     era5_handler = class_name(year, month, day)
     era5_handler.change_date(hour)
     ret = era5_handler.get_data()
-    print(ret)
+    logger.info(ret)

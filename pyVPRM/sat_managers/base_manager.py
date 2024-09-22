@@ -29,7 +29,7 @@ from dateutil import parser
 import xarray as xr
 from datetime import datetime, timedelta, date
 import numpy as np
-
+from loguru import logger
 
 def geodesic_point_buffer(lat, lon, km):
     buf = Point(0, 0).buffer(km * 1000)  # distance in metres
@@ -180,7 +180,7 @@ class satellite_data_manager:
             self.proj_dict = self.sat_img.rio.crs.to_dict()
         except Exception as e:
             self.proj_dict = {}
-            print(e)
+            logger.info(e)
         self.t = Transformer.from_crs(
             "+proj=longlat +datum=WGS84", self.sat_img.rio.crs
         )
@@ -249,16 +249,16 @@ class satellite_data_manager:
         if not isinstance(new_tiles, list):
             new_tiles = [new_tiles]
         if not np.all([isinstance(i, satellite_data_manager) for i in new_tiles]):
-            print("Can only merge with another instance of a satellite_data_manger")
+            logger.info("Can only merge with another instance of a satellite_data_manger")
         if reproject:
-            print("Do reprojections")
+            logger.info("Do reprojections")
             to_merge = [
                 i.sat_img.rio.reproject(self.sat_img.rio.crs) for i in new_tiles
             ]
         else:
             to_merge = [i.sat_img for i in new_tiles]
         to_merge.append(self.sat_img)
-        print("Merge")
+        logger.info("Merge")
         self.sat_img = merge.merge_datasets(to_merge)
         return
 
@@ -396,7 +396,7 @@ class earthdata(satellite_data_manager):
         for d in ds:
             fs = modisDown.getFilesList(d)
             cde = modisDown.checkDataExist(fs)
-            print("Download {}: {}".format(d, cde))
+            logger.info("Download {}: {}".format(d, cde))
             for c in cde:
                 os.system(
                     "wget --user {} --password {} --directory-prefix {} {} ".format(

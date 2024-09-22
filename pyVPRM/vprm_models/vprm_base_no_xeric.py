@@ -11,7 +11,7 @@ import datetime
 import pandas as pd
 import itertools
 from scipy.optimize import curve_fit
-
+from loguru import logger
 
 class vprm_base_no_xeric:
     """
@@ -42,7 +42,7 @@ class vprm_base_no_xeric:
                     None
         """
         if self.era5_inst is None:
-            print(
+            logger.info(
                 "Not meteorology given. Provide meteorology instance using the set_met method first."
             )
 
@@ -281,7 +281,7 @@ class vprm_base_no_xeric:
             drop_rows = []
             for index, row in s.get_data().iterrows():
                 img_status = self.vprm_pre._set_sat_img_counter(row["datetime_utc"])
-                # print(self.counter)
+                # logger.info(self.counter)
                 if img_status == False:
                     drop_rows.append(index)
                     continue
@@ -337,7 +337,7 @@ class vprm_base_no_xeric:
 
         img_status = self.vprm_pre._set_sat_img_counter(datetime_utc)
         if img_status is False:
-            print("No sat image for {}. Return None.".format(datetime_utc))
+            logger.info("No sat image for {}. Return None.".format(datetime_utc))
             return None
 
         if (lat != self.buffer["cur_lat"]) | (lon != self.buffer["cur_lon"]):
@@ -488,7 +488,7 @@ class vprm_base_no_xeric:
             best_fit_params_dict = dict()
         for key in fit_dict.keys():
             min_len = np.min([i.get_len() for i in fit_dict[key]])
-            print(key, min_len)
+            logger.info(key, min_len)
             data_for_fit = []
             for s in fit_dict[key]:
                 t_data = s.get_data()
@@ -532,7 +532,7 @@ class vprm_base_no_xeric:
                     "alpha": best_fit_params[0][0],
                     "beta": best_fit_params[0][1],
                 }
-                print("Best MSE Respiration: {}".format(best_mse))
+                logger.info("Best MSE Respiration: {}".format(best_mse))
 
             # #GPP
             # best_mse = np.inf
@@ -580,6 +580,6 @@ class vprm_base_no_xeric:
                         best_fit_params = fit_nee
                 best_fit_params_dict[key]["lamb"] = best_fit_params[0][0]
                 best_fit_params_dict[key]["par0"] = best_fit_params[0][1]
-                print("Best MSE NEE: {}".format(best_mse))
+                logger.info("Best MSE NEE: {}".format(best_mse))
 
         return best_fit_params_dict

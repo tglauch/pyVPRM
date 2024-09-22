@@ -30,7 +30,7 @@ import xarray as xr
 from datetime import datetime, timedelta, date
 import numpy as np
 from pyVPRM.sat_managers.base_manager import earthdata
-
+from loguru import logger
 
 class modis(earthdata):
     # Class to download and load MODIS data
@@ -74,7 +74,7 @@ class modis(earthdata):
         ).replace(tzinfo=None)
 
     def set_band_names(self):
-        print("Trying to set reflectance bands assuming standard naming for MODIS")
+        logger.info("Trying to set reflectance bands assuming standard naming for MODIS")
         bands = []
         for i in list(self.sat_img.data_vars):
             if ("sur_refl" in i) & ("_b" in i):
@@ -227,7 +227,7 @@ class modis(earthdata):
         return glob.glob(os.path.join(dest, "*.hdf"))
 
     def get_cloud_coverage(self):
-        print("PERCENTCLOUDY", self.meta_data["PERCENTCLOUDY"])
+        logger.info("PERCENTCLOUDY", self.meta_data["PERCENTCLOUDY"])
         return self.meta_data["PERCENTCLOUDY"]
 
     def get_recording_time(self):

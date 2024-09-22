@@ -30,6 +30,7 @@ import rasterio
 from astropy.convolution import convolve
 from datetime import datetime, timedelta
 import yaml
+from loguru import logger
 
 regridder_options = dict()
 regridder_options["conservative"] = "conserve"
@@ -56,7 +57,7 @@ class vprm:
                 The lowess smoothed array
         """
 
-        print("Running with pyVPRM version {}".format(pyVPRM.__version__))
+        logger.info("Running with pyVPRM version {}".format(pyVPRM.__version__))
         self.sat_imgs = []
 
         self.sites = sites
@@ -86,7 +87,7 @@ class vprm:
             try:
                 cfg = yaml.safe_load(stream)
             except yaml.YAMLError as exc:
-                print(exc)
+                logger.info(exc)
 
         self.temp_coefficients = dict()
         self.map_to_vprm_class = dict()
@@ -139,7 +140,7 @@ class vprm:
             ds_out = out_grid
 
         if weights_for_regridder is None:
-            print(
+            logger.info(
                 "Need to generate the weights for the regridder. This can be very slow and memory intensive"
             )
             if driver == "xEMSF":
@@ -148,7 +149,7 @@ class vprm:
                     regridder.to_netcdf(regridder_save_path)
             elif driver == "ESMF_RegridWeightGen":
                 if regridder_save_path is None:
-                    print(
+                    logger.info(
                         "If you use ESMF_RegridWeightGen, a regridder_save_path needs to be given"
                     )
                     return
@@ -174,13 +175,13 @@ class vprm:
                     exec_str = "mpirun -np {} ".format(n_cpus) + exec_str
                 if not logs:
                     exec_str += " --no_log "
-                print(exec_str)
+                logger.info(exec_str)
                 os.system(exec_str)  # --no_log
                 # os.remove(src_temp_path)
                 # os.remove(dest_temp_path)
                 weights_for_regridder = regridder_save_path
             else:
-                print("Driver needs to be xEMSF or ESMF_RegridWeightGen")
+                logger.info("Driver needs to be xEMSF or ESMF_RegridWeightGen")
         if weights_for_regridder is not None:
             regridder = xe.Regridder(
                 src_grid,
@@ -329,7 +330,7 @@ class vprm:
         evi2_params = {"g": 2.5, "l": 1, "c": 2.4}
 
         if not isinstance(handler, satellite_data_manager):
-            print(
+            logger.info(
                 "Satellite image needs to be an object of the sattelite_data_manager class"
             )
             return
@@ -439,7 +440,7 @@ class vprm:
                 x_ind = np.argmin(np.abs(x - xs))
                 y_ind = np.argmin(np.abs(y - ys))
                 for key in keys:
-                    print(key)
+                    logger.info(key)
                     self.sat_imgs.sat_img[key][
                         :, y_ind - arsz : y_ind + arsz, x_ind - arsz : x_ind + arsz
                     ] = convolve(
@@ -500,7 +501,7 @@ class vprm:
         self.timestamp_start = self.timestamps[0]
         self.timestamp_end = self.timestamps[-1]
         self.tot_num_days = (self.timestamp_end - self.timestamp_start).days
-        print(
+        logger.info(
             "Loaded data from {} to {}".format(self.timestamp_start, self.timestamp_end)
         )
         day_steps = [i.days for i in (self.timestamps - self.timestamp_start)]
@@ -580,10 +581,10 @@ class vprm:
         if n_cpus is None:
             n_cpus = self.n_cpus
         if isinstance(land_cover_map, str):
-            print("Load pre-generated land cover map: {}".format(land_cover_map))
+            logger.info("Load pre-generated land cover map: {}".format(land_cover_map))
             self.land_cover_type = satellite_data_manager(sat_img=land_cover_map)
         else:
-            print("Generating satellite data compatible land cover map")
+            logger.info("Generating satellite data compatible land cover map")
 
             for key in self.map_to_vprm_class.keys():
                 land_cover_map.sat_img[var_name] = xr.where(
@@ -619,7 +620,7 @@ class vprm:
                         exec_str = "mpirun -np {} ".format(n_cpus) + exec_str
                     if not logs:
                         exec_str += " --no_log "
-                    print("Run: {}".format(exec_str))
+                    logger.info("Run: {}".format(exec_str))
                     os.system(exec_str)
                     os.remove(src_temp_path)
                     os.remove(dest_temp_path)
@@ -653,7 +654,7 @@ class vprm:
                     land_cover_map.sat_img.rio.crs.to_proj4()
                     != self.sat_imgs.sat_img.rio.crs.to_proj4()
                 ):
-                    print(
+                    logger.info(
                         "Projection of land cover map and satellite images need to match. Reproject first."
                     )
                     return False
@@ -670,7 +671,7 @@ class vprm:
                             / land_cover_map.get_resolution()
                         )
                     )
-                    print("Filter size {}:".format(filter_size))
+                    logger.info("Filter size {}:".format(filter_size))
                 if filter_size <= 1:
                     filter_size = 1
                 for i in veg_inds:
@@ -774,7 +775,7 @@ class vprm:
         if isinstance(times, list):
             times = np.array(sorted(times))
             if (times[-1] > self.timestamp_end) | (times[0] < self.timestamp_start):
-                print(
+                logger.info(
                     "You have provied some timestamps that are not covered from satellite images.\
                 They will be ignored in the following, to avoid unreliable results"
                 )
@@ -793,11 +794,11 @@ class vprm:
             if times == "daily":
                 xvals = np.arange(self.tot_num_days)
             else:
-                print("{} is not a valid str for times".format(times))
+                logger.info("{} is not a valid str for times".format(times))
                 return
         else:
             xvals = self.sat_imgs.sat_img["time"]
-        print("Lowess timestamps {}".format(xvals))
+        logger.info("Lowess timestamps {}".format(xvals))
 
         if self.sites is not None:  # Is flux tower sites are given
             if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
@@ -904,7 +905,7 @@ class vprm:
                     )
 
         else:
-            print("Not implemented")
+            logger.info("Not implemented")
             # Originally had a function to smooth only at specific lat/long.
             # That doesn't make sense anymore, because the time dimension will change through lowess smoothing.
             # If this is your plan then try to crop the sat image first and then do the lowess filtering.
@@ -1054,7 +1055,7 @@ class vprm:
         if (days_after_first_image < 0) | (
             days_after_first_image > self.sat_imgs.sat_img[self.time_key][-1]
         ):
-            # print('No data for {}'.format(datetime_utc))
+            # logger.info('No data for {}'.format(datetime_utc))
             self.counter = 0
             return False
         elif counter_new != self.counter:
