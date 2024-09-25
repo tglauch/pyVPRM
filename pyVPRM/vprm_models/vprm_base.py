@@ -462,7 +462,7 @@ class vprm_base:
         else:
             lc_classes = [land_cover_type]
 
-        lc_classes = [i for i in lc_classes if i not in no_flux_veg_types]
+        lc_classes = [i for i in lc_classes if ((i not in no_flux_veg_types) & (i in self.fit_params_dict.keys()))]
 
         for i in lc_classes:
             if mode == "2d":
