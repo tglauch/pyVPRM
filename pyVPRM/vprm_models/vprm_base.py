@@ -69,6 +69,7 @@ class vprm_base:
         tmin = self.vprm_pre.temp_coefficients[land_cover_type][0]
         topt = self.vprm_pre.temp_coefficients[land_cover_type][1]
         tmax = self.vprm_pre.temp_coefficients[land_cover_type][2]
+        tlow = self.vprm_pre.temp_coefficients[land_cover_type][3]
         if temperature is not None:
             t = temperature
         elif lon is not None:
@@ -85,7 +86,7 @@ class vprm_base:
                 t = tmin
         else:
             ret = xr.where((ret < 0) | (t < tmin), 0, ret)
-            t = xr.where(t < tmin, tmin, t)
+            t = xr.where(t < tlow, tlow, t)
         return (t, ret)
 
     def get_p_scale(self, lon=None, lat=None, site_name=None, land_cover_type=None):
