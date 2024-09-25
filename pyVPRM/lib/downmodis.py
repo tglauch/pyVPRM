@@ -50,6 +50,7 @@ from ftplib import FTP
 import ftplib
 
 import requests
+
 # urllib in python 2 and 3
 from urllib.request import urlopen
 import urllib.request
@@ -59,18 +60,22 @@ from html.parser import HTMLParser
 import re
 import netrc
 import warnings
+
 # urlparse in python 2 and 3
 try:
     from urlparse import urlparse
+
     URLPARSE = True
 except ImportError:
     try:
         from urllib.parse import urlparse
+
         URLPARSE = True
     except ImportError:
         URLPARSE = False
-        warnings.warn('urlparse not found, it is not possible to use'
-                      ' netrc file', ImportError)
+        warnings.warn(
+            "urlparse not found, it is not possible to use" " netrc file", ImportError
+        )
 # global GDAL
 
 # try:
@@ -102,19 +107,19 @@ def urljoin(*args):
     :return: a string
     """
 
-    return "/".join([str(x).rstrip('/') for x in args])
+    return "/".join([str(x).rstrip("/") for x in args])
 
 
 def getNewerVersion(oldFile, newFile):
     """Check two files to determine which is newer
 
-       :param str oldFile: one of the two similar files
-       :param str newFile: one of the two similar files
+    :param str oldFile: one of the two similar files
+    :param str newFile: one of the two similar files
 
-       :return: the name of newer file
+    :return: the name of newer file
     """
     # get the processing date (YYYYDDDHHMMSS) from the file strings
-    if oldFile.split('.')[4] > newFile.split('.')[4]:
+    if oldFile.split(".")[4] > newFile.split(".")[4]:
         return oldFile
     else:
         return newFile
@@ -123,31 +128,33 @@ def getNewerVersion(oldFile, newFile):
 def str2date(datestring):
     """Convert to datetime.date object from a string
 
-       :param str datestring string with format (YYYY-MM-DD)
-       :return: a datetime.date object representing datestring
+    :param str datestring string with format (YYYY-MM-DD)
+    :return: a datetime.date object representing datestring
     """
-    if '-' in datestring:
-        stringSplit = datestring.split('-')
-    elif '.' in datestring:
-        stringSplit = datestring.split('.')
-    elif ' ' in datestring:
-        stringSplit = datestring.split(' ')
+    if "-" in datestring:
+        stringSplit = datestring.split("-")
+    elif "." in datestring:
+        stringSplit = datestring.split(".")
+    elif " " in datestring:
+        stringSplit = datestring.split(" ")
     return date(int(stringSplit[0]), int(stringSplit[1]), int(stringSplit[2]))
 
 
 class ModisHTTPRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Class to return 302 error"""
+
     def http_error_302(self, req, fp, code, msg, headers):
-        return urllib.request.HTTPRedirectHandler.http_error_302(self, req, fp,
-                                                                 code, msg,
-                                                                 headers)
+        return urllib.request.HTTPRedirectHandler.http_error_302(
+            self, req, fp, code, msg, headers
+        )
 
 
 class modisHtmlParser(HTMLParser):
     """A class to parse HTML
 
-       :param fh: content of http request
+    :param fh: content of http request
     """
+
     def __init__(self, fh):
         """Function to initialize the object"""
         HTMLParser.__init__(self)
@@ -155,9 +162,9 @@ class modisHtmlParser(HTMLParser):
         self.feed(str(fh))
 
     def handle_starttag(self, tag, attrs):
-        if tag == 'a':
+        if tag == "a":
             attrD = dict(attrs)
-            self.fileids.append(attrD['href'].replace('/', ''))
+            self.fileids.append(attrD["href"].replace("/", ""))
 
     def get_all(self):
         """Return everything"""
@@ -165,28 +172,28 @@ class modisHtmlParser(HTMLParser):
 
     def get_dates(self):
         """Return a list of directories with date"""
-        regex = re.compile('(\d{4})[/.-](\d{2})[/.-](\d{2})$')
+        regex = re.compile(r"(\d{4})[/.-](\d{2})[/.-](\d{2})$")
         alldata = set([elem for elem in self.fileids if regex.match(elem)])
         return sorted(list(alldata))
 
     def get_tiles(self, prod, tiles, jpeg=False):
         """Return a list of files to download
 
-           :param str prod: the code of MODIS product that we are going to
-                            analyze
-           :param list tiles: the list of tiles to consider
-           :param bool jpeg: True to also check for jpeg data
+        :param str prod: the code of MODIS product that we are going to
+                         analyze
+        :param list tiles: the list of tiles to consider
+        :param bool jpeg: True to also check for jpeg data
         """
         finalList = []
         for i in self.fileids:
             # distinguish jpg from hdf by where the tileID is within the string
             # jpgs have the tileID at index 3, hdf have tileID at index 2
-            name = i.split('.')
+            name = i.split(".")
             # if product is not in the filename, move to next filename in list
             if not name.count(prod):
                 continue
             # if tiles are not specified and the file is not a jpg, add to list
-            if not tiles and not (name.count('jpg') or name.count('BROWSE')):
+            if not tiles and not (name.count("jpg") or name.count("BROWSE")):
                 finalList.append(i)
             # if tiles are specified
             if tiles:
@@ -202,63 +209,77 @@ class modisHtmlParser(HTMLParser):
 class downModis:
     """A class to download MODIS data from NASA FTP or HTTP repositories
 
-       :param str destinationFolder: where the files will be stored
-       :param str password: the password required by NASA authentication system
-       :param str user: the user namerequired by NASA authentication system
-       :param str url: the base url from where to download the MODIS data,
-                       it can be FTP or HTTP but it has to start with
-                       'ftp://' or 'http://' or 'https://'
-       :param str path: the directory where the data that you want to
-                        download are stored on the FTP server. For HTTP
-                        requests, this is the part of the url between the 'url'
-                        parameter and the 'product' parameter.
-       :param str product: the code of the product to download, the code
-                           should be idential to the one of the url
-       :param str tiles: a set of tiles to be downloaded, None == all tiles.
-                         This can be passed as a string of tileIDs separated
-                         by commas, or as a list of individual tileIDs
-       :param str today: the day to start downloading; in order to pass a
-                         date different from today use the format YYYY-MM-DD
-       :param str enddate: the day to end downloading; in order to pass a
-                           date use the format YYYY-MM-DD. This day must be
-                           before the 'today' parameter. Downloading happens
-                           in reverse order (currently)
+    :param str destinationFolder: where the files will be stored
+    :param str password: the password required by NASA authentication system
+    :param str user: the user namerequired by NASA authentication system
+    :param str url: the base url from where to download the MODIS data,
+                    it can be FTP or HTTP but it has to start with
+                    'ftp://' or 'http://' or 'https://'
+    :param str path: the directory where the data that you want to
+                     download are stored on the FTP server. For HTTP
+                     requests, this is the part of the url between the 'url'
+                     parameter and the 'product' parameter.
+    :param str product: the code of the product to download, the code
+                        should be idential to the one of the url
+    :param str tiles: a set of tiles to be downloaded, None == all tiles.
+                      This can be passed as a string of tileIDs separated
+                      by commas, or as a list of individual tileIDs
+    :param str today: the day to start downloading; in order to pass a
+                      date different from today use the format YYYY-MM-DD
+    :param str enddate: the day to end downloading; in order to pass a
+                        date use the format YYYY-MM-DD. This day must be
+                        before the 'today' parameter. Downloading happens
+                        in reverse order (currently)
 
-       :param int delta: timelag i.e. the number of days starting from
-                         today backwards. Will be overwritten if
-                         'enddate' is specifed during instantiation
-       :param bool jpeg: set to True if you want to download the JPG overview
-                         file in addition to the HDF
-       :param bool debug: set to True if you want to obtain debug information
-       :param int timeout: Timeout value for HTTP server (seconds)
-       :param bool checkgdal: variable to set the GDAL check
+    :param int delta: timelag i.e. the number of days starting from
+                      today backwards. Will be overwritten if
+                      'enddate' is specifed during instantiation
+    :param bool jpeg: set to True if you want to download the JPG overview
+                      file in addition to the HDF
+    :param bool debug: set to True if you want to obtain debug information
+    :param int timeout: Timeout value for HTTP server (seconds)
+    :param bool checkgdal: variable to set the GDAL check
     """
 
-    def __init__(self, destinationFolder, password=None, user=None, token=None,
-                 url="https://e4ftl01.cr.usgs.gov", tiles=None, path="MOLT",
-                 product="MOD11A1.006", today=None, enddate=None, delta=10,
-                 jpg=False, debug=False, timeout=30, checkgdal=True):
+    def __init__(
+        self,
+        destinationFolder,
+        password=None,
+        user=None,
+        token=None,
+        url="https://e4ftl01.cr.usgs.gov",
+        tiles=None,
+        path="MOLT",
+        product="MOD11A1.006",
+        today=None,
+        enddate=None,
+        delta=10,
+        jpg=False,
+        debug=False,
+        timeout=30,
+        checkgdal=True,
+    ):
         """Function to initialize the object"""
 
         self.token = None
         self.user = None
         self.password = None
-        
+
         # prepare the base url and set the url type (ftp/http)
-        if 'ftp://' in url:
-            self.url = url.replace('ftp://', '').rstrip('/')
-            self.urltype = 'ftp'
-        elif 'http://' in url:
+        if "ftp://" in url:
+            self.url = url.replace("ftp://", "").rstrip("/")
+            self.urltype = "ftp"
+        elif "http://" in url:
             self.url = url
-            self.urltype = 'http'
-        elif 'https://' in url:
+            self.urltype = "http"
+        elif "https://" in url:
             self.url = url
-            self.urltype = 'http'
+            self.urltype = "http"
         else:
             raise IOError("The url should contain 'ftp://' or 'http://'")
 
         # token case
-        if token: 
+        if token:
             # token for download
             self.token = token
         # user and password case
@@ -275,44 +296,47 @@ class downModis:
             try:
                 nt = netrc.netrc()
             except:
-                raise IOError("Please set 'user' and 'password' parameters netrc file does not exist")
+                raise IOError(
+                    "Please set 'user' and 'password' parameters netrc file does not exist"
+                )
             try:
                 account = nt.hosts[self.domain]
             except:
                 try:
-                    account = nt.hosts['urs.earthdata.nasa.gov']
+                    account = nt.hosts["urs.earthdata.nasa.gov"]
                 except:
-                    raise IOError("Please set 'user' and 'password' parameters netrc file does not contain parameter for NASA url")
+                    raise IOError(
+                        "Please set 'user' and 'password' parameters netrc file does not contain parameter for NASA url"
+                    )
             # user for download
             self.user = account[0]
             # password for download
             self.password = account[2]
             # token for download from password
             self.token = self.password if self.user == "token" else None
-            
+
         if not self.user and not self.password and not self.token:
             raise IOError("You must provide either a token or a user and password")
-            
+
         # set the http header
         if self.token:
-            self.http_header = {'Authorization': f"Bearer {self.token}"}
+            self.http_header = {"Authorization": f"Bearer {self.token}"}
         else:
             self.userpwd = "{us}:{pw}".format(us=self.user, pw=self.password)
             userAndPass = b64encode(str.encode(self.userpwd)).decode("ascii")
-            self.http_header = {'Authorization': 'Basic %s' %  userAndPass}
+            self.http_header = {"Authorization": "Basic %s" % userAndPass}
 
         cookieprocessor = urllib.request.HTTPCookieProcessor()
-        opener = urllib.request.build_opener(ModisHTTPRedirectHandler,
-                                             cookieprocessor)
+        opener = urllib.request.build_opener(ModisHTTPRedirectHandler, cookieprocessor)
         urllib.request.install_opener(opener)
         # the product (product_code.004 or product_cod.005)
         self.product = product
-        self.product_code = product.split('.')[0]
+        self.product_code = product.split(".")[0]
         # url directory where data are located
         self.path = urljoin(path, self.product)
         # tiles to downloads
         if isinstance(tiles, str):
-            self.tiles = tiles.split(',')
+            self.tiles = tiles.split(",")
         else:  # tiles are list, tuple, or None
             self.tiles = tiles
         # set destination folder
@@ -326,17 +350,22 @@ class downModis:
                 os.mkdir(destinationFolder)
                 self.writeFilePath = destinationFolder
             except:
-                raise Exception("Folder to store downloaded files does not "
-                                "exist or is not writeable")
+                raise Exception(
+                    "Folder to store downloaded files does not "
+                    "exist or is not writeable"
+                )
         # return the name of product
-        if len(self.path.split('/')) == 2:
-            self.product = self.path.split('/')[1]
-        elif len(self.path.split('/')) == 3:
-            self.product = self.path.split('/')[2]
+        if len(self.path.split("/")) == 2:
+            self.product = self.path.split("/")[1]
+        elif len(self.path.split("/")) == 3:
+            self.product = self.path.split("/")[2]
         # write a file with the name of file to be downloaded
-        self.filelist = open(os.path.join(self.writeFilePath,
-                                          'listfile{pro}.txt'.format(pro=self.product)),
-                             'w')
+        self.filelist = open(
+            os.path.join(
+                self.writeFilePath, "listfile{pro}.txt".format(pro=self.product)
+            ),
+            "w",
+        )
         # set if to download jpgs
         self.jpeg = jpg
         # today, or the last day in the download series chronologically
@@ -350,11 +379,13 @@ class downModis:
         # for debug, you can download only xml files
         self.debug = debug
         # for logging
-        log_filename = os.path.join(self.writeFilePath,
-                                    'modis{pro}.log'.format(pro=self.product))
-        log_format = '%(asctime)s - %(levelname)s - %(message)s'
-        logging.basicConfig(filename=log_filename, level=logging.DEBUG,
-                            format=log_format)
+        log_filename = os.path.join(
+            self.writeFilePath, "modis{pro}.log".format(pro=self.product)
+        )
+        log_format = "%(asctime)s - %(levelname)s - %(message)s"
+        logging.basicConfig(
+            filename=log_filename, level=logging.DEBUG, format=log_format
+        )
         logging.captureWarnings(True)
         # global connection attempt counter
         self.nconnection = 0
@@ -365,22 +396,22 @@ class downModis:
         for f in os.listdir(self.writeFilePath):
             if os.path.isfile(os.path.join(self.writeFilePath, f)):
                 self.fileInPath.append(f)
-       # global GDAL
-       # if not GDAL and checkgdal:
-       #     logging.warning("WARNING: Python GDAL library not found")
-       # elif GDAL and not checkgdal:
-       #     GDAL = False
+        # global GDAL
+        # if not GDAL and checkgdal:
+        #     logging.warning("WARNING: Python GDAL library not found")
+        # elif GDAL and not checkgdal:
+        #     GDAL = False
         self.dirData = []
         # set today and enday dates
         self._getToday()
 
     def removeEmptyFiles(self):
         """Function to remove files in the download directory that have
-           filesize equal to 0
+        filesize equal to 0
         """
         year = str(self.today.year)
-        prefix = self.product.split('.')[0]
-        files = glob.glob1(self.writeFilePath, '%s.A%s*' % (prefix, year))
+        prefix = self.product.split(".")[0]
+        files = glob.glob1(self.writeFilePath, "%s.A%s*" % (prefix, year))
         for f in files:
             fil = os.path.join(self.writeFilePath, f)
             if os.path.getsize(fil) == 0:
@@ -389,23 +420,25 @@ class downModis:
     def connect(self, ncon=20):
         """Connect to the server and fill the dirData variable
 
-           :param int ncon: maximum number of attempts to connect to the HTTP
-                            server before failing
+        :param int ncon: maximum number of attempts to connect to the HTTP
+                         server before failing
         """
-        if self.urltype == 'ftp':
+        if self.urltype == "ftp":
             self._connectFTP(ncon)
-        elif self.urltype == 'http':
+        elif self.urltype == "http":
             self._connectHTTP(ncon)
         if len(self.dirData) == 0:
-            raise Exception("There are some troubles with the server. "
-                            "The directory seems to be empty")
+            raise Exception(
+                "There are some troubles with the server. "
+                "The directory seems to be empty"
+            )
 
     def _connectHTTP(self, ncon=20):
         """Connect to HTTP server, create a list of directories for all days
 
-           :param int ncon: maximum number of attempts to connect to the HTTP
-                            server before failing. If ncon < 0, connection
-                            attempts are unlimited in number
+        :param int ncon: maximum number of attempts to connect to the HTTP
+                         server before failing. If ncon < 0, connection
+                         attempts are unlimited in number
         """
         self.nconnection += 1
         try:
@@ -415,26 +448,30 @@ class downModis:
                 http = urllib.request.urlopen(req)
                 self.dirData = modisHtmlParser(http.read()).get_dates()
             except Exception as e:
-                logging.error('Error in connection. Code {code}, '
-                              'reason {re}'.format(code=e.code, re=e.reason))
+                logging.error(
+                    "Error in connection. Code {code}, "
+                    "reason {re}".format(code=e.code, re=e.reason)
+                )
                 http = urlopen(url, timeout=self.timeout)
                 self.dirData = modisHtmlParser(http.read()).get_dates()
             self.dirData.reverse()
         except Exception as e:
             try:
-                logging.error('Error in connection. Code {code}, '
-                              'reason {re}'.format(code=e.code, re=e.reason))
+                logging.error(
+                    "Error in connection. Code {code}, "
+                    "reason {re}".format(code=e.code, re=e.reason)
+                )
             except:
-                logging.error('Error {er}'.format(er=e))
+                logging.error("Error {er}".format(er=e))
             if self.nconnection <= ncon or ncon < 0:
                 self._connectHTTP()
 
     def _connectFTP(self, ncon=20):
         """Set connection to ftp server, move to path where data are stored,
-           and create a list of directories for all days
+        and create a list of directories for all days
 
-           :param int ncon: maximum number of attempts to connect to the FTP
-                            server before failing.
+        :param int ncon: maximum number of attempts to connect to the FTP
+                         server before failing.
 
         """
         if not self.user and not self.password:
@@ -452,11 +489,13 @@ class downModis:
             # reverse order of data for have first the nearest to today
             self.dirData.reverse()
             # ensure dirData contains only directories, remove all references to files
-            self.dirData = [elem.split()[-1] for elem in self.dirData if elem.startswith("d")]
+            self.dirData = [
+                elem.split()[-1] for elem in self.dirData if elem.startswith("d")
+            ]
             if self.debug:
                 logging.debug("Open connection {url}".format(url=self.url))
         except (EOFError, ftplib.error_perm) as e:
-            logging.error('Error in connection: {err}'.format(err=e))
+            logging.error("Error in connection: {err}".format(err=e))
             if self.nconnection <= ncon:
                 self._connectFTP()
 
@@ -474,19 +513,20 @@ class downModis:
     def setDirectoryIn(self, day):
         """Enter into the file directory of a specified day
 
-           :param str day: a string representing a day in format YYYY.MM.DD
+        :param str day: a string representing a day in format YYYY.MM.DD
         """
         try:
             self.ftp.cwd(day)
         except (ftplib.error_reply, socket.error) as e:
-            logging.error("Error {err} entering in directory "
-                          "{name}".format(err=e, name=day))
+            logging.error(
+                "Error {err} entering in directory " "{name}".format(err=e, name=day)
+            )
             self.setDirectoryIn(day)
 
     def setDirectoryOver(self):
         """Move up within the file directory"""
         try:
-            self.ftp.cwd('..')
+            self.ftp.cwd("..")
         except (ftplib.error_reply, socket.error) as e:
             logging.error("Error {err} when trying to come back".format(err=e))
             self.setDirectoryOver()
@@ -517,11 +557,11 @@ class downModis:
             if d <= today_s:
                 today_index = i
                 break
-#            else:
-#                logging.error("No data available for requested days")
-#                import sys
-#                sys.exit()
-        days = self.dirData[today_index:][:self.delta]
+        #            else:
+        #                logging.error("No data available for requested days")
+        #                import sys
+        #                sys.exit()
+        days = self.dirData[today_index:][: self.delta]
         # this is useful for 8/16 days data, delta could download more images
         # that you want
         if self.enday is not None:
@@ -545,24 +585,24 @@ class downModis:
 
     def getFilesList(self, day=None):
         """Returns a list of files to download. HDF and XML files are
-           downloaded by default. JPG files will be downloaded if
-           self.jpeg == True.
+        downloaded by default. JPG files will be downloaded if
+        self.jpeg == True.
 
-           :param str day: the date of data in format YYYY.MM.DD
+        :param str day: the date of data in format YYYY.MM.DD
 
-           :return: a list of files to download for the day
+        :return: a list of files to download for the day
         """
-        if self.urltype == 'http':
+        if self.urltype == "http":
             return self._getFilesListHTTP(day)
-        elif self.urltype == 'ftp':
+        elif self.urltype == "ftp":
             return self._getFilesListFTP()
 
     def _getFilesListHTTP(self, day):
         """Returns a list of files to download from http server, which will
-           be HDF and XML files, and optionally JPG files if specified by
-           self.jpeg
+        be HDF and XML files, and optionally JPG files if specified by
+        self.jpeg
 
-           :param str day: the date of data in format YYYY.MM.DD
+        :param str day: the date of data in format YYYY.MM.DD
         """
         # return the files list inside the directory of each day
         try:
@@ -570,11 +610,9 @@ class downModis:
             if self.debug:
                 logging.debug("The url is: {url}".format(url=url))
             try:
-                http = modisHtmlParser(requests.get(url,
-                                                    timeout=self.timeout).content)
+                http = modisHtmlParser(requests.get(url, timeout=self.timeout).content)
             except:
-                http = modisHtmlParser(urlopen(url,
-                                               timeout=self.timeout).read())
+                http = modisHtmlParser(urlopen(url, timeout=self.timeout).read())
             # download JPG files also
             if self.jpeg:
                 # if tiles not specified, download all files
@@ -582,40 +620,42 @@ class downModis:
                     finalList = http.get_all()
                 # if tiles specified, download all files with jpegs
                 else:
-                    finalList = http.get_tiles(self.product_code,
-                                               self.tiles, jpeg=True)
+                    finalList = http.get_tiles(self.product_code, self.tiles, jpeg=True)
             # if JPG files should not be downloaded, get only HDF and XML
             else:
                 finalList = http.get_tiles(self.product_code, self.tiles)
             if self.debug:
-                logging.debug("The number of file to download is: "
-                              "{num}".format(num=len(finalList)))
+                logging.debug(
+                    "The number of file to download is: "
+                    "{num}".format(num=len(finalList))
+                )
 
             return finalList
-        except (socket.error) as e:
-            logging.error("Error {err} when try to receive list of "
-                          "files".format(err=e))
+        except socket.error as e:
+            logging.error(
+                "Error {err} when try to receive list of " "files".format(err=e)
+            )
             self._getFilesListHTTP(day)
 
     def _getFilesListFTP(self):
         """Create a list of files to download from FTP server, it is possible
-           choose to download also the JPG overview files or only the HDF files
+        choose to download also the JPG overview files or only the HDF files
         """
+
         def cicle_file(jpeg=False):
             """Check the type of file"""
             finalList = []
             for i in self.listfiles:
-                name = i.split('.')
+                name = i.split(".")
                 # distinguish jpeg files from hdf files by the number of index
                 # where find the tile index
-                if not self.tiles and not (name.count('jpg') or
-                                           name.count('BROWSE')):
+                if not self.tiles and not (name.count("jpg") or name.count("BROWSE")):
                     finalList.append(i)
                 # is a jpeg of tiles number
                 if self.tiles:
                     if self.tiles.count(name[3]) == 1 and jpeg:
                         finalList.append(i)
-                # is a hdf of tiles number
+                    # is a hdf of tiles number
                     elif self.tiles.count(name[2]) == 1:
                         finalList.append(i)
             return finalList
@@ -635,22 +675,25 @@ class downModis:
             else:
                 finalList = cicle_file()
             if self.debug:
-                logging.debug("The number of file to download is: "
-                              "{num}".format(num=len(finalList)))
+                logging.debug(
+                    "The number of file to download is: "
+                    "{num}".format(num=len(finalList))
+                )
             return finalList
         except (ftplib.error_reply, socket.error) as e:
-            logging.error("Error {err} when trying to receive list of "
-                          "files".format(err=e))
+            logging.error(
+                "Error {err} when trying to receive list of " "files".format(err=e)
+            )
             self._getFilesListFTP()
 
     def checkDataExist(self, listNewFile, move=False):
         """Check if a file already exists in the local download directory
 
-           :param list listNewFile: list of all files, returned by getFilesList
-                                    function
-           :param bool move: it is useful to know if a function is called from
-                             download or move function
-           :return: list of files to download
+        :param list listNewFile: list of all files, returned by getFilesList
+                                 function
+        :param bool move: it is useful to know if a function is called from
+                          download or move function
+        :return: list of files to download
         """
         # different return if this method is used from downloadsAllDay() or
         # moveFile()
@@ -669,36 +712,36 @@ class downModis:
     def checkFile(self, filHdf):
         """Check by using GDAL to be sure that the download went ok
 
-           :param str filHdf: name of the HDF file to check
+        :param str filHdf: name of the HDF file to check
 
-           :return: 0 if file is correct, 1 for error
+        :return: 0 if file is correct, 1 for error
         """
-        return 0 
-        #try:
+        return 0
+        # try:
         #    gdal.Open(filHdf)
         #    return 0
-        #except (RuntimeError) as e:
+        # except (RuntimeError) as e:
         #    logging.error(e)
         #    return 1
 
     def downloadFile(self, filDown, filHdf, day):
         """Download a single file
 
-           :param str filDown: name of the file to download
-           :param str filHdf: name of the file to write to
-           :param str day: the day in format YYYY.MM.DD
+        :param str filDown: name of the file to download
+        :param str filHdf: name of the file to write to
+        :param str day: the day in format YYYY.MM.DD
         """
-        if self.urltype == 'http':
+        if self.urltype == "http":
             self._downloadFileHTTP(filDown, filHdf, day)
-        elif self.urltype == 'ftp':
+        elif self.urltype == "ftp":
             self._downloadFileFTP(filDown, filHdf)
 
     def _downloadFileHTTP(self, filDown, filHdf, day):
         """Download a single file from the http server
 
-           :param str filDown: name of the file to download
-           :param str filHdf: name of the file to write to
-           :param str day: the day in format YYYY.MM.DD
+        :param str filDown: name of the file to download
+        :param str filHdf: name of the file to write to
+        :param str day: the day in format YYYY.MM.DD
         """
         filSave = open(filHdf, "wb")
         url = urljoin(self.url, self.path, day, filDown)
@@ -706,26 +749,30 @@ class downModis:
         try:  # download and write the file
             req = urllib.request.Request(url, headers=self.http_header)
             http = urllib.request.urlopen(req)
-            orig_size = http.headers['Content-Length']
+            orig_size = http.headers["Content-Length"]
             filSave.write(http.read())
         # if local file has an error, try to download the file again
         except Exception as e:
-            logging.warning("Tried to downlaod with urllib but got this "
-                            "error {co}, reason {re}".format(co=e.code,
-                                                             re=e.reason))
+            logging.warning(
+                "Tried to downlaod with urllib but got this "
+                "error {co}, reason {re}".format(co=e.code, re=e.reason)
+            )
             try:
                 http = requests.get(url, timeout=self.timeout)
-                orig_size = http.headers['Content-Length']
+                orig_size = http.headers["Content-Length"]
                 filSave.write(http.content)
             except Exception as e:
-                logging.warning("Tried to downlaod with requests but got this "
-                                "error {co}, reason {re}".format(co=e.code,
-                                                                 re=e.reason))
-                logging.error("Cannot download {name}. "
-                              "Retrying...".format(name=filDown))
+                logging.warning(
+                    "Tried to downlaod with requests but got this "
+                    "error {co}, reason {re}".format(co=e.code, re=e.reason)
+                )
+                logging.error(
+                    "Cannot download {name}. " "Retrying...".format(name=filDown)
+                )
                 filSave.close()
                 os.remove(filSave.name)
                 import time
+
                 time.sleep(5)
                 self._downloadFileHTTP(filDown, filHdf, day)
         filSave.close()
@@ -734,15 +781,17 @@ class downModis:
             self.filelist.write("{name}\n".format(name=filDown))
             self.filelist.flush()
             if self.debug:
-                logging.debug("File {name} downloaded but not "
-                              "check the size".format(name=filDown))
+                logging.debug(
+                    "File {name} downloaded but not "
+                    "check the size".format(name=filDown)
+                )
             return 0
         if int(orig_size) == int(transf_size):
             # if no xml file, delete the HDF and redownload
-            if filHdf.find('.xml') == -1:
+            if filHdf.find(".xml") == -1:
                 test = False
-             #   if GDAL:
-             #       test = self.checkFile(filHdf)
+                #   if GDAL:
+                #       test = self.checkFile(filHdf)
                 test = True
                 if test:
                     os.remove(filSave.name)
@@ -751,30 +800,34 @@ class downModis:
                     self.filelist.write("{name}\n".format(name=filDown))
                     self.filelist.flush()
                     if self.debug:
-                        logging.debug("File {name} downloaded "
-                                      "correctly".format(name=filDown))
+                        logging.debug(
+                            "File {name} downloaded " "correctly".format(name=filDown)
+                        )
                     return 0
             else:  # xml exists
                 self.filelist.write("{name}\n".format(name=filDown))
                 self.filelist.flush()
                 if self.debug:
-                    logging.debug("File {name} downloaded "
-                                  "correctly".format(name=filDown))
+                    logging.debug(
+                        "File {name} downloaded " "correctly".format(name=filDown)
+                    )
                 return 0
         # if filesizes are different, delete and try again
         else:
-            logging.warning("Different size for file {name} - original data: "
-                            "{orig}, downloaded: {down}".format(name=filDown,
-                                                                orig=orig_size,
-                                                                down=transf_size))
+            logging.warning(
+                "Different size for file {name} - original data: "
+                "{orig}, downloaded: {down}".format(
+                    name=filDown, orig=orig_size, down=transf_size
+                )
+            )
             os.remove(filSave.name)
             self._downloadFileHTTP(filDown, filHdf, day)
 
     def _downloadFileFTP(self, filDown, filHdf):
         """Download a single file from ftp server
 
-           :param str filDown: name of the file to download
-           :param str filHdf: name of the file to write to
+        :param str filDown: name of the file to download
+        :param str filHdf: name of the file to write to
         """
         filSave = open(filHdf, "wb")
         try:  # transfer file from ftp
@@ -784,10 +837,11 @@ class downModis:
             if self.debug:
                 logging.debug("File {name} downloaded".format(name=filDown))
         # if error during download process, try to redownload the file
-        except (ftplib.error_reply, socket.error, ftplib.error_temp,
-                EOFError) as e:
-            logging.error("Cannot download {name}, the error was '{err}'. "
-                          "Retrying...".format(name=filDown, err=e))
+        except (ftplib.error_reply, socket.error, ftplib.error_temp, EOFError) as e:
+            logging.error(
+                "Cannot download {name}, the error was '{err}'. "
+                "Retrying...".format(name=filDown, err=e)
+            )
             filSave.close()
             os.remove(filSave.name)
             try:
@@ -801,31 +855,31 @@ class downModis:
         if orig_size == transf_size:
             return 0
         else:
-            logging.warning("Different size for file {name} - original data: "
-                            "{orig}, downloaded: {down}".format(name=filDown,
-                                                                orig=orig_size,
-                                                                down=transf_size))
+            logging.warning(
+                "Different size for file {name} - original data: "
+                "{orig}, downloaded: {down}".format(
+                    name=filDown, orig=orig_size, down=transf_size
+                )
+            )
             os.remove(filSave.name)
             self._downloadFileFTP(filDown, filHdf)
 
     def dayDownload(self, day, listFilesDown):
         """Downloads tiles for the selected day
 
-           :param str day: the day in format YYYY.MM.DD
-           :param list listFilesDown: list of the files to download, returned
-                                      by checkDataExist function
+        :param str day: the day in format YYYY.MM.DD
+        :param list listFilesDown: list of the files to download, returned
+                                   by checkDataExist function
         """
         # for each file in files' list
         for i in listFilesDown:
-            fileSplit = i.split('.')
-            filePrefix = "{a}.{b}.{c}.{d}".format(a=fileSplit[0],
-                                                  b=fileSplit[1],
-                                                  c=fileSplit[2],
-                                                  d=fileSplit[3])
+            fileSplit = i.split(".")
+            filePrefix = "{a}.{b}.{c}.{d}".format(
+                a=fileSplit[0], b=fileSplit[1], c=fileSplit[2], d=fileSplit[3]
+            )
 
             # check if this file already exists in the save directory
-            oldFile = glob.glob1(self.writeFilePath, filePrefix + "*"
-                                 + fileSplit[-1])
+            oldFile = glob.glob1(self.writeFilePath, filePrefix + "*" + fileSplit[-1])
             numFiles = len(oldFile)
             # if it doesn't exist
             if numFiles == 0:
@@ -838,17 +892,16 @@ class downModis:
                     os.remove(os.path.join(self.writeFilePath, oldFile[0]))
                     file_hdf = os.path.join(self.writeFilePath, fileDown)
             elif numFiles > 1:
-                logging.error("There are to many files for "
-                              "{name}".format(name=i))
+                logging.error("There are to many files for " "{name}".format(name=i))
             if numFiles == 0 or (numFiles == 1 and fileDown != oldFile[0]):
                 self.downloadFile(i, file_hdf, day)
 
     def downloadsAllDay(self, clean=False, allDays=False):
         """Download all requested days
 
-           :param bool clean: if True remove the empty files, they could have
-                              some problems in the previous download
-           :param bool allDays: download all passable days
+        :param bool clean: if True remove the empty files, they could have
+                           some problems in the previous download
+        :param bool allDays: download all passable days
         """
         if clean:
             self.removeEmptyFiles()
@@ -859,18 +912,19 @@ class downModis:
             days = self.getListDays()
         # log the days to download
         if self.debug:
-            logging.debug("The number of days to download is: "
-                          "{num}".format(num=len(days)))
+            logging.debug(
+                "The number of days to download is: " "{num}".format(num=len(days))
+            )
         # download the data
-        if self.urltype == 'http':
+        if self.urltype == "http":
             self._downloadAllDaysHTTP(days)
-        elif self.urltype == 'ftp':
+        elif self.urltype == "ftp":
             self._downloadAllDaysFTP(days)
 
     def _downloadAllDaysHTTP(self, days):
         """Downloads all the tiles considered from HTTP server
 
-           :param list days: the list of days to download
+        :param list days: the list of days to download
         """
         # for each day
         for day in days:
@@ -888,7 +942,7 @@ class downModis:
     def _downloadAllDaysFTP(self, days):
         """Downloads all the tiles considered from FTP server
 
-           :param list days: the list of days to download
+        :param list days: the list of days to download
         """
         # for each day
         for day in days:
@@ -918,8 +972,9 @@ class downModis:
         ch = logging.StreamHandler()
         ch.setLevel(logging.DEBUG)
         # create formatter
-        formatter = logging.Formatter("%(asctime)s - %(name)s - "
-                                      "%(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - " "%(levelname)s - %(message)s"
+        )
         # add formatter to console handler
         ch.setFormatter(formatter)
         # add console handler to logger
@@ -940,15 +995,15 @@ class downModis:
                 day = day.strftime("%Y.%m.%d")
                 # check if day is in the days list
                 if day not in days:
-                    logger.critical("This day {day} is not present on "
-                                    "list".format(day=day))
+                    logger.critical(
+                        "This day {day} is not present on " "list".format(day=day)
+                    )
         # the length of list of days and delta are equal
         else:
-            logger.info("debugDays() : getListDays() and self.delta are same "
-                        "length")
+            logger.info("debugDays() : getListDays() and self.delta are same " "length")
 
     def debugMaps(self):
-        """ Prints the files to download to the debug stream"""
+        """Prints the files to download to the debug stream"""
         logger = self.debugLog()
         days = self.getListDays()
         for day in days:
