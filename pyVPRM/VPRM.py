@@ -97,6 +97,7 @@ class vprm:
                     cfg[key]["tmin"],
                     cfg[key]["topt"],
                     cfg[key]["tmax"],
+                    cfg[key]["tlow"],
                 ]
             for c in cfg[key]["class_numbers"]:
                 self.map_to_vprm_class[c] = cfg[key]["vprm_class"]
