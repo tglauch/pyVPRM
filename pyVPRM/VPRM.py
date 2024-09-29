@@ -332,7 +332,7 @@ class vprm:
 
         if not isinstance(handler, satellite_data_manager):
             logger.info(
-                "Satellite image needs to be an object of the sattelite_data_manager class"
+                "Satellite image needs to be an object of the satellite_data_manager class"
             )
             return
         bands_to_mask = []
