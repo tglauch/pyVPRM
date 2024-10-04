@@ -552,7 +552,7 @@ class vprm_base:
             best_fit_params_dict = dict()
         for key in fit_dict.keys():
             min_len = np.min([i.get_len() for i in fit_dict[key]])
-            logger.info(key, min_len)
+            logger.info(str(key), str(min_len))
             data_for_fit = []
             for s in fit_dict[key]:
                 t_data = s.get_data()
