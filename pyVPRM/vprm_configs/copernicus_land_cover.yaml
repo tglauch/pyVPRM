@@ -8,6 +8,7 @@ Evergreen Forest:
     tmin: -5
     topt: 20
     tmax: 40    
+    tlow: 1
 
 Deciduous Forest:
     vprm_class: 2
@@ -19,7 +20,7 @@ Deciduous Forest:
     tmin: 0
     topt: 20
     tmax: 40
-    
+    tlow: 5
 
 Mixed Forest:
     vprm_class: 3
@@ -31,7 +32,7 @@ Mixed Forest:
     tmin: -3
     topt: 20
     tmax: 40    
-
+    tlow: 2
 
 Shrubland:
     vprm_class: 4
@@ -40,6 +41,7 @@ Shrubland:
     tmin: 2
     topt: 20
     tmax: 40    
+    tlow: 0
 
 Savannas:
     vprm_class: 5
@@ -48,7 +50,8 @@ Savannas:
     tmin: 0
     topt: 20
     tmax: 40  
-    
+    tlow: 0
+
 Cropland:
     vprm_class: 6
     class_numbers:
@@ -56,7 +59,8 @@ Cropland:
     tmin: -2
     topt: 22
     tmax: 40
-     
+    tlow: 2
+
 Grassland:
     vprm_class: 7
     class_numbers:
@@ -65,6 +69,7 @@ Grassland:
     tmin: -3
     topt: 18
     tmax: 40
+    tlow: 0
 
 Other:
     vprm_class: 8
@@ -77,6 +82,7 @@ Other:
     tmin: 2
     topt: 18
     tmax: 40
+    tlow: 0
 
 Wetland:
     vprm_class: 9
@@ -85,3 +91,4 @@ Wetland:
     tmin: 0
     topt: 20
     tmax: 40
+    tlow: 0
