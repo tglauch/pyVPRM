@@ -380,7 +380,7 @@ class vprm:
 
         bands_to_mask = []
         if which_evi in ["evi", "evi2"]:
-            bands_to_mask = [which_evi, "lswi"]
+            bands_to_mask = ["evi", "lswi"]
         else:
             for btm in [b_nir, b_red, b_blue, b_swir]:
                 if btm is not None:
