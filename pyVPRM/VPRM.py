@@ -339,7 +339,7 @@ class vprm:
         bands = [b_nir, b_red, b_blue, b_swir]
         if which_evi == 'evi2':
             bands = [b_nir, b_red, b_swir]    
-        for btm in :
+        for btm in bands:
             if btm is not None:
                 bands_to_mask.append(btm)
         if mask_bad_pixels:
