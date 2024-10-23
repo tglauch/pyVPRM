@@ -68,7 +68,7 @@ class VIIRS(earthdata):
             test.coords['y'] = t[1].coords['y']
             t[1][key] = test 
         t[1]= t[1].assign_coords({'time': obs_time})
-        self.sat_img = t[1]
+        self.sat_img = t[1].squeeze()
         self.set_band_names()
         return
 
