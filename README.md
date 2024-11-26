@@ -47,7 +47,7 @@ conda install esmpy
 Afterwards install ```pyVPRM``` using pip via
 
 ```
-pip install git+https://github.com/tglauch/pyVPRM.git
+pip install pyVPRM
 ```
 
 ## Start your own project
