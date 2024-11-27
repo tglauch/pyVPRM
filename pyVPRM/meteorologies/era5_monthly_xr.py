@@ -13,9 +13,30 @@ import datetime
 from pyVPRM.meteorologies.met_base_class import met_data_handler_base
 from loguru import logger
 
+
 class met_data_handler(met_data_handler_base):
 
-    def __init__(self, year, month, day, hour, bpath, mpi=False, keys=[]):
+    def __init__(
+        self,
+        year,
+        month,
+        day,
+        hour,
+        bpath,
+        fname_fmt_str="{year}_{month}.nc",
+        mpi=False,
+        keys=[],
+    ):
+        """construct a met_data_handler instance for monthly ERA5 data
+
+        ARGS:
+        fname_fmt_str (str): specifies the file name syntax. Must have
+           placeholders for year and month.
+           valid examples:
+              '{year}_{month}.nc'
+              'ERA5_2mT_msdswrf_ssrd_NZ_{year:04d}_{month:02d}.nc'
+        """
+
         super().__init__()
         # Init with year, month, day, hour and the required era5 keys as given in the
         #  keys_dict above
@@ -23,6 +44,7 @@ class met_data_handler(met_data_handler_base):
         self.this_month = 0
         self.this_year = 0
         self.bpath = bpath
+        self.fname_fmt_str = fname_fmt_str
         self.ds_in_t = None
         self.regridder = None
         self.mpi = mpi
@@ -109,7 +131,10 @@ class met_data_handler(met_data_handler_base):
     def _init_data_for_day(self):
         if (self.this_month != self.month) | (self.this_year != self.year):
             self.data = xr.open_dataset(
-                os.path.join(self.bpath, "{}_{}.nc".format(self.year, self.month))
+                os.path.join(
+                    self.bpath,
+                    self.fname_fmt_str.format(year=self.year, month=self.month),
+                )
             )
             self.this_month = self.month
             self.this_year = self.year
