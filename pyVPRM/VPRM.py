@@ -617,9 +617,13 @@ class vprm:
                     )
                     src_grid.to_netcdf(src_temp_path)
                     ds_out.to_netcdf(dest_temp_path)
-                    exec_str = "ESMF_RegridWeightGen --source {} --destination {} --weight {} -m conserve -r --netcdf4 –src_regional –dest_regional ".format(
-                        src_temp_path, dest_temp_path, regridder_save_path
-                    )
+                    logger.debug(f"wrote source regridder: {src_temp_path}")
+                    logger.debug(f"wrote dest regridder: {dest_temp_path}")
+                    exec_str = (
+                        "ESMF_RegridWeightGen --source {} --destination {} "
+                        "--weight {} -m conserve -r --netcdf4 --src_regional"
+                        " --dest_regional --ignore_unmapped"
+                    ).format(src_temp_path, dest_temp_path, regridder_save_path)
                     if mpi is True:
                         exec_str = "mpirun -np {} ".format(n_cpus) + exec_str
                     if not logs:

@@ -48,6 +48,7 @@ setup(
         "requests",
         "statsmodels",
         "loguru",
+        "fiona",
     ],
     include_package_data=True,
     zip_safe=False,
