@@ -141,16 +141,31 @@ class met_data_handler(met_data_handler_base):
             self.in_era5_grid = True
 
         if self.ds_in_t is None:
+            # determine whether data uses "lat" or "latitude"
+            if "lat" in self.data.coords:
+                latvar = "lat"
+            elif "latitude" in self.data.coords:
+                latvar = "latitude"
+            else:
+                raise ValueError("cannot locate 'lat' or 'latitude' values")
+            # determine whether data uses "lon" or "longitude"
+            if "lon" in self.data.coords:
+                lonvar = "lon"
+            elif "longitude" in self.data.coords:
+                lonvar = "longitude"
+            else:
+                raise ValueError("cannot locate 'lon' or 'longitude' values")
+
             self.ds_in_t = xr.Dataset(
                 {
                     "lat": (
                         ["lat"],
-                        self.data["lat"].values,
+                        self.data[latvar].values,
                         {"units": "degrees_north"},
                     ),
                     "lon": (
                         ["lon"],
-                        self.data["lon"].values,
+                        self.data[lonvar].values,
                         {"units": "degrees_east"},
                     ),
                 }
