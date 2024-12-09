@@ -38,7 +38,7 @@ regridder_options["conservative"] = "conserve"
 
 class vprm:
     """
-    Class for the  Vegetation Photosynthesis and Respiration Model
+    Main class for the  Vegetation Photosynthesis and Respiration Model
     """
 
     def __init__(
