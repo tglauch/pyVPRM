@@ -29,6 +29,12 @@ jobs:
       - name: Build release distributions
         run: |
           # NOTE: put your own distribution build steps here.
+          VERSION=$(python setup.py --version)
+          echo "Setup.py version: $VERSION"
+          if [ "$VERSION" != "${{ github.ref_name }}" ]; then
+            echo "Version mismatch! Setup.py ($VERSION) vs Tag (${{ github.ref_name }})"
+            exit 1
+          fi
           python -m pip install build
           python -m build
 
