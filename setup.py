@@ -8,7 +8,7 @@ def readme():
 
 setup(
     name="pyVPRM",
-    version="4.0",
+    version="5.0",
     description="Vegetation Photosynthesis and Respiration Model",
     long_description="A tool to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respiration Model",
     classifiers=[
