@@ -1,8 +1,5 @@
 [![DOI](https://zenodo.org/badge/626435494.svg)](https://doi.org/10.5281/zenodo.14216613)
 
-
-![eu_gpp_small](https://github.com/user-attachments/assets/c099ef1f-6c5a-445c-bc6e-f6697c47b641)
-
 <img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d" width=45% height=50%>
 
 # About
