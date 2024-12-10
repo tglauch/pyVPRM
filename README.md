@@ -22,7 +22,7 @@ In case of any questions please write an E-Mail to theo.glauch@dlr.de.
 </figure> 
 
 <figure>
-<img src="https://github.com/user-attachments/assets/48c412b2-cf5f-4573-9db8-e60909893218", height=300pt>
+<img src="https://github.com/user-attachments/assets/26913805-f188-477a-9a85-08911a165b1e", height=300pt>
 </figure> 
 
 
