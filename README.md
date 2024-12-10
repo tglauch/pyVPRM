@@ -1,6 +1,7 @@
 [![DOI](https://zenodo.org/badge/626435494.svg)](https://doi.org/10.5281/zenodo.14216613)
 
 
+![eu_gpp_small](https://github.com/user-attachments/assets/c099ef1f-6c5a-445c-bc6e-f6697c47b641)
 
 <img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d" width=45% height=50%>
 
@@ -20,7 +21,7 @@ In case of any questions please write an E-Mail to theo.glauch@dlr.de.
 ## Example Net Ecosystem Fluxes generated with pyVPRM
 
 <figure>
-<img src="https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a", height=300pt>
+<img src="https://github.com/user-attachments/assets/def61395-f90e-421b-9264-f0608161bd7a](https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d", height=300pt>
 </figure> 
 
 <figure>
