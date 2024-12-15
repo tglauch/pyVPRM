@@ -458,12 +458,15 @@ class vprm_base:
             if met_regridder_weights is not None:
                 if not os.path.exists(os.path.dirname(met_regridder_weights)):
                     os.makedirs(os.path.dirname(met_regridder_weights))
-            lc_classes = self.vprm_pre.land_cover_type.sat_img.vprm_classes.values
+            if land_cover_type is not None:
+                lc_classes = [land_cover_type]
+            else:
+                lc_classes = self.vprm_pre.land_cover_type.sat_img.vprm_classes.values
         else:
             lc_classes = [land_cover_type]
 
         lc_classes = [i for i in lc_classes if ((i not in no_flux_veg_types) & (i in self.fit_params_dict.keys()))]
-
+        lc_classes = np.atleast_1d(lc_classes)
         for i in lc_classes:
             if mode == "2d":
                 inputs = self._get_vprm_variables(
