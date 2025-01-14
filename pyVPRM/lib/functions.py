@@ -13,7 +13,6 @@ import xarray as xr
 from datetime import datetime
 import rioxarray
 
-
 def parse_wrf_grid_file(file_path, n_chunks=1, chunk_x=1, chunk_y=1):
 
     t = xr.open_dataset(file_path)
@@ -293,3 +292,40 @@ def add_corners_to_1d_grid(mids):
     mids.append(mids[-1] + 2 * diff)
     mids = np.array(mids)
     return mids
+
+def get_specific_chunk(data, dim_chunks, chunk_position):
+    """
+    Get a specific chunk from an xarray DataArray based on its position in the grid.
+
+    Parameters:
+        data (xr.DataArray): The input DataArray to split.
+        dim_chunks (dict): A dictionary specifying the number of chunks for each dimension,
+                           e.g., {'x': 3, 'y': 2}.
+        chunk_position (tuple): The position of the chunk in the grid, e.g., (0, 1).
+
+    Returns:
+        xr.DataArray: The specific chunk corresponding to the given position.
+    """
+    # Validate chunk_position
+    if len(chunk_position) != len(dim_chunks):
+        raise ValueError("chunk_position must have the same length as dim_chunks")
+
+    dim_slices = {}
+
+    for dim, n_chunks in dim_chunks.items():
+        # Get dimension size
+        dim_size = data.sizes[dim]
+        # Compute chunk sizes, handling remainders
+        chunk_sizes = [(dim_size + i) // n_chunks for i in range(n_chunks)]
+        # Compute start and stop indices for each chunk
+        indices = [sum(chunk_sizes[:i]) for i in range(n_chunks + 1)]
+        dim_slices[dim] = [(indices[i], indices[i + 1]) for i in range(n_chunks)]
+
+    # Build slice for the specified chunk position
+    slices = {
+        dim: slice(*dim_slices[dim][chunk_position[idx]])
+        for idx, dim in enumerate(dim_chunks.keys())
+    }
+
+    # Return the specific chunk
+    return data.isel(**slices)
