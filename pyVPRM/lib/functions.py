@@ -329,3 +329,54 @@ def get_specific_chunk(data, dim_chunks, chunk_position):
 
     # Return the specific chunk
     return data.isel(**slices)
+
+def merge_chunks_with_open_mfdataset(chunk_files, dim_order=['x', 'y']):
+    """
+    Merge pre-saved chunk files into a single xarray DataArray using open_mfdataset
+    for efficient processing row-by-row or column-by-column.
+
+    Parameters:
+        chunk_files (dict): A dictionary where keys are chunk positions (e.g., (0, 0))
+                            and values are file paths to the chunk files.
+        dim_order (list): List of dimension names in the order they should be concatenated,
+                          e.g., ['x', 'y'].
+
+    Returns:
+        xr.DataArray: The remerged xarray DataArray.
+    """
+    # Determine the number of dimensions
+    ndim = len(dim_order)
+
+    # Group files by their positions along the last dimension
+    grouped_files = {}
+    for position, file_path in chunk_files.items():
+        group_key = position[:-1]  # All dimensions except the last
+        grouped_files.setdefault(group_key, []).append((position[-1], file_path))
+
+    # Sort files within each group by the last dimension
+    for key in grouped_files:
+        grouped_files[key] = [fp for _, fp in sorted(grouped_files[key])]
+
+    # Merge files within each group (rows or columns)
+    partial_datasets = {}
+    for group_key, file_list in grouped_files.items():
+        partial_datasets[group_key] = xr.open_mfdataset(
+            file_list, combine="nested", concat_dim=dim_order[-1], engine="netcdf4"
+        )
+
+    # Organize partial datasets into a grid for further concatenation
+    grid_shape = tuple(max(pos[i] for pos in chunk_files.keys()) + 1 for i in range(ndim - 1))
+    dataset_grid = np.empty(grid_shape, dtype=object)
+
+    for group_key, dataset in partial_datasets.items():
+        dataset_grid[group_key] = dataset
+
+    # Merge across the remaining dimensions recursively
+    for dim_idx in reversed(range(ndim - 1)):
+        dataset_grid = [
+            xr.concat(row, dim=dim_order[dim_idx]) if isinstance(row, (list, np.ndarray)) else row
+            for row in dataset_grid
+        ]
+        dataset_grid = xr.concat(dataset_grid, dim=dim_order[dim_idx])
+
+    return dataset_grid
