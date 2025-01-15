@@ -330,6 +330,42 @@ def get_specific_chunk(data, dim_chunks, chunk_position):
     # Return the specific chunk
     return data.isel(**slices)
 
+
+def get_fully_covered_destinaion_grid_cell(dest_grid, regridder):
+    # Currently only works for destination grid in WGS84
+    
+    dest_lon = dest_grid['lon'].values
+    dest_lat = dest_grid['lat'].values
+    weights = regridder.weights.data.todense()  # Extract sparse matrix from DataArray
+    
+    # Sum weights for each destination cell
+    dest_weights_sum = np.array(weights.sum(axis=1)).flatten()
+    
+    # Check if destination cells are fully covered (sum of weights == 1)
+    is_fully_covered = dest_weights_sum > 0.99
+    
+    # Create a mask indicating fully covered cells
+    coverage_mask = is_fully_covered.reshape((len(dest_lat), len(dest_lon)))
+    dest_grid["is_fully_covered"] = (["lat", "lon"], coverage_mask)
+    return dest_grid
+
+
+def get_fractional_coverage_of_destinaion_grid_cell(dest_grid, regridder):
+    # Currently only works for destination grid in WGS84
+    
+    dest_lon = dest_grid['lon'].values
+    dest_lat = dest_grid['lat'].values
+    weights = regridder.weights.data.todense()  # Extract sparse matrix from DataArray
+    
+    # Sum weights for each destination cell
+    dest_weights_sum = np.array(weights.sum(axis=1)).flatten()
+    
+    # Create a mask indicating fully covered cells
+    coverage_mask = dest_weights_sum.reshape((len(dest_lat), len(dest_lon)))
+    dest_grid["is_fully_covered"] = (["lat", "lon"], coverage_mask)
+    return dest_grid
+
+
 def merge_chunks_with_open_mfdataset(chunk_files, dim_order=['x', 'y']):
     """
     Merge pre-saved chunk files into a single xarray DataArray using open_mfdataset
