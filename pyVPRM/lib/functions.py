@@ -336,10 +336,10 @@ def get_fully_covered_destinaion_grid_cell(dest_grid, regridder):
     
     dest_lon = dest_grid['lon'].values
     dest_lat = dest_grid['lat'].values
-    weights = regridder.weights.data.todense()  # Extract sparse matrix from DataArray
+    weights = regridder.weights.data  # Extract sparse matrix from DataArray
     
     # Sum weights for each destination cell
-    dest_weights_sum = np.array(weights.sum(axis=1)).flatten()
+    dest_weights_sum = np.array(weights.sum(axis=1).todense()).flatten()
     
     # Check if destination cells are fully covered (sum of weights == 1)
     is_fully_covered = dest_weights_sum > 0.99
@@ -355,10 +355,10 @@ def get_fractional_coverage_of_destinaion_grid_cell(dest_grid, regridder):
     
     dest_lon = dest_grid['lon'].values
     dest_lat = dest_grid['lat'].values
-    weights = regridder.weights.data.todense()  # Extract sparse matrix from DataArray
+    weights = regridder.weights.data  # Extract sparse matrix from DataArray
     
     # Sum weights for each destination cell
-    dest_weights_sum = np.array(weights.sum(axis=1)).flatten()
+    dest_weights_sum = np.array(weights.sum(axis=1).todense()).flatten()
     
     # Create a mask indicating fully covered cells
     coverage_mask = dest_weights_sum.reshape((len(dest_lat), len(dest_lon)))
