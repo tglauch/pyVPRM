@@ -2,6 +2,8 @@
 
 <img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d" width=45% height=50%>
 
+A description of the model is published as preprint in Geoscientific Model Development (GMD) https://egusphere.copernicus.org/preprints/2025/egusphere-2024-3692/. 
+
 # About
 
 
@@ -14,8 +16,6 @@ Among others it can be used for
 3. Generating input files to run VPRM in the Weather Research and Forecasting Model (WRF)
 
 In case of any questions please write an E-Mail to theo.glauch@dlr.de.
-
-A description of the model is published in Geoscientific Model Development (GMD) https://egusphere.copernicus.org/preprints/2025/egusphere-2024-3692/.
 
 ## Example Net Ecosystem Fluxes generated with pyVPRM
 
