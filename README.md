@@ -2,7 +2,7 @@
 
 <img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d" width=45% height=50%>
 
-Preprint published in Geoscientific Model Development: https://egusphere.copernicus.org/preprints/2025/egusphere-2024-3692/
+A preprint describing the model ist published in Geoscientific Model Development: https://egusphere.copernicus.org/preprints/2025/egusphere-2024-3692/
 
 # About
 
