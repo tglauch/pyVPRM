@@ -53,78 +53,117 @@ class vprm_base:
         self.month = month
         self.date = "{}-{}-{} {}:00:00".format(year, month, day, hour)
         return
+        
+    def data_for_fitting(self):
+        self.vprm_pre.sat_imgs.sat_img.load()
+        for s in self.vprm_pre.sites:
+            self.new = True
+            site_name = s.get_site_name()
+            ret_dict = dict()
+            for k in ["evi", "Ps", "par", "Ts", "Ws", "lswi", "tcorr"]:
+                ret_dict[k] = []
+            drop_rows = []
+            for index, row in s.get_data().iterrows():
+                datetime_utc = row["datetime_utc"]
+                img_status = self.vprm_pre._set_sat_img_counter(datetime_utc)
+                if self.era5_inst is not None:
+                    era_keys = ["ssrd", "t2m"]
+                    hour = datetime_utc.hour
+                    day = datetime_utc.day
+                    month = datetime_utc.month
+                    year = datetime_utc.year
+                    self.load_weather_data(hour, day, month, year, era_keys=era_keys)
+                # logger.info(self.counter)
+                if img_status == False:
+                    drop_rows.append(index)
+                    continue
+                ret_dict["evi"].append(self.get_evi(site_name=site_name))
+                ret_dict["Ps"].append(
+                    self.get_p_scale(
+                        site_name=site_name, land_cover_type=s.get_land_type()
+                    )
+                )
+                if self.era5_inst is None:
+                    ret_dict["par"].append(self.get_par(ssrd=row["ssrd"]))
+                else:
+                    lonlat = s.get_lonlat()
+                    ret_dict["par"].append(self.get_par(lon=lonlat[0], lat=lonlat[1]))
+                if self.era5_inst is None:
+                    Ts_all = self.get_t_scale(
+                        land_cover_type=s.get_land_type(), temperature=row["t2m"]
+                    )
+                else:
+                    lonlat = s.get_lonlat()
+                    Ts_all = self.get_t_scale(
+                        land_cover_type=s.get_land_type(), lon=lonlat[0], lat=lonlat[1]
+                    )
+                ret_dict["Ts"].append(Ts_all[1])
+                ret_dict["tcorr"].append(Ts_all[0])
+                ret_dict["Ws"].append(
+                    self.get_w_scale(
+                        site_name=site_name, land_cover_type=s.get_land_type()
+                    )
+                )
+                ret_dict["lswi"].append(self.get_lswi(site_name=site_name))
+            s.drop_rows_by_index(drop_rows)
+            s.add_columns(ret_dict)
+        return self.vprm_pre.sites
 
-    def get_neural_network_variables(
+    def _get_vprm_variables(
         self,
-        datetime_utc,
+        land_cover_type,
+        datetime_utc=None,
         lat=None,
         lon=None,
-        era_variables=["ssrd", "t2m"],
+        add_era_variables=[],
         regridder_weights=None,
-        sat_img_keys=None,
     ):
         """
-        Get the variables for an neural network based vegetation model
+        Get the variables for the Vegetation Photosynthesis and Respiration Model
 
             Parameters:
-                datetime_utc (datetime): The END time of the 1-hour integration period
-                lat (float or list of floats): latitude (optional)
-                lon (float or list of floats): longitude (optional)
-                era_variables (list): ERA5 variables (optional)
-                regridder_weights (str): Path to the pre-computed weights for the ERA5 regridder (optional)
-                sat_img_keys (str): List of data_vars from the satellite images to be used (optional)
+                datetime_utc (datetime): The time of interest
+                lat (float): A latitude (optional)
+                lon (float): A longitude (optional)
+                add_era_variables (list): Additional era variables for modifications of the VPRM
+                regridder_weights (str): Path to the pre-computed weights for the ERA5 regridder
+                tower_dict (dict): Alternatively to a model meteorology and land cover map also the data from the flux tower can be passed in a dictionary Minimaly required are the variables 't2m', 'ssrd', 'land_cover_type'
             Returns:
                     None
         """
+        pass
 
-        self.counter = 0
-        hour = datetime_utc.hour
-        day = datetime_utc.day
-        month = datetime_utc.month
-        year = datetime_utc.year
-        self._set_sat_img_counter(datetime_utc)
-        if sat_img_keys is None:
-            sat_img_keys = list(self.sat_imgs.sat_img.data_vars)
+    def make_vprm_predictions(
+        self,
+        date=None,
+        met_regridder_weights=None,
+        inputs=None,
+        no_flux_veg_types=[0, 8],
+        land_cover_type=None,
+        concatenate_fluxes=True,
+    ):
+        """
+        Using the VPRM fit parameters make predictions on the entire satellite image.
 
-        if self.prototype_lat_lon is None:
-            self._set_prototype_lat_lon()
+            Parameters:
+                date (datetime object): The date for the prediction
+                regridder_weights (str): Path to the weights file for regridding from ERA5
+                                         to the satellite grid
+                no_flux_veg_types (list of ints): flux type ids that get a default GPP/NEE of 0
+                                                  (e.g. oceans, deserts...)
+            Returns:
+                    None
+        """
+        pass
 
-        self.load_weather_data(hour, day, month, year, era_keys=era_variables)
-        if (lat is None) & (lon is None):
-            self.era5_inst.regrid(
-                dataset=self.prototype_lat_lon,
-                weights=regridder_weights,
-                n_cpus=self.n_cpus,
-            )
-        ret_dict = dict()
-        # sat_inds = np.concatenate([np.arange(self.counter-8, self.counter-2, 3),
-        #                            np.arange(self.counter-2, self.counter+1)])
-        for_ret_dict = self.get_sat_img_values_for_all_keys(
-            counter_range=self.counter, lon=lon, lat=lat
-        )
-        for i, key in enumerate(sat_img_keys):
-            ret_dict[key] = for_ret_dict[key]
-        for key in era_variables:
-            if lat is None:
-                ret_dict[key] = self.era5_inst.get_data(key=key)
-            else:
-                ret_dict[key] = self.era5_inst.get_data(
-                    lonlat=(lon, lat), key=key
-                ).values.flatten()
-        if lon is not None:
-            land_type = self.land_cover_type.value_at_lonlat(
-                lon, lat, key="land_cover_type", interp_method="nearest", as_array=False
-            ).values.flatten()
-        else:
-            land_type = self.land_cover_type.sat_img["land_cover_type"].values
-        land_type[
-            (land_type != 1)
-            & (land_type != 2)
-            & (land_type != 3)
-            & (land_type != 4)
-            & (land_type != 6)
-            & (land_type != 7)
-        ] = 0
-        land_type[~np.isfinite(land_type)] = 0
-        ret_dict["land_cover_type"] = land_type
-        return ret_dict
+    def fit_vprm_data(
+        self,
+        data_list,
+        variable_dict,
+        same_length=True,
+        fit_nee=True,
+        fit_resp=True,
+        fit_combined=False,
+        best_fit_params_dict=None,
+    ):
+        pass
