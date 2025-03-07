@@ -60,7 +60,7 @@ class vprm_base:
             self.new = True
             site_name = s.get_site_name()
             ret_dict = dict()
-            for k in ["evi", "Ps", "par", "Ts", "Ws", "lswi", "tcorr"]:
+            for k in self.vprm_pre.sat_imgs.sat_img.keys():
                 ret_dict[k] = []
             drop_rows = []
             for index, row in s.get_data().iterrows():
@@ -77,34 +77,15 @@ class vprm_base:
                 if img_status == False:
                     drop_rows.append(index)
                     continue
-                ret_dict["evi"].append(self.get_evi(site_name=site_name))
-                ret_dict["Ps"].append(
-                    self.get_p_scale(
-                        site_name=site_name, land_cover_type=s.get_land_type()
-                    )
-                )
+                temp_data = self.vprm_pre.get_sat_img_values_for_all_keys()
+                for k in temp_data.keys():
+                    ret_dict[k].append(temp_data[k])
                 if self.era5_inst is None:
-                    ret_dict["par"].append(self.get_par(ssrd=row["ssrd"]))
+                    print('For neural network applications an ERA5 instance needs to be provided')
                 else:
                     lonlat = s.get_lonlat()
-                    ret_dict["par"].append(self.get_par(lon=lonlat[0], lat=lonlat[1]))
-                if self.era5_inst is None:
-                    Ts_all = self.get_t_scale(
-                        land_cover_type=s.get_land_type(), temperature=row["t2m"]
-                    )
-                else:
-                    lonlat = s.get_lonlat()
-                    Ts_all = self.get_t_scale(
-                        land_cover_type=s.get_land_type(), lon=lonlat[0], lat=lonlat[1]
-                    )
-                ret_dict["Ts"].append(Ts_all[1])
-                ret_dict["tcorr"].append(Ts_all[0])
-                ret_dict["Ws"].append(
-                    self.get_w_scale(
-                        site_name=site_name, land_cover_type=s.get_land_type()
-                    )
-                )
-                ret_dict["lswi"].append(self.get_lswi(site_name=site_name))
+                    for key in met_keys:
+                        ret_dict[key].append(float(self.era5_inst.get_data(lonlat=(lon, lat), key=key)))
             s.drop_rows_by_index(drop_rows)
             s.add_columns(ret_dict)
         return self.vprm_pre.sites
