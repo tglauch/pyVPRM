@@ -1,0 +1,164 @@
+import xarray as xr
+import glob
+import os
+import time
+import numpy as np
+from dateutil import parser
+from scipy.interpolate import interp2d
+import pygrib
+import copy
+import uuid
+import datetime
+from pyVPRM.meteorologies.met_base_class import met_data_handler_base
+from loguru import logger
+
+map_function = lambda lon: (lon - 360) if (lon > 180) else lon
+
+map_function_inv = lambda lon: (lon + 360) if (lon < 0) else lon
+
+# Check documentation under
+# https://confluence.ecmwf.int/display/CKB/ERA5%3A+data+documentation#ERA5:datadocumentation-Spatialgrid
+
+PAT = 'edh_pat_5279479e4f....'
+
+
+class met_data_handler(met_data_handler_base):
+    """
+    Class for using ERA5 data available on Levante's DKRZ cluster.
+    """
+
+    def __init__(self, year, month, day=None, hour=None, keys=[], timesteps="hourly"):
+        super().__init__()
+        if timesteps == "hourly":
+            self.add_time_str = "1H"
+        elif timesteps == "daily":
+            self.add_time_str = "1D"
+        elif timesteps == "monthly":
+            self.add_time_str = "1M"
+        self.in_era5_grid = True
+        self.regridder = None
+        self.rearranged = False
+        if len(keys) == 0:
+            self.keys = keys_dict.keys()
+        else:
+            self.keys = keys
+        self.ds = xr.open_dataset(
+            f"https://edh:{PAT}@data.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr",
+            chunks={},
+            engine="zarr",
+        ).astype("float32")
+        self.change_date(year, month, day, hour)
+
+    def _init_data_for_day(self):
+      return
+
+    def _load_data_for_hour(self):
+        # Caution: The date as argument corresponds to the END of the ERA5 integration time.
+
+        self.ds_out = self.ds.sel(**{"valid_time": '{}-{}-{} {}:00:00'.format(self.year, self.month,
+                                                                              self.day, self.hour)})
+        self.rearranged = False
+        self.in_era5_grid = True
+
+    def get_all_interpolators(self, day, hour):
+        ret_dict = dict()
+        for key in self.keys:
+            ret_dict[key] = self.get_interpolator()
+        return ret_dict
+
+    def regrid(
+        self,
+        lats=None,
+        lons=None,
+        dataset=None,
+        n_cpus=1,
+        weights=None,
+        overwrite_regridder=False,
+    ):
+
+        import xesmf as xe
+
+        if self.in_era5_grid is False:
+            return
+
+        self.rearrange_lons()
+
+        if (self.regridder is None) | (overwrite_regridder):
+            if (lats is not None) and (lons is not None):
+                t_ds_out = xr.Dataset(
+                    {
+                        "lat": (["lat"], lats, {"units": "degrees_north"}),
+                        "lon": (["lon"], lons, {"units": "degrees_east"}),
+                    }
+                )
+                t_ds_out = t_ds_out.set_coords(["lon", "lat"])
+                self.reg_lats = lats
+                self.reg_lons = lons
+            else:
+                t_ds_out = dataset
+
+            if (weights is not None) & os.path.exists(str(weights)):
+                logger.info("Load weights from {}".format(weights))
+            else:
+                bfolder = os.path.dirname(weights)
+                src_temp_path = os.path.join(bfolder, "{}.nc".format(str(uuid.uuid4())))
+                dest_temp_path = os.path.join(
+                    bfolder, "{}.nc".format(str(uuid.uuid4()))
+                )
+                self.ds_out.to_netcdf(src_temp_path)
+                t_ds_out.to_netcdf(dest_temp_path)
+                cmd = "mpirun -np {}  ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log".format(
+                    n_cpus, src_temp_path, dest_temp_path, weights
+                )
+                logger.info(cmd)
+                os.system(cmd)
+                os.remove(src_temp_path)
+                os.remove(dest_temp_path)
+
+            self.regridder = xe.Regridder(
+                self.ds_out, t_ds_out, "bilinear", weights=weights, reuse_weights=True
+            )
+        self.ds_out = self.regridder(self.ds_out)
+        self.in_era5_grid = False
+        return
+
+    def rearrange_lons(self):
+      if self.ds_out['longitude'].values[-1] > 180:
+          self.ds_out = self.ds_out.assign_coords({'longitude': [map_function(i) for i in
+                                                               ds_out.coords['longitude'].values]})
+          self.ds_out = self.ds_out.sortby('longitude')  
+          self.rearranged = True
+      return
+      
+    def get_data(self, lonlat=None, key=None):
+        if lonlat is None:
+            self.rearrange_lons()
+        if key is not None:
+            tmp = self.ds_out[key]
+        else:
+            tmp = self.ds_out
+        if lonlat is None:
+            return tmp
+        else:
+            lon = lonlat[0]
+            if isinstance(lon, list) | isinstance(lon, np.ndarray):
+                if self.rearranged is False:
+                    lon = [map_function_inv(i) for i in lon]
+                return tmp.interp(longitude=("z", lon), latitude=("z", lonlat[1]), method="linear")
+            else:
+                lon = lonlat[0]
+                if self.rearranged is False:
+                    lon = map_function_inv(lon)
+                return tmp.interp(longitude=lon, latitude=lonlat[1])
+
+
+if __name__ == "__main__":
+    year = "2000"
+    month = 2
+    day = 20
+    hour = 5  # UTC hour
+    position = {"lat": 50.30493, "long": 5.99812}
+    era5_handler = met_data_handler(year, month, day)
+    era5_handler.change_date(hour)
+    ret = era5_handler.get_data()
+    logger.info(ret)
