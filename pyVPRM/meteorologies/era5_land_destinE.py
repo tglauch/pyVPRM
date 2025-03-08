@@ -125,7 +125,7 @@ class met_data_handler(met_data_handler_base):
     def rearrange_lons(self):
       if self.ds_out['longitude'].values[-1] > 180:
           self.ds_out = self.ds_out.assign_coords({'longitude': [map_function(i) for i in
-                                                               ds_out.coords['longitude'].values]})
+                                                                self.ds_out.coords['longitude'].values]})
           self.ds_out = self.ds_out.sortby('longitude')  
           self.rearranged = True
       return
