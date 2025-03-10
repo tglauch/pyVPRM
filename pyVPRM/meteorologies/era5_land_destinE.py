@@ -16,8 +16,6 @@ map_function = lambda lon: (lon - 360) if (lon > 180) else lon
 
 map_function_inv = lambda lon: (lon + 360) if (lon < 0) else lon
 
-# Check documentation under
-# https://confluence.ecmwf.int/display/CKB/ERA5%3A+data+documentation#ERA5:datadocumentation-Spatialgrid
 
 PAT = 'edh_pat_5279479e4f....'
 
@@ -47,6 +45,8 @@ class met_data_handler(met_data_handler_base):
             chunks={},
             engine="zarr",
         ).astype("float32")
+        if keys != []:
+            self.ds = self.ds[keys]
         self.change_date(year, month, day, hour)
 
     def _init_data_for_day(self):
@@ -122,15 +122,30 @@ class met_data_handler(met_data_handler_base):
         self.in_era5_grid = False
         return
 
+    def reduce_time(self, t0, t1):
+        self.ds = self.ds.sel({"valid_time": slice(t0, t1)})
+        return
+        
+    def reduce_along_lonlat(self, lon, lat, interp_method='nearest'):
+        if self.rearranged is False:
+            lon = [map_function_inv(i) for i in lon]
+        self.ds = self.ds.interp(longitude=("longitude", lon), latitude=("latitude", lat),
+                                       method=interp_method)
+        return
+    
     def rearrange_lons(self):
       if self.ds_out['longitude'].values[-1] > 180:
           self.ds_out = self.ds_out.assign_coords({'longitude': [map_function(i) for i in
-                                                                self.ds_out.coords['longitude'].values]})
+                                                               self.ds_out.coords['longitude'].values]})
           self.ds_out = self.ds_out.sortby('longitude')  
           self.rearranged = True
       return
-      
-    def get_data(self, lonlat=None, key=None):
+
+    def load(self):
+        self.ds = self.ds.compute()
+        return
+
+    def get_data(self, lonlat=None, key=None, interp_method='nearest'):
         if lonlat is None:
             self.rearrange_lons()
         if key is not None:
@@ -144,12 +159,15 @@ class met_data_handler(met_data_handler_base):
             if isinstance(lon, list) | isinstance(lon, np.ndarray):
                 if self.rearranged is False:
                     lon = [map_function_inv(i) for i in lon]
-                return tmp.interp(longitude=("z", lon), latitude=("z", lonlat[1]), method="linear")
+                return tmp.interp(longitude=("z", lon), latitude=("z", lonlat[1]),
+                                  method=interp_method)
             else:
                 lon = lonlat[0]
                 if self.rearranged is False:
                     lon = map_function_inv(lon)
-                return tmp.interp(longitude=lon, latitude=lonlat[1])
+                return tmp.interp(longitude=lon, latitude=lonlat[1],
+                                 method=interp_method)
+
 
 
 if __name__ == "__main__":
