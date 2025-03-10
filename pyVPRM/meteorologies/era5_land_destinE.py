@@ -158,7 +158,7 @@ class met_data_handler(met_data_handler_base):
             if isinstance(lon, list) | isinstance(lon, np.ndarray):
                 if self.rearranged is False:
                     lon = [map_function_inv(i) for i in lon]
-                return tmp.interp(longitude=("z", lon), latitude=("z", lonlat[1]),
+                return tmp.interp(longitude=("longitude", lon), latitude=("latitude", lonlat[1]),
                                   method=interp_method)
             else:
                 lon = lonlat[0]
