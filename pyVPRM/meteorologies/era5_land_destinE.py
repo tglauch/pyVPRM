@@ -16,50 +16,42 @@ map_function = lambda lon: (lon - 360) if (lon > 180) else lon
 
 map_function_inv = lambda lon: (lon + 360) if (lon < 0) else lon
 
-
-PAT = 'edh_pat_5279479e4f....'
-
-
 class met_data_handler(met_data_handler_base):
     """
     Class for using ERA5 data available on Levante's DKRZ cluster.
     """
 
     def __init__(self, year, month, day=None, hour=None,
-                 PAT=None, keys=[], timesteps="hourly"):
+                 PAT=None, keys=[]):
         if PAT is None:
-            print('Need to set the access token. Check https://platform.destine.eu/ and use the function set_access_tocken')
+            print('Need to set the access token. Check https://platform.destine.eu/.')
+            return
         super().__init__()
         self.PAT = PAT
-        if timesteps == "hourly":
-            self.add_time_str = "1H"
-        elif timesteps == "daily":
-            self.add_time_str = "1D"
-        elif timesteps == "monthly":
-            self.add_time_str = "1M"
         self.in_era5_grid = True
         self.regridder = None
         self.rearranged = False
-        if len(keys) == 0:
-            self.keys = keys_dict.keys()
-        else:
-            self.keys = keys
+        self.keys = keys
+        self.load_ds()
+        self.change_date(year, month, day, hour)
+
+    def load_ds(self):
         self.ds = xr.open_dataset(
-            f"https://edh:{}@data.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr".format(self.PAT),
+            "https://edh:{}@data.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr".format(self.PAT),
             chunks={},
             engine="zarr",
         ).astype("float32")
-        if keys != []:
-            self.ds = self.ds[keys]
-        self.change_date(year, month, day, hour)
-
-    def set_access_tocken(self, PAT):
-        self.PAT = PAT
-        
+        if self.keys != []:
+            self.ds = self.ds[self.keys]
+        return
+    
     def _init_data_for_day(self):
       return
 
     def _load_data_for_hour(self):
+        if self.ds is None:
+            print('No dataset loaded from destination Earth')
+            return
         # Caution: The date as argument corresponds to the END of the ERA5 integration time.
 
         self.ds_out = self.ds.sel(**{"valid_time": '{}-{}-{} {}:00:00'.format(self.year, self.month,
