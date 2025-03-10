@@ -25,8 +25,12 @@ class met_data_handler(met_data_handler_base):
     Class for using ERA5 data available on Levante's DKRZ cluster.
     """
 
-    def __init__(self, year, month, day=None, hour=None, keys=[], timesteps="hourly"):
+    def __init__(self, year, month, day=None, hour=None,
+                 PAT=None, keys=[], timesteps="hourly"):
+        if PAT is None:
+            print('Need to set the access token. Check https://platform.destine.eu/ and use the function set_access_tocken')
         super().__init__()
+        self.PAT = PAT
         if timesteps == "hourly":
             self.add_time_str = "1H"
         elif timesteps == "daily":
@@ -41,7 +45,7 @@ class met_data_handler(met_data_handler_base):
         else:
             self.keys = keys
         self.ds = xr.open_dataset(
-            f"https://edh:{PAT}@data.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr",
+            f"https://edh:{}@data.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr".format(self.PAT),
             chunks={},
             engine="zarr",
         ).astype("float32")
@@ -49,6 +53,9 @@ class met_data_handler(met_data_handler_base):
             self.ds = self.ds[keys]
         self.change_date(year, month, day, hour)
 
+    def set_access_tocken(self, PAT):
+        self.PAT = PAT
+        
     def _init_data_for_day(self):
       return
 
