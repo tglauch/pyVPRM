@@ -18,16 +18,17 @@ class vprm_base:
     Base class for all meteorologies
     """
 
-    def __init__(self, vprm_pre=None, met=None, fit_params_dict=None):
+    def __init__(self, vprm_pre=None, met=None, met_keys=[]):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
         self.buffer = dict()
         self.buffer["cur_lat"] = None
         self.buffer["cur_lon"] = None
         self.fit_params_dict = fit_params_dict
+        self.met_keys = met_keys
         return
 
-    def load_weather_data(self, hour, day, month, year, era_keys):
+    def load_weather_data(self, hour, day, month, year):
         """
         Load meteorlocial data from the available (on DKRZ's levante) data storage
 
@@ -36,8 +37,6 @@ class vprm_base:
                     day (int): day in UTC
                     month (int): month in UTC
                     year (int): year in UTC
-                    era_keys (list): list of ERA5 variables using the shortNames.
-                                     See https://confluence.ecmwf.int/displau /CKB/ERA5%3A+data+documentation#ERA5:datadocumentation-Parameterlistings
             Returns:
                     None
         """
@@ -67,12 +66,12 @@ class vprm_base:
                 datetime_utc = row["datetime_utc"]
                 img_status = self.vprm_pre._set_sat_img_counter(datetime_utc)
                 if self.era5_inst is not None:
-                    era_keys = ["ssrd", "t2m"]
                     hour = datetime_utc.hour
                     day = datetime_utc.day
                     month = datetime_utc.month
                     year = datetime_utc.year
-                    self.load_weather_data(hour, day, month, year, era_keys=era_keys)
+                    self.load_weather_data(hour, day, month, year,
+                                           era_keys=self.met_keys)
                 # logger.info(self.counter)
                 if img_status == False:
                     drop_rows.append(index)
