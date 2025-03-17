@@ -2,7 +2,19 @@
 
 <img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d" width=45% height=50%>
 
-A description of the model is published as preprint in Geoscientific Model Development (GMD) https://egusphere.copernicus.org/preprints/2025/egusphere-2024-3692/. 
+A description of the model is published as preprint in Geoscientific Model Development (GMD) https://egusphere.copernicus.org/preprints/2025/egusphere-2024-3692/. If you used this package for you scientific work please cite using the following Bibtex 
+```
+@Article{egusphere-2024-3692,
+AUTHOR = {Glauch, T. and Marshall, J. and Gerbig, C. and Bot\'{\i}a, S. and Ga{\l}kowski, M. and Vardag, S. N. and Butz, A.},
+TITLE = {\textit{pyVPRM}: A next-generation Vegetation Photosynthesis and Respiration Model for the post-MODIS era},
+JOURNAL = {EGUsphere},
+VOLUME = {2025},
+YEAR = {2025},
+PAGES = {1--45},
+URL = {https://egusphere.copernicus.org/preprints/2025/egusphere-2024-3692/},
+DOI = {10.5194/egusphere-2024-3692}
+}
+```
 
 # About
 
