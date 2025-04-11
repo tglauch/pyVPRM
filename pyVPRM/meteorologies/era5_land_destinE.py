@@ -22,7 +22,7 @@ class met_data_handler(met_data_handler_base):
     """
 
     def __init__(self, year, month, day=None, hour=None,
-                 PAT=None, keys=[]):
+                 PAT=None, keys=[], lat_slice=None, lon_slice=None):
         if PAT is None:
             print('Need to set the access token. Check https://platform.destine.eu/.')
             return
@@ -31,6 +31,11 @@ class met_data_handler(met_data_handler_base):
         self.in_era5_grid = True
         self.regridder = None
         self.rearranged = False
+        self.lat_slice = lat_slice
+        self.lon_slice = lon_slice
+        if self.lon_slice is not None:
+            self.lon_slice[0] = map_function_inv(self.lon_slice[0])
+            self.lon_slice[1] = map_function_inv(self.lon_slice[1])
         self.keys = keys
         self.load_ds()
         self.change_date(year, month, day, hour)
@@ -53,9 +58,13 @@ class met_data_handler(met_data_handler_base):
             print('No dataset loaded from destination Earth')
             return
         # Caution: The date as argument corresponds to the END of the ERA5 integration time.
-
-        self.ds_out = self.ds.sel(**{"valid_time": '{}-{}-{} {}:00:00'.format(self.year, self.month,
-                                                                              self.day, self.hour)})
+        sel_dict = {"valid_time": '{}-{}-{} {}:00:00'.format(self.year, self.month,
+                                                             self.day, self.hour)}
+        if self.lat_slice is not None:
+            sel_dict['latitude'] = slice(self.lat_slice[1], self.lat_slice[0])
+        if self.lon_slice is not None:
+            sel_dict['longitude'] = slice(self.lon_slice[0], self.lon_slice[1])
+        self.ds_out = self.ds.sel(sel_dict)
         self.rearranged = False
         self.in_era5_grid = True
 
@@ -122,7 +131,12 @@ class met_data_handler(met_data_handler_base):
         return
 
     def reduce_time(self, t0, t1):
-        self.ds = self.ds.sel({"valid_time": slice(t0, t1)})
+        sel_dict = {"valid_time": slice(t0, t1)}
+        if self.lat_slice is not None:
+            sel_dict['latitude'] = slice(self.lat_slice[1], self.lat_slice[0])
+        if self.lon_slice is not None:
+            sel_dict['longitude'] = slice(self.lon_slice[0], self.lon_slice[1])
+        self.ds = self.ds.sel(sel_dict)
         return
         
     def reduce_along_lonlat(self, lon, lat, interp_method='nearest'):
