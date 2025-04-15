@@ -22,7 +22,8 @@ class met_data_handler(met_data_handler_base):
     """
 
     def __init__(self, year, month, day=None, hour=None,
-                 PAT=None, keys=[], lat_slice=None, lon_slice=None):
+                 PAT=None, keys=[], lat_slice=None, lon_slice=None,
+                 mpi=False):
         if PAT is None:
             print('Need to set the access token. Check https://platform.destine.eu/.')
             return
@@ -33,6 +34,7 @@ class met_data_handler(met_data_handler_base):
         self.rearranged = False
         self.lat_slice = lat_slice
         self.lon_slice = lon_slice
+        self.mpi = mpi
         if self.lon_slice is not None:
             self.lon_slice[0] = map_function_inv(self.lon_slice[0])
             self.lon_slice[1] = map_function_inv(self.lon_slice[1])
@@ -45,7 +47,8 @@ class met_data_handler(met_data_handler_base):
             "https://edh:{}@data.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr".format(self.PAT),
             chunks={},
             engine="zarr",
-        ).astype("float32")
+        ).astype("float32").rename({'longitude':'lon',
+                                    'latitude':'lat'})
         if self.keys != []:
             self.ds = self.ds[self.keys]
         return
@@ -61,9 +64,9 @@ class met_data_handler(met_data_handler_base):
         sel_dict = {"valid_time": '{}-{}-{} {}:00:00'.format(self.year, self.month,
                                                              self.day, self.hour)}
         if self.lat_slice is not None:
-            sel_dict['latitude'] = slice(self.lat_slice[1], self.lat_slice[0])
+            sel_dict['lat'] = slice(self.lat_slice[1], self.lat_slice[0])
         if self.lon_slice is not None:
-            sel_dict['longitude'] = slice(self.lon_slice[0], self.lon_slice[1])
+            sel_dict['lon'] = slice(self.lon_slice[0], self.lon_slice[1])
         self.ds_out = self.ds.sel(sel_dict)
         self.rearranged = False
         self.in_era5_grid = True
@@ -115,9 +118,11 @@ class met_data_handler(met_data_handler_base):
                 )
                 self.ds_out.to_netcdf(src_temp_path)
                 t_ds_out.to_netcdf(dest_temp_path)
-                cmd = "mpirun -np {}  ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log".format(
-                    n_cpus, src_temp_path, dest_temp_path, weights
+                cmd = "ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log".format(
+                    src_temp_path, dest_temp_path, weights
                 )
+                if self.mpi:
+                    cmd = 'mpirun -np {} '.format(n_cpus) + cmd
                 logger.info(cmd)
                 os.system(cmd)
                 os.remove(src_temp_path)
@@ -133,24 +138,24 @@ class met_data_handler(met_data_handler_base):
     def reduce_time(self, t0, t1):
         sel_dict = {"valid_time": slice(t0, t1)}
         if self.lat_slice is not None:
-            sel_dict['latitude'] = slice(self.lat_slice[1], self.lat_slice[0])
+            sel_dict['lat'] = slice(self.lat_slice[1], self.lat_slice[0])
         if self.lon_slice is not None:
-            sel_dict['longitude'] = slice(self.lon_slice[0], self.lon_slice[1])
+            sel_dict['lon'] = slice(self.lon_slice[0], self.lon_slice[1])
         self.ds = self.ds.sel(sel_dict)
         return
         
     def reduce_along_lonlat(self, lon, lat, interp_method='nearest'):
         if self.rearranged is False:
             lon = [map_function_inv(i) for i in lon]
-        self.ds = self.ds.interp(longitude=("longitude", lon), latitude=("latitude", lat),
+        self.ds = self.ds.interp(lon=("lon", lon), lat=("lat", lat),
                                        method=interp_method)
         return
     
     def rearrange_lons(self):
-      if self.ds_out['longitude'].values[-1] > 180:
-          self.ds_out = self.ds_out.assign_coords({'longitude': [map_function(i) for i in
-                                                               self.ds_out.coords['longitude'].values]})
-          self.ds_out = self.ds_out.sortby('longitude')  
+      if self.ds_out['lon'].values.max() > 180:
+          self.ds_out = self.ds_out.assign_coords({'lon': [map_function(i) for i in
+                                                            self.ds_out.coords['lon'].values]})
+          self.ds_out = self.ds_out.sortby('lon')  
           self.rearranged = True
       return
 
@@ -172,13 +177,13 @@ class met_data_handler(met_data_handler_base):
             if isinstance(lon, list) | isinstance(lon, np.ndarray):
                 if self.rearranged is False:
                     lon = [map_function_inv(i) for i in lon]
-                return tmp.interp(longitude=("longitude", lon), latitude=("latitude", lonlat[1]),
+                return tmp.interp(lon=("lon", lon), lat=("lat", lonlat[1]),
                                   method=interp_method)
             else:
                 lon = lonlat[0]
                 if self.rearranged is False:
                     lon = map_function_inv(lon)
-                return tmp.interp(longitude=lon, latitude=lonlat[1],
+                return tmp.interp(lon=lon, lat=lonlat[1],
                                  method=interp_method)
 
 
