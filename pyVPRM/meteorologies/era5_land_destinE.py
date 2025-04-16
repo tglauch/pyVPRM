@@ -67,7 +67,7 @@ class met_data_handler(met_data_handler_base):
             sel_dict['lat'] = slice(self.lat_slice[1], self.lat_slice[0])
         if self.lon_slice is not None:
             sel_dict['lon'] = slice(self.lon_slice[0], self.lon_slice[1])
-        self.ds_out = self.ds.sel(sel_dict)
+        self.ds_out = self.ds.sel(sel_dict).compute()
         self.rearranged = False
         self.in_era5_grid = True
 
@@ -141,7 +141,7 @@ class met_data_handler(met_data_handler_base):
             sel_dict['lat'] = slice(self.lat_slice[1], self.lat_slice[0])
         if self.lon_slice is not None:
             sel_dict['lon'] = slice(self.lon_slice[0], self.lon_slice[1])
-        self.ds = self.ds.sel(sel_dict)
+        self.ds = self.ds.sel(sel_dict).compute()
         return
         
     def reduce_along_lonlat(self, lon, lat, interp_method='nearest'):
