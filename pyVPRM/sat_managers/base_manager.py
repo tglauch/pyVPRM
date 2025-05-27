@@ -18,6 +18,7 @@ from requests.auth import HTTPDigestAuth
 from rioxarray import merge
 import yaml
 import warnings
+import subprocess
 
 warnings.filterwarnings("ignore")
 from matplotlib.colors import LinearSegmentedColormap
@@ -386,6 +387,10 @@ class earthdata(satellite_data_manager):
         rmv_downloads=False,
     ):
 
+        # Function to construct the url name
+        def join_url(*parts):
+            return '/'.join(str(part).strip('/') for part in parts)
+
         modisDown = self._init_downloader(
             savepath, date, delta, username, lonlat, pwd, token, jpg, enddate, hv
         )
@@ -398,14 +403,14 @@ class earthdata(satellite_data_manager):
             cde = modisDown.checkDataExist(fs)
             logger.info("Download {}: {}".format(d, cde))
             for c in cde:
-                os.system(
-                    "wget --user '{}' --password '{}' --directory-prefix '{}' '{}' ".format(
-                        modisDown.user,
-                        modisDown.password,
-                        modisDown.writeFilePath,
-                        os.path.join(modisDown.url, modisDown.path, d, c),
-                    )
-                )
+                file_url = join_url(modisDown.url, modisDown.path, d, c)
+                subprocess.run([
+                    "wget",
+                    "--user", modisDown.user,
+                    "--password", modisDown.password,
+                    "--directory-prefix", modisDown.writeFilePath,
+                    file_url
+                ], check=True)
                 time.sleep(5)
             # modisDown.dayDownload(d, cde)
         return
