@@ -399,7 +399,7 @@ class earthdata(satellite_data_manager):
             logger.info("Download {}: {}".format(d, cde))
             for c in cde:
                 os.system(
-                    "wget --user {} --password {} --directory-prefix {} {} ".format(
+                    "wget --user '{}' --password '{}' --directory-prefix '{}' '{}' ".format(
                         modisDown.user,
                         modisDown.password,
                         modisDown.writeFilePath,
