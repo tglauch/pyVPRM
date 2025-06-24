@@ -8,7 +8,7 @@ A description of the model is published as preprint in Geoscientific Model Devel
 Glauch, T., Marshall, J., Gerbig, C., Botía, S., Gałkowski, M., Vardag, S. N., and Butz, A.: pyVPRM: A next-generation Vegetation Photosynthesis and Respiration Model for the post-MODIS era, EGUsphere [preprint], https://doi.org/10.5194/egusphere-2024-3692, 2025.
 ```
 
-or use BibTeX:
+or using BibTeX:
 ```
 @Article{egusphere-2024-3692,
 AUTHOR = {Glauch, T. and Marshall, J. and Gerbig, C. and Bot\'{\i}a, S. and Ga{\l}kowski, M. and Vardag, S. N. and Butz, A.},
