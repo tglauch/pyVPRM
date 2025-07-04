@@ -66,7 +66,6 @@ class vprm:
         self.n_cpus = n_cpus
         self.counter = 0
         self.fit_params_dict = None
-        self.res = None
 
         self.new = True
         self.timestamps = []
