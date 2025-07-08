@@ -1,7 +1,9 @@
 [![DOI](https://zenodo.org/badge/626435494.svg)](https://doi.org/10.5281/zenodo.14216613)
 
-<img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d">
-
+<figure>
+<img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d", height=150pt>
+</figure> 
+  
 A description of the model is published as preprint in Geoscientific Model Development (GMD) https://egusphere.copernicus.org/preprints/2025/egusphere-2024-3692/. If you use this package for you scientific work please cite as follows
 
 ```
