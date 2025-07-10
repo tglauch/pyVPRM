@@ -84,22 +84,22 @@ class vprm:
 
         with open(vprm_config_path, "r") as stream:
             try:
-                cfg = yaml.safe_load(stream)
+                vprm_cfg = yaml.safe_load(stream)
             except yaml.YAMLError as exc:
                 logger.info(exc)
 
         self.temp_coefficients = dict()
         self.map_to_vprm_class = dict()
-        for key in cfg:
-            if "tmin" in cfg[key].keys():
-                self.temp_coefficients[cfg[key]["vprm_class"]] = [
-                    cfg[key]["tmin"],
-                    cfg[key]["topt"],
-                    cfg[key]["tmax"],
-                    cfg[key]["tlow"],
+        for key in vprm_cfg:
+            if "tmin" in vprm_cfg[key].keys():
+                self.temp_coefficients[vprm_cfg[key]["vprm_class"]] = [
+                    vprm_cfg[key]["tmin"],
+                    vprm_cfg[key]["topt"],
+                    vprm_cfg[key]["tmax"],
+                    vprm_cfg[key]["tlow"],
                 ]
-            for c in cfg[key]["class_numbers"]:
-                self.map_to_vprm_class[c] = cfg[key]["vprm_class"]
+            for c in vprm_cfg[key]["class_numbers"]:
+                self.map_to_vprm_class[c] = vprm_cfg[key]["vprm_class"]
         return
 
     def to_wrf_output(
