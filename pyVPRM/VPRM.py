@@ -84,22 +84,22 @@ class vprm:
 
         with open(vprm_config_path, "r") as stream:
             try:
-                vprm_cfg = yaml.safe_load(stream)
+                self.vprm_cfg = yaml.safe_load(stream)
             except yaml.YAMLError as exc:
                 logger.info(exc)
 
         self.temp_coefficients = dict()
         self.map_to_vprm_class = dict()
-        for key in vprm_cfg:
-            if "tmin" in vprm_cfg[key].keys():
-                self.temp_coefficients[vprm_cfg[key]["vprm_class"]] = [
-                    vprm_cfg[key]["tmin"],
-                    vprm_cfg[key]["topt"],
-                    vprm_cfg[key]["tmax"],
-                    vprm_cfg[key]["tlow"],
+        for key in self.vprm_cfg:
+            if "tmin" in self.vprm_cfg[key].keys():
+                self.temp_coefficients[self.vprm_cfg[key]["vprm_class"]] = [
+                    self.vprm_cfg[key]["tmin"],
+                    self.vprm_cfg[key]["topt"],
+                    self.vprm_cfg[key]["tmax"],
+                    self.vprm_cfg[key]["tlow"],
                 ]
-            for c in vprm_cfg[key]["class_numbers"]:
-                self.map_to_vprm_class[c] = vprm_cfg[key]["vprm_class"]
+            for c in self.vprm_cfg[key]["class_numbers"]:
+                self.map_to_vprm_class[c] = self.vprm_cfg[key]["vprm_class"]
         return
 
     def to_wrf_output(
@@ -276,7 +276,12 @@ class vprm:
             "evi_max": ds_t_max_evi,
             "evi_min": ds_t_min_evi,
         }
-
+        
+        veg_classes_def = 'VPRM class definition: '
+        for k in self.vprm_cfg.keys():
+            veg_classes_def += '{} {}, '.format(self.vprm_cfg[k]['vprm_class'], k)
+        veg_classes_def = veg_classes_def[:-2]
+        
         for key in ret_dict.keys():
             ret_dict[key] = ret_dict[key].assign_attrs(
                 title="VPRM input data for WRF: {}".format(key),
@@ -288,7 +293,7 @@ class vprm:
                 institution2="Deutsches Zentrum für Luft- und Raumfahrt (DLR)",
                 contact="theo.glauch@dlr.de",
                 date_created=str(datetime.now()),
-                comment="Used VPRM classes: 1 Evergreen forest, 2 Deciduous forest, 3 Mixed forest, 4 Shrubland, 5 Trees and grasses, 6 Cropland, 7 Grassland, 8 Barren, Urban and built-up, water, permanent snow and ice",
+                comment=veg_classes_def,
             )
         return ret_dict
 
