@@ -1061,9 +1061,11 @@ class vprm:
         days_after_first_image = (
             datetime_utc - self.timestamp_start
         ).total_seconds() / (24 * 60 * 60)
+        # Calculate a list of time differences between the xarray time and the datetime_utc both with respect to timestamp_start. 
+        # Take the index (argmin) with smallest difference 
         counter_new = np.argmin(
             np.abs(self.sat_imgs.sat_img[self.time_key].values - days_after_first_image)
-        )
+        ) 
         if (days_after_first_image < 0) | (
             days_after_first_image > self.sat_imgs.sat_img[self.time_key][-1]
         ):
