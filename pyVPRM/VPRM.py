@@ -42,7 +42,7 @@ class vprm:
     """
 
     def __init__(
-        self, vprm_config_path, land_cover_map=None, verbose=False, n_cpus=1, sites=None
+        self, vprm_config_path, land_cover_map=None, verbose=False, n_cpus=1, flux_tower_instances=None
     ):
         """
         Initialize a class instance
@@ -51,7 +51,7 @@ class vprm:
                 land_cover_map (xarray): A pre calculated map with the land cover types
                 verbose (bool): Set true for additional output when debugging
                 n_cpus: Number of CPUs
-                sites: For fitting. Provide a list of sites.
+                flux_tower_instances: For fitting. Provide a list of flux_tower_instances.
 
         Returns:
                 The lowess smoothed array
@@ -60,9 +60,9 @@ class vprm:
         logger.info("Running with pyVPRM version {}".format(pyVPRM.__version__))
         self.sat_imgs = []
 
-        self.sites = sites
-        if self.sites is not None:
-            self.lonlats = [i.get_lonlat() for i in sites]
+        self.flux_tower_instances = flux_tower_instances
+        if self.flux_tower_instances is not None:
+            self.lonlats = [i.get_lonlat() for i in flux_tower_instances]
         self.n_cpus = n_cpus
         self.counter = 0
         self.fit_params_dict = None
@@ -468,7 +468,7 @@ class vprm:
             interp_method="nearest",
         )
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords(
-            {"site_names": [i.get_site_name() for i in self.sites]}
+            {"site_names": [i.get_site_name() for i in self.flux_tower_instances]}
         )
 
     def sort_and_merge_by_timestamp(self):
@@ -481,7 +481,7 @@ class vprm:
             Returns:
                     None
         """
-        if self.sites is None:
+        if self.flux_tower_instances is None:
             x_time_y = 0
             for h in self.sat_imgs:
                 size_dict = dict(h.sat_img.sizes)
@@ -748,7 +748,7 @@ class vprm:
         self.min_lswi = copy.deepcopy(self.prototype)
         self.min_max_evi = copy.deepcopy(self.prototype)
         shortcut = self.sat_imgs.sat_img
-        # if self.sites is None:
+        # if self.flux_tower_instances is None:
         self.min_lswi.sat_img["min_lswi"] = shortcut["lswi"].min(
             self.time_key, skipna=True
         )
@@ -812,7 +812,7 @@ class vprm:
             xvals = self.sat_imgs.sat_img["time"]
         logger.info("Lowess timestamps {}".format(xvals))
 
-        if self.sites is not None:  # Is flux tower sites are given
+        if self.flux_tower_instances is not None:  # Is flux tower sites are given
             if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
