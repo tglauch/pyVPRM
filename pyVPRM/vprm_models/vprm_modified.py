@@ -134,7 +134,7 @@ class vprm_modified(vprm_base):
 
     def data_for_fitting(self):
         self.vprm_pre.sat_imgs.sat_img.load()
-        for s in self.vprm_pre.sites:
+        for s in self.vprm_pre.flux_tower_instances:
             self.new = True
             site_name = s.get_site_name()
             ret_dict = dict()
@@ -166,7 +166,7 @@ class vprm_modified(vprm_base):
                 ret_dict["lswi"].append(self.get_lswi(site_name=site_name))
             s.drop_rows_by_index(drop_rows)
             s.add_columns(ret_dict)
-        return self.vprm_pre.sites
+        return self.vprm_pre.flux_tower_instances
 
     def _get_vprm_variables(
         self,
