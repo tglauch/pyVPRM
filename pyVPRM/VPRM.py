@@ -768,7 +768,8 @@ class vprm:
         )
         return
 
-    def lowess(self, keys, lonlats=None, times=False, frac=0.25, it=3, n_cpus=None):
+    def lowess(self, keys, lonlats=None, times=False, frac=0.25, it=3,
+               n_cpus=None, smooth_all=False):
         """
         Performs the lowess smoothing
 
@@ -812,7 +813,7 @@ class vprm:
             xvals = self.sat_imgs.sat_img["time"]
         logger.info("Lowess timestamps {}".format(xvals))
 
-        if self.flux_tower_instances is not None:  # Is flux tower sites are given
+        if (self.flux_tower_instances is not None) and (smooth_all is False):  # Is flux tower sites are given
             if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
                 for key in keys:
                     self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
