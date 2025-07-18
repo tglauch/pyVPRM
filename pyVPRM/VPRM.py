@@ -60,9 +60,7 @@ class vprm:
         logger.info("Running with pyVPRM version {}".format(pyVPRM.__version__))
         self.sat_imgs = []
 
-        self.flux_tower_instances = flux_tower_instances
-        if self.flux_tower_instances is not None:
-            self.lonlats = [i.get_lonlat() for i in flux_tower_instances]
+        self.set_flux_tower_inst(flux_tower_instances)
         self.n_cpus = n_cpus
         self.counter = 0
         self.fit_params_dict = None
@@ -102,6 +100,12 @@ class vprm:
                 self.map_to_vprm_class[c] = self.vprm_cfg[key]["vprm_class"]
         return
 
+    def set_flux_tower_inst(self, flux_tower_instances):
+        self.flux_tower_instances = flux_tower_instances
+        if self.flux_tower_instances is not None:
+            self.lonlats = [i.get_lonlat() for i in flux_tower_instances]
+        return
+    
     def to_wrf_output(
         self,
         out_grid,
@@ -306,6 +310,7 @@ class vprm:
         b_swir=None,
         drop_bands=False,
         which_evi=None,
+        add_ndvi=False,
         timestamp_key=None,
         mask_bad_pixels=True,
         mask_clouds=True,
@@ -379,12 +384,20 @@ class vprm:
             temp_lswi = xr.where((temp_lswi < -1) | (temp_lswi > 1), np.nan, temp_lswi)
             handler.sat_img["evi"] = temp_evi
             handler.sat_img["lswi"] = temp_lswi
+        if add_ndvi:
+            nir = handler.sat_img[b_nir]
+            red = handler.sat_img[b_red]
+            temp_ndvi = (nir-red)/(nir+red)
+            handler.sat_img['ndvi'] = temp_ndvi
+            
         if timestamp_key is not None:
             handler.sat_img = handler.sat_img.rename({timestamp_key: "timestamps"})
 
         bands_to_mask = []
         if which_evi in ["evi", "evi2"]:
             bands_to_mask = ["evi", "lswi"]
+        if add_ndvi:
+            bands_to_mask.append('ndvi')
         else:
             for btm in [b_nir, b_red, b_blue, b_swir]:
                 if btm is not None:
