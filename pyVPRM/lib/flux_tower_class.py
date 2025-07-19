@@ -103,7 +103,7 @@ class brazil_flux_data(flux_tower_data):
                 "par_fill",
                 "ust",
             ]
-        if use_vars is "all":
+        if use_vars == "all":
             self.vars = "all"
         site_info_dict = dict()
         site_info_dict["K67"] = dict(lat=-2.857, lon=-54.959, veg_class="EF")
@@ -188,7 +188,7 @@ class ameri_fluxnet(flux_tower_data):
         self.data_path = data_path
 
         super().__init__(t_start, t_stop, ssrd_key, t2m_key, site_name)
-        if (use_vars is None) | (use_vars is "all"):
+        if (use_vars is None) | (use_vars == "all"):
             self.vars = "all"
         else:
             self.vars = use_vars
@@ -205,7 +205,7 @@ class ameri_fluxnet(flux_tower_data):
         return
 
     def add_tower_data(self):
-        if self.vars is "all":
+        if self.vars == "all":
             idata = pd.read_csv(
                 glob.glob(os.path.join(self.data_path, "*.csv"))[0], skiprows=2
             )
@@ -286,7 +286,7 @@ class fluxnet(flux_tower_data):
                 "TA_F_QC",
                 "SW_IN_F_QC",
             ]
-        elif use_vars is "all":
+        elif use_vars == "all":
             self.vars = "all"
         else:
             self.vars = use_vars
@@ -381,7 +381,7 @@ class icos(flux_tower_data):
                 "TA_F_QC",
                 "SW_IN_F_QC",
             ]
-        elif use_vars is "all":
+        elif use_vars == "all":
             self.vars = "all"
         else:
             self.vars = use_vars
@@ -427,7 +427,7 @@ class icos(flux_tower_data):
         return
 
     def add_tower_data(self):
-        if self.vars is "all":
+        if self.vars == "all":
             idata = pd.read_csv(self.data_path, on_bad_lines="skip")
         else:
             idata = pd.read_csv(
