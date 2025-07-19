@@ -351,6 +351,7 @@ class icos(flux_tower_data):
         use_vars=None,
         t_start=None,
         t_stop=None,
+        icos_2025=True,
     ):
 
         self.data_path = data_path
@@ -384,14 +385,35 @@ class icos(flux_tower_data):
             self.vars = "all"
         else:
             self.vars = use_vars
-
-        site_info = pd.read_csv(
-            os.path.join(
-                os.path.dirname(self.data_path),
-                "ICOSETC_{}_SITEINFO_L2.csv".format(self.site_name),
-            ),
-            on_bad_lines="skip",
-        )
+        if icos_2025:
+            site_info = pd.read_csv(
+                os.path.join(
+                    os.path.dirname(self.data_path).replace('FLUXNET_HH_L2', 'ARCHIVE_L2'),
+                    "ICOSETC_{}_SITEINFO_L2.csv".format(self.site_name),
+                ),
+                on_bad_lines="skip",
+            )
+            self.fetch90 = pd.read_csv(
+                os.path.join(
+                    os.path.dirname(self.data_path).replace('FLUXNET_HH_L2', 'ARCHIVE_L2'),
+                    "ICOSETC_{}_FLUXES_L2.csv".format(self.site_name),
+                ),
+                on_bad_lines="skip",
+            )
+            if 'FETCH_90' in self.fetch90.keys():
+                self.fetch90 = np.percentile(self.fetch90['FETCH_90'][self.fetch90['FETCH_90']>0], 50)
+            else:
+                self.fetch90 = None
+        else:
+            site_info = pd.read_csv(
+                os.path.join(
+                    os.path.dirname(self.data_path),
+                    "ICOSETC_{}_SITEINFO_L2.csv".format(self.site_name),
+                ),
+                on_bad_lines="skip",
+            )
+            self.fetch90 = None # Not yet implemented
+            
         self.land_cover_type = site_info.loc[site_info["VARIABLE"] == "IGBP"][
             "DATAVALUE"
         ].values[0]
