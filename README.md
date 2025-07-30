@@ -4,7 +4,7 @@
 <img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d", height=150pt>
 </figure> 
   
-A description of the model is published in Geoscientific Model Development (GMD) https://gmd.copernicus.org/articles/18/4713/2025/[https://gmd.copernicus.org/articles/18/4713/2025/]. If you use this package for you scientific work please cite as follows
+A description of the model is published in Geoscientific Model Development (GMD) https://gmd.copernicus.org/articles/18/4713/2025/. If you use this package for you scientific work please cite as follows
 
 ```
 Glauch, T., Marshall, J., Gerbig, C., Botía, S., Gałkowski, M., Vardag, S. N., & Butz, A. (2025). pyVPRM: A next-generation vegetation photosynthesis and respiration model for the post-MODIS era. Geoscientific Model Development, 18(14), 4713–4742. https://doi.org/10.5194/gmd-18-4713-2025
