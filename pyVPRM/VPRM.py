@@ -556,18 +556,27 @@ class vprm:
             )
         self.time_key = "time"
         if "evi" in list(self.sat_imgs.sat_img.data_vars):
-            self.sat_imgs.sat_img["evi"] = xr.where(
-                (self.sat_imgs.sat_img["evi"] == np.inf),
-                self.sat_imgs.sat_img["evi"].min(dim=self.time_key),
-                self.sat_imgs.sat_img["evi"],
-            )
+            self.sat_imgs.sat_img["evi"] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img["evi"],
+                                                                        time_dim = self.time_key)
+            # self.sat_imgs.sat_img["evi"] = xr.where(
+            #     (self.sat_imgs.sat_img["evi"] == np.inf),
+            #     self.sat_imgs.sat_img["evi"].min(dim=self.time_key),
+            #     self.sat_imgs.sat_img["evi"],
+            # )
 
         if "lswi" in list(self.sat_imgs.sat_img.data_vars):
-            self.sat_imgs.sat_img["lswi"] = xr.where(
-                (self.sat_imgs.sat_img["lswi"] == np.inf),
-                self.sat_imgs.sat_img["lswi"].min(dim=self.time_key),
-                self.sat_imgs.sat_img["lswi"],
-            )
+            self.sat_imgs.sat_img["lswi"] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img["lswi"],
+                                                                         time_dim = self.time_key)
+            # self.sat_imgs.sat_img["lswi"] = xr.where(
+            #     (self.sat_imgs.sat_img["lswi"] == np.inf),
+            #     self.sat_imgs.sat_img["lswi"].min(dim=self.time_key),
+            #     self.sat_imgs.sat_img["lswi"],
+            # )
+
+        if "ndvi" in list(self.sat_imgs.sat_img.data_vars):
+            self.sat_imgs.sat_img["ndvi"] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img["ndvi"],
+                                                                         time_dim = self.time_key)
+            
         return
 
     def clip_to_box(self, sat_to_crop):
@@ -949,13 +958,21 @@ class vprm:
         )
         return
 
-    def clip_values(self, key, min_val, max_val):
-        self.sat_imgs.sat_img[key].values[
-            self.sat_imgs.sat_img[key].values < min_val
-        ] = min_val
-        self.sat_imgs.sat_img[key].values[
-            self.sat_imgs.sat_img[key].values > max_val
-        ] = max_val
+    def clip_values(self, key, min_val, max_val, to_nan=False):
+        if to_nan:
+            self.sat_imgs.sat_img[key].values[
+                self.sat_imgs.sat_img[key].values < min_val
+            ] = np.nan
+            self.sat_imgs.sat_img[key].values[
+                self.sat_imgs.sat_img[key].values > max_val
+            ] = np.nan
+        else:
+            self.sat_imgs.sat_img[key].values[
+                self.sat_imgs.sat_img[key].values < min_val
+            ] = min_val
+            self.sat_imgs.sat_img[key].values[
+                self.sat_imgs.sat_img[key].values > max_val
+            ] = max_val
         return
 
     def clip_non_finite(self, data_var, val, sel):
