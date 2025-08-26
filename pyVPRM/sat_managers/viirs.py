@@ -194,6 +194,11 @@ class VIIRS(earthdata):
             # self.sat_img[b].values[mask != int('00', 2)] = np.nan
         return
 
+    def mask_water(self, bands=None):
+        print("Water Masking not yet implemented for VIIRS')
+        #Not yet implemented
+        return
+
     def mask_snow(self, bands=None):
         if bands is None:
             bands = self.bands
