@@ -415,3 +415,81 @@ def merge_chunks_with_open_mfdataset(chunk_files, dim_order=['x', 'y']):
         dataset_grid = xr.concat(dataset_grid, dim=dim_order[dim_idx])
 
     return dataset_grid
+
+
+def replace_inf_runs_ignore_nans(
+    da: xr.DataArray,
+    time_dim: str = "time",
+    N: int = 4,
+    percentile: float = 5.0
+) -> xr.DataArray:
+    """
+    Replace runs of >= N consecutive inf values (ignoring nans) along time
+    with the given percentile (default 5%) of the finite values over time.
+    Otherwise replace infs with nan.
+    
+    Parameters
+    ----------
+    da : xr.DataArray
+        Input array with a time dimension.
+    time_dim : str
+        Name of the time dimension.
+    N : int
+        Minimum run length of inf values (ignoring nans) that triggers replacement.
+    percentile : float
+        Percentile (0–100) of finite values to use for replacement.
+    """
+    time_axis = da.get_axis_num(time_dim)
+    arr = np.moveaxis(da.values, time_axis, 0)   # shape (T, ...)
+    T = arr.shape[0]
+
+    if arr.ndim == 1:
+        flat = arr.reshape(T, 1)
+        out_flat = flat.copy()
+    else:
+        spatial_size = int(np.prod(arr.shape[1:]))
+        flat = arr.reshape(T, spatial_size)      # shape (T, P)
+        out_flat = flat.copy()
+
+    for p in range(flat.shape[1]):
+        seq = flat[:, p]
+        is_inf = np.isinf(seq)
+        is_finite = np.isfinite(seq)
+        not_break = ~is_finite         # True for inf or nan
+
+        # reference distribution of finite values
+        finite_vals = seq[is_finite]
+        if finite_vals.size > 0:
+            repl_val = np.nanpercentile(finite_vals, percentile)
+        else:
+            repl_val = np.nan
+
+        t = 0
+        while t < T:
+            if not_break[t]:
+                start = t
+                t2 = t + 1
+                while t2 < T and not_break[t2]:
+                    t2 += 1
+                run_slice = slice(start, t2)
+                run_is_inf = is_inf[run_slice]
+                count_inf = int(run_is_inf.sum())
+
+                if count_inf >= N and finite_vals.size > 0:
+                    abs_idxs = start + np.where(run_is_inf)[0]
+                    out_flat[abs_idxs, p] = repl_val
+                else:
+                    if count_inf > 0:
+                        abs_idxs = start + np.where(run_is_inf)[0]
+                        out_flat[abs_idxs, p] = np.nan
+
+                t = t2
+            else:
+                t += 1
+
+    out = out_flat.reshape(arr.shape)
+    out = np.moveaxis(out, 0, time_axis)
+
+    return xr.DataArray(out, coords=da.coords, dims=da.dims, name=da.name, attrs=da.attrs)
+
+
