@@ -466,6 +466,7 @@ class vprm:
                 x, y = t.transform(ll[0], ll[1])
                 x_ind = np.argmin(np.abs(x - xs))
                 y_ind = np.argmin(np.abs(y - ys))
+                arsz = 3 # Hard Coded. Means only 3 by 3 pixes around the lonlat location are smoothed
                 for key in keys:
                     logger.info(key)
                     self.sat_imgs.sat_img[key][
