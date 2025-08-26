@@ -25,6 +25,8 @@ DOI = {10.5194/gmd-18-4713-2025}
 }
 ```
 
+In case of any questions please write an E-Mail to theo.glauch@dlr.de.
+
 # About
 
 
@@ -35,8 +37,6 @@ Among others it can be used for
 1. Fitting the parameters of a VPRM model against Eddy-Covariance Fluxtower measurements (e.g. FLUXNET or ICOS)
 2. Making CO2 flux predictions for a given region of interest
 3. Generating input files to run VPRM in the Weather Research and Forecasting Model (WRF)
-
-In case of any questions please write an E-Mail to theo.glauch@dlr.de.
 
 ## Example Net Ecosystem Fluxes generated with pyVPRM
 
