@@ -12,6 +12,7 @@ from pyVPRM.lib.functions import (
     do_lowess_smoothing,
     make_xesmf_grid,
     to_esmf_grid,
+    replace_inf_runs_ignore_nans
 )
 from scipy.ndimage import uniform_filter
 from pyproj import Transformer
