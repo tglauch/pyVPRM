@@ -163,6 +163,18 @@ class sentinel2(satellite_data_manager):
         )
         return
 
+    def mask_water(self, bands=None):
+        # mask water (and land, i.e. roads and similar)
+        if bands is None:
+            bands = self.bands
+        self.sat_img[bands] = xr.where(
+            (self.sat_img["scl"] == 5)
+            | (self.sat_img["scl"] == 6),
+            np.nan,
+            self.sat_img[bands],
+        )
+        return
+
     def mask_clouds(self, bands=None):
         if bands is None:
             bands = self.bands
