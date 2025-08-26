@@ -264,3 +264,21 @@ class modis(earthdata):
             self.sat_img[b] = xr.where(mask == int("1", 2), np.inf, self.sat_img[b])
             # self.sat_img[b].values[mask == int('1', 2)] = np.inf
         return
+
+    def mask_water(self, bands=None):
+        if bands is None:
+            bands = self.bands
+            if self.bands is not None:
+                self.bands = [i for i in list(self.sat_img.keys()) if "sur_refl_b" in i]
+        start_bit = 3  # Start Bit
+        end_bit = 5  # End Bit  (inclusive)
+        num_bits_to_extract = end_bit - start_bit + 1
+        bit_mask = (1 << num_bits_to_extract) - 1
+        mask = (
+            np.array(self.sat_img["sur_refl_state_500m"].values, dtype=np.uint32)
+            >> start_bit
+        ) & bit_mask
+        for b in bands:
+            self.sat_img[b] = xr.where(mask != int("001", 2), np.nan, self.sat_img[b])
+            # self.sat_img[b].values[mask == int('1', 2)] = np.inf
+        return
