@@ -492,13 +492,14 @@ class vprm:
             {"site_names": [i.get_site_name() for i in self.flux_tower_instances]}
         )
 
-    def sort_and_merge_by_timestamp(self):
+    def sort_and_merge_by_timestamp(self, min_lenght_snow_period=21): 
         """
         Called after adding the satellite images with 'add_sat_img'. Sorts the satellite
         images by timestamp and merges everything to one satellite_data_manager.
 
             Parameters:
-
+            min_lenght_snow_period defines how long a period should be until gaps are 
+            filled to stabilize lowess fits
             Returns:
                     None
         """
@@ -556,8 +557,11 @@ class vprm:
                 {"timestamps": (dims, tismp)}
             )
         self.time_key = "time"
+
+        N = int(min_lenght_snow_period / np.diff(self.sat_imgs.sat_img['time']).mean())
         if "evi" in list(self.sat_imgs.sat_img.data_vars):
             self.sat_imgs.sat_img["evi"] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img["evi"],
+                                                                        N = N,
                                                                         time_dim = self.time_key)
             # self.sat_imgs.sat_img["evi"] = xr.where(
             #     (self.sat_imgs.sat_img["evi"] == np.inf),
@@ -567,6 +571,7 @@ class vprm:
 
         if "lswi" in list(self.sat_imgs.sat_img.data_vars):
             self.sat_imgs.sat_img["lswi"] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img["lswi"],
+                                                                         N = N,
                                                                          time_dim = self.time_key)
             # self.sat_imgs.sat_img["lswi"] = xr.where(
             #     (self.sat_imgs.sat_img["lswi"] == np.inf),
@@ -576,6 +581,7 @@ class vprm:
 
         if "ndvi" in list(self.sat_imgs.sat_img.data_vars):
             self.sat_imgs.sat_img["ndvi"] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img["ndvi"],
+                                                                         N = N,
                                                                          time_dim = self.time_key)
             
         return
