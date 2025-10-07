@@ -112,7 +112,7 @@ class vprm:
         out_grid,
         weights_for_regridder=None,
         regridder_save_path=None,
-        driver="xEMSF",
+        driver="xESMF",
         interp_method="conservative",
         n_cpus=None,
         mpi=True,
@@ -148,7 +148,7 @@ class vprm:
             logger.info(
                 "Need to generate the weights for the regridder. This can be very slow and memory intensive"
             )
-            if driver == "xEMSF":
+            if driver == "xESMF":
                 regridder = xe.Regridder(src_grid, ds_out, interp_method)
                 if regridder_save_path is not None:
                     regridder.to_netcdf(regridder_save_path)
@@ -186,7 +186,7 @@ class vprm:
                 # os.remove(dest_temp_path)
                 weights_for_regridder = regridder_save_path
             else:
-                logger.info("Driver needs to be xEMSF or ESMF_RegridWeightGen")
+                logger.info("Driver needs to be xESMF or ESMF_RegridWeightGen")
         if weights_for_regridder is not None:
             regridder = xe.Regridder(
                 src_grid,
