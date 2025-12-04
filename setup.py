@@ -17,6 +17,7 @@ setup(
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: MIT License",
         "Topic :: Scientific/Engineering :: Atmospheric Science",
+        "Programming Language :: Python :: 3"
     ],
     keywords="CO2 Biosphere Atmosphere Physics VPRM",
     url="https://github.com/tglauch/pyVPRM/",
