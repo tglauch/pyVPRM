@@ -71,8 +71,7 @@ class vprm:
         self.t2m = None
 
         # self.target_shape = None
-
-        self.sat_img_buffer = dict()
+        
         self.buffer = dict()
         self.buffer["cur_lat"] = None
         self.buffer["cur_lon"] = None
@@ -1073,7 +1072,7 @@ class vprm:
             ).values.flatten()
         else:
             self.buffer[key] = self.sat_imgs.sat_img[key].isel(select_dict)
-        return self.sat_img_buffer[key]
+        return self.buffer[key]
 
     def get_sat_img_values_for_all_keys(self, lon=None, lat=None, counter_range=None):
         """
