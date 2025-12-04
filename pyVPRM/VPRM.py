@@ -1125,7 +1125,7 @@ class vprm:
             self.new = False
             return  # Still same satellite image
 
-    def _set_prototype_lat_lon(self):
+    def _set_empty_xr_lat_lon_grid(self):
         src_x = self.prototype.sat_img.coords["x"].values
         src_y = self.prototype.sat_img.coords["y"].values
         X, Y = np.meshgrid(src_x, src_y)
