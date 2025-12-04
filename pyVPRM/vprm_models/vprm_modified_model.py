@@ -8,13 +8,13 @@ import pygrib
 import copy
 import uuid
 import datetime
-from pyVPRM.vprm_models.vprm_base import vprm_base
+from pyVPRM.vprm_models.vprm_base_model import vprm_base_model
 import pandas as pd
 import itertools
 from scipy.optimize import curve_fit
 from loguru import logger
 
-class vprm_modified(vprm_base):
+class vprm_modified_model(vprm_base_model):
     """
     Base class for all meteorologies
     """
