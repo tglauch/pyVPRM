@@ -37,7 +37,7 @@ regridder_options = dict()
 regridder_options["conservative"] = "conserve"
 
 
-class vprm:
+class vprm_preprocessor:
     """
     Main class for the  Vegetation Photosynthesis and Respiration Model
     """
