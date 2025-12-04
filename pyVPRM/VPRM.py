@@ -76,7 +76,7 @@ class vprm:
         self.buffer = dict()
         self.buffer["cur_lat"] = None
         self.buffer["cur_lon"] = None
-        self.prototype_lat_lon = None
+        self.empty_xr_lat_lon_grid = None
 
         self.land_cover_type = land_cover_map
         # land_cover_type: tmin, topt, tmax
@@ -1133,13 +1133,13 @@ class vprm:
             self.prototype.sat_img.rio.crs, "+proj=longlat +datum=WGS84"
         )
         x_long, y_lat = t.transform(X, Y)
-        self.prototype_lat_lon = xr.Dataset(
+        self.empty_xr_lat_lon_grid = xr.Dataset(
             {
                 "lon": (["y", "x"], x_long, {"units": "degrees_east"}),
                 "lat": (["y", "x"], y_lat, {"units": "degrees_north"}),
             }
         )
-        self.prototype_lat_lon = self.prototype_lat_lon.set_coords(["lon", "lat"])
+        self.empty_xr_lat_lon_grid = self.empty_xr_lat_lon_grid.set_coords(["lon", "lat"])
         return
 
     def save(self, save_path):
