@@ -13,7 +13,7 @@ import itertools
 from scipy.optimize import curve_fit
 from loguru import logger
 
-class vprm_base_no_xeric:
+class vprm_base_model_no_xeric:
     """
     Base class for all meteorologies
     """
