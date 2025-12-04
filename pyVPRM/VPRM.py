@@ -511,15 +511,15 @@ class vprm:
                 if prod > x_time_y:
                     biggest = h
                     x_time_y = prod
-            self.prototype = copy.deepcopy(biggest)
-            keys = list(self.prototype.sat_img.keys())
-            self.prototype.sat_img = self.prototype.sat_img.drop(keys)
+            self.prototype_satellite_manager = copy.deepcopy(biggest)
+            keys = list(self.prototype_satellite_manager.sat_img.keys())
+            self.prototype_satellite_manager.sat_img = self.prototype_satellite_manager.sat_img.drop(keys)
         #  for h in self.sat_imgs:
-        #      h.sat_img = h.sat_img.rio.reproject_match(self.prototype.sat_img, nodata=np.nan)
+        #      h.sat_img = h.sat_img.rio.reproject_match(self.prototype_satellite_manager.sat_img, nodata=np.nan)
         else:
-            self.prototype = copy.deepcopy(self.sat_imgs[0])
-            keys = list(self.prototype.sat_img.keys())
-            self.prototype.sat_img = self.prototype.sat_img.drop(keys)
+            self.prototype_satellite_manager = copy.deepcopy(self.sat_imgs[0])
+            keys = list(self.prototype_satellite_manager.sat_img.keys())
+            self.prototype_satellite_manager.sat_img = self.prototype_satellite_manager.sat_img.drop(keys)
         self.sat_imgs = satellite_data_manager(
             sat_img=xr.concat([k.sat_img for k in self.sat_imgs], "time")
         )
@@ -536,7 +536,7 @@ class vprm:
         )
         day_steps = [i.days for i in (self.timestamps - self.timestamp_start)]
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time": day_steps})
-        self.prototype.sat_img = self.prototype.sat_img.assign_coords(
+        self.prototype_satellite_manager.sat_img = self.prototype_satellite_manager.sat_img.assign_coords(
             {"time": day_steps}
         )
 
@@ -592,7 +592,7 @@ class vprm:
             bounds[0], bounds[1], bounds[2], bounds[3]
         )
         keys = list(self.sat_imgs.sat_img.keys())
-        self.prototype = satellite_data_manager(
+        self.prototype_satellite_manager = satellite_data_manager(
             sat_img=self.sat_imgs.sat_img.drop(keys)
         )
         return
@@ -748,7 +748,7 @@ class vprm:
                     .to_array()
                     .values[0]
                 )
-                self.land_cover_type = copy.deepcopy(self.prototype)
+                self.land_cover_type = copy.deepcopy(self.prototype_satellite_manager)
                 self.land_cover_type.sat_img = self.land_cover_type.sat_img.assign(
                     {var_name: (["y", "x"], t)}
                 )
@@ -780,9 +780,9 @@ class vprm:
             Returns:
                     None
         """
-        self.max_lswi = copy.deepcopy(self.prototype)
-        self.min_lswi = copy.deepcopy(self.prototype)
-        self.min_max_evi = copy.deepcopy(self.prototype)
+        self.max_lswi = copy.deepcopy(self.prototype_satellite_manager)
+        self.min_lswi = copy.deepcopy(self.prototype_satellite_manager)
+        self.min_max_evi = copy.deepcopy(self.prototype_satellite_manager)
         shortcut = self.sat_imgs.sat_img
         # if self.flux_tower_instances is None:
         self.min_lswi.sat_img["min_lswi"] = shortcut["lswi"].min(
@@ -1126,11 +1126,11 @@ class vprm:
             return  # Still same satellite image
 
     def _set_empty_xr_lat_lon_grid(self):
-        src_x = self.prototype.sat_img.coords["x"].values
-        src_y = self.prototype.sat_img.coords["y"].values
+        src_x = self.prototype_satellite_manager.sat_img.coords["x"].values
+        src_y = self.prototype_satellite_manager.sat_img.coords["y"].values
         X, Y = np.meshgrid(src_x, src_y)
         t = Transformer.from_crs(
-            self.prototype.sat_img.rio.crs, "+proj=longlat +datum=WGS84"
+            self.prototype_satellite_manager.sat_img.rio.crs, "+proj=longlat +datum=WGS84"
         )
         x_long, y_lat = t.transform(X, Y)
         self.empty_xr_lat_lon_grid = xr.Dataset(
@@ -1150,7 +1150,7 @@ class vprm:
         return
 
     def is_disjoint(self, this_sat_img):
-        bounds = self.prototype.sat_img.rio.transform_bounds(
+        bounds = self.prototype_satellite_manager.sat_img.rio.transform_bounds(
             this_sat_img.sat_img.rio.crs
         )
         dj = rasterio.coords.disjoint_bounds(bounds, this_sat_img.sat_img.rio.bounds())
@@ -1163,7 +1163,7 @@ class vprm:
                 [v.sat_imgs for v in vprm_insts], reproject=allow_reproject
             )
             keys = list(self.sat_imgs.sat_img.keys())
-            self.prototype = satellite_data_manager(
+            self.prototype_satellite_manager = satellite_data_manager(
                 sat_img=self.sat_imgs.sat_img.drop(keys)
             )
 
