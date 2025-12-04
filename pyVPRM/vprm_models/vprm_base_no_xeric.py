@@ -347,8 +347,8 @@ class vprm_base_no_xeric:
 
         if len(era_keys) > 0:
 
-            if self.vprm_pre.prototype_lat_lon is None:
-                self.vprm_pre._set_prototype_lat_lon()
+            if self.vprm_pre._empty_xr_lat_lon_grid is None:
+                self.vprm_pre._set_empty_xr_lat_lon_grid()
 
             self.load_weather_data(hour, day, month, year, era_keys=era_keys)
 
