@@ -354,7 +354,7 @@ class vprm_base_no_xeric:
 
             if (lat is None) & (lon is None):
                 self.era5_inst.regrid(
-                    dataset=self.vprm_pre.prototype_lat_lon,
+                    dataset=self.vprm_pre.empty_xr_lat_lon_grid,
                     weights=regridder_weights,
                     n_cpus=self.vprm_pre.n_cpus,
                 )
