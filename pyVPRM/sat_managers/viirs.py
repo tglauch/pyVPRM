@@ -195,7 +195,7 @@ class VIIRS(earthdata):
         return
 
     def mask_water(self, bands=None):
-        print("Water Masking not yet implemented for VIIRS')
+        print('Water Masking not yet implemented for VIIRS')
         #Not yet implemented
         return
 
