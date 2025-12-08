@@ -73,6 +73,7 @@ class modis(earthdata):
         self.product = product
         self.path = "MOLT"
         self.resolution = None
+        self.default_crs_str = crs_str
         if self.bands is not None:
             self.bands = [i for i in list(self.sat_img.keys()) if "sur_refl_b" in i]
 
