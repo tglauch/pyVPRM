@@ -32,6 +32,19 @@ import numpy as np
 from pyVPRM.sat_managers.base_manager import earthdata
 from loguru import logger
 
+
+crs_str = 'PROJCS["unnamed",\
+            GEOGCS["Unknown datum based upon the custom spheroid", \
+            DATUM["Not specified (based on custom spheroid)", \
+            SPHEROID["Custom spheroid",6371007.181,0]], \
+            PRIMEM["Greenwich",0],\
+            UNIT["degree",0.0174532925199433]],\
+            PROJECTION["Sinusoidal"], \
+            PARAMETER["longitude_of_center",0], \
+            PARAMETER["false_easting",0], \
+            PARAMETER["false_northing",0], \
+            UNIT["Meter",1]]'
+
 class modis(earthdata):
     # Class to download and load MODIS data
 
