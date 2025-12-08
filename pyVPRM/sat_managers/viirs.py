@@ -53,6 +53,7 @@ class VIIRS(earthdata):
         self.load_kwargs = {"variable": self.use_keys}
         self.sat = "VIIRS"
         self.path = "VIIRS"
+        self.default_crs_str = crs_str
         self.product = "VNP09H1.001"  #'VNP09GA.001' #
         self.pixel_size = 463.31271652777775
 
