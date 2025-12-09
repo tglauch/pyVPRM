@@ -215,7 +215,6 @@ class modis(earthdata):
                 self.sat_image_path, masked=True, cache=False
             ).squeeze()
         if self.sat_img.rio.crs is None:
-            print('read from xarray')
             self.sat_img = xr.open_dataset(self.sat_image_path)
             self.sat_img = self.sat_img.rio.write_crs(crs_str)
             # Add as an attribute to each data variable
