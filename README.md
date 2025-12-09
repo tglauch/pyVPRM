@@ -3,6 +3,7 @@
 [![License](https://img.shields.io/pypi/l/pyVPRM.svg)](https://pypi.org/project/pyVPRM/)
 [![Downloads](https://img.shields.io/pypi/dm/pyVPRM.svg)](https://pypi.org/project/pyVPRM/)
 ![GitHub stars](https://img.shields.io/github/stars/tglauch/pyVPRM?style=social)
+![Python Version](https://img.shields.io/pypi/pyversions/pyVPRM)
 
 
 <figure>
