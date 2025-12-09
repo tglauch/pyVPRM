@@ -214,6 +214,13 @@ class modis(earthdata):
             self.sat_img = rxr.open_rasterio(
                 self.sat_image_path, masked=True, cache=False
             ).squeeze()
+        if self.sat_img.rio.crs is None:
+            print('read from xarray')
+            self.sat_img = xr.open_dataset(self.sat_image_path)
+            self.sat_img = self.sat_img.rio.write_crs(crs_str)
+            # Add as an attribute to each data variable
+            for var in self.sat_img.data_vars:
+                self.sat_img[var].attrs['scale_factor'] = 1.0
         if self.use_keys is None:
             self.use_keys = list(self.sat_img.keys())
         self.sat_img = self.sat_img[self.use_keys]
