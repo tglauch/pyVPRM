@@ -24,7 +24,6 @@ from matplotlib.colors import LinearSegmentedColormap
 from lxml import etree
 from datetime import datetime
 from rasterio.warp import calculate_default_transform
-import h5py
 from dateutil import parser
 import xarray as xr
 from datetime import datetime, timedelta, date
