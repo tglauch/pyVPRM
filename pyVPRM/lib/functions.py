@@ -207,6 +207,88 @@ def to_esmf_grid(sat_img):
     return dso
 
 
+'''
+def do_karman_smoothing(array_to_smooth, kalman_filter_instance=None,
+                        xvals=None, timestamps=None,
+                        transition_covariance=0.01,
+                        observation_covariance=0.05):
+    ### ToDo: Choose frac adaptively from the data.
+
+    """
+    Performs lowess smoothing on a 2-D-array, where the first dimension is the time.
+
+        Parameters:
+                array_to_smooth (list): The 2-D-array
+        Returns:
+                The lowess smoothed array
+    """
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        ret = []
+
+        if array_to_smooth.ndim == 1:
+            if timestamps is None:
+                t_timestamp = np.arange(len(array_to_smooth))
+            else:
+                t_timestamp = timestamps
+            mask = np.isfinite(array_to_smooth)
+            if xvals is None:
+                xvals = t_timestamp
+            ret = [np.nan]
+            counter = 0
+
+            #start
+            ret = lowess(
+                array_to_smooth[mask],
+                t_timestamp[mask],
+                is_sorted=True,
+                frac=frac + 0.05 * counter,
+                it=it,
+                xvals=xvals,
+                return_sorted=False,
+            )
+            return ret
+        else:
+            if xvals is not None:
+                ret_array = np.zeros((len(xvals), np.shape(array_to_smooth)[1]))
+            else:
+                ret_array = np.zeros(
+                    (len(array_to_smooth[:, 0]), np.shape(array_to_smooth)[1])
+                )
+            for j in range(np.shape(array_to_smooth)[1]):
+                if timestamps is None:
+                    t_timestamp = np.arange(len(array_to_smooth[:, j]))
+                else:
+                    if timestamps.ndim == 1:
+                        t_timestamp = timestamps
+                    else:
+                        t_timestamp = timestamps[:, j]
+                mask = np.isfinite(array_to_smooth[:, j])
+                if xvals is None:
+                    xvals = t_timestamp
+                lws_res = [np.nan]
+                counter = 0
+                while counter < 10:
+                    lws_res = lowess(
+                        array_to_smooth[:, j][mask],
+                        t_timestamp[mask],
+                        is_sorted=True,
+                        frac=frac + 0.05 * counter,
+                        it=it,
+                        xvals=xvals,
+                        return_sorted=False,
+                    )
+                    if not np.all(np.isfinite(lws_res)):
+                        #  print('Non finite values for frac: {}. Retry.'.format(frac+0.05*counter))
+                        counter += 1
+                    else:
+                        break
+                ret_array[:, j] = lws_res
+            return ret_array.T
+'''
+
+
 def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, frac=0.25, it=3):
     ### ToDo: Choose frac adaptively from the data.
 
