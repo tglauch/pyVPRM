@@ -10,6 +10,7 @@ from pyVPRM.sat_managers.base_manager import satellite_data_manager
 from pyVPRM.lib.functions import (
     add_corners_to_1d_grid,
     do_lowess_smoothing,
+    do_karman_smoothing,
     make_xesmf_grid,
     to_esmf_grid,
     replace_inf_runs_ignore_nans
@@ -963,7 +964,167 @@ class vprm_preprocessor:
             {"time_gap_filled": list(xvals)}
         )
         return
+'''
+    def karman(self, keys, lonlats=None, n_cpus=None, smooth_all=False):
+        """
+        Performs the lowess smoothing
 
+            Parameters:
+                    lonlats (str): If given the smearing is only performed at the
+                                   given lats and lons
+            Returns:
+                    None
+        """
+        self.sat_imgs.sat_img.load()
+
+        if n_cpus is None:
+            n_cpus = self.n_cpus
+        if isinstance(times, pd.core.indexes.datetimes.DatetimeIndex):
+            times = list(times)
+        if isinstance(times, list):
+            times = np.array(sorted(times))
+            if (times[-1] > self.timestamp_end) | (times[0] < self.timestamp_start):
+                logger.info(
+                    "You have provied some timestamps that are not covered from satellite images.\
+                They will be ignored in the following, to avoid unreliable results"
+                )
+            times = times[
+                (times <= self.timestamp_end) & (times >= self.timestamp_start)
+            ]
+            xvals = [
+                int(
+                    np.round(
+                        (i - self.timestamp_start).total_seconds() / (24 * 60 * 60)
+                    )
+                )
+                for i in times
+            ]
+        elif isinstance(times, str):
+            if times == "daily":
+                xvals = np.arange(self.tot_num_days)
+            else:
+                logger.info("{} is not a valid str for times".format(times))
+                return
+        else:
+            xvals = self.sat_imgs.sat_img["time"]
+        logger.info("Lowess timestamps {}".format(xvals))
+
+        if (self.flux_tower_instances is not None) and (smooth_all is False):  # Is flux tower sites are given
+            if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
+                for key in keys:
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
+                        {
+                            key: (
+                                ["time_gap_filled", "site_names"],
+                                np.array(
+                                    [
+                                        do_lowess_smoothing(
+                                            self.sat_imgs.sat_img.sel(site_names=i)[
+                                                key
+                                            ].values,
+                                            timestamps=self.sat_imgs.sat_img.sel(
+                                                site_names=i
+                                            )["timestamps"].values,
+                                            xvals=xvals,
+                                            frac=frac,
+                                            it=it,
+                                        )
+                                        for i in self.sat_imgs.sat_img.site_names.values
+                                    ]
+                                ).T,
+                            )
+                        }
+                    )
+            else:
+                for key in keys:
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
+                        {
+                            key: (
+                                ["time_gap_filled", "site_names"],
+                                np.array(
+                                    [
+                                        do_lowess_smoothing(
+                                            self.sat_imgs.sat_img.sel(site_names=i)[
+                                                key
+                                            ].values,
+                                            timestamps=self.sat_imgs.sat_img[
+                                                "time"
+                                            ].values,
+                                            xvals=xvals,
+                                            frac=frac,
+                                            it=it,
+                                        )
+                                        for i in self.sat_imgs.sat_img.site_names.values
+                                    ]
+                                ).T,
+                            )
+                        }
+                    )
+
+        elif lonlats is None:  # If smoothing the entire array
+            if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
+                for key in keys:
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
+                        {
+                            key: (
+                                ["time_gap_filled", "y", "x"],
+                                np.array(
+                                    Parallel(n_jobs=n_cpus, max_nbytes=None)(
+                                        delayed(do_lowess_smoothing)(
+                                            self.sat_imgs.sat_img[key][:, :, i].values,
+                                            timestamps=self.sat_imgs.sat_img[
+                                                "timestamps"
+                                            ][:, :, i].values,
+                                            xvals=xvals,
+                                            frac=frac,
+                                            it=it,
+                                        )
+                                        for i, x_coord in enumerate(
+                                            self.sat_imgs.sat_img.x.values
+                                        )
+                                    )
+                                ).T,
+                            )
+                        }
+                    )
+            else:
+                for key in keys:
+                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
+                        {
+                            key: (
+                                ["time_gap_filled", "y", "x"],
+                                np.array(
+                                    Parallel(n_jobs=n_cpus, max_nbytes=None)(
+                                        delayed(do_lowess_smoothing)(
+                                            self.sat_imgs.sat_img[key][:, :, i].values,
+                                            timestamps=self.sat_imgs.sat_img[
+                                                "time"
+                                            ].values,
+                                            xvals=xvals,
+                                            frac=frac,
+                                            it=it,
+                                        )
+                                        for i, x_coord in enumerate(
+                                            self.sat_imgs.sat_img.x.values
+                                        )
+                                    )
+                                ).T,
+                            )
+                        }
+                    )
+
+        else:
+            logger.info("Not implemented")
+            # Originally had a function to smooth only at specific lat/long.
+            # That doesn't make sense anymore, because the time dimension will change through lowess smoothing.
+            # If this is your plan then try to crop the sat image first and then do the lowess filtering.
+
+        self.time_key = "time_gap_filled"
+        self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords(
+            {"time_gap_filled": list(xvals)}
+        )
+        return
+'''
     def clip_values(self, key, min_val, max_val, to_nan=False):
         if to_nan:
             self.sat_imgs.sat_img[key].values[
