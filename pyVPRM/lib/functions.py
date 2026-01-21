@@ -10,6 +10,14 @@ from datetime import datetime
 import rioxarray
 import warnings
 
+def get_corners_from_pixel_centers_1D(pixel_centers_1D):
+    half_pixel_width = np.unique(np.diff(pixel_centers_1D))[0]/2       #get smallest difference between two pixel centers (why not just take first?)
+    pixel_corners = pixel_centers_1D - half_pixel_width                #shift from center to top/left corners
+    pixel_corners = list(pixel_corners)                                #list for fast appending
+    pixel_corners.append(pixel_corners[-1]+2*half_pixel_width)         #add missing lower/right corners
+    pixel_corners = np.array(pixel_corners)
+    return pixel_corners  
+
 def parse_wrf_grid_file(file_path, n_chunks=1, chunk_x=1, chunk_y=1):
 
     t = xr.open_dataset(file_path)
@@ -62,37 +70,50 @@ def parse_wrf_grid_file(file_path, n_chunks=1, chunk_x=1, chunk_y=1):
     return out_grid
 
 
-def make_xesmf_grid(sat_img):
-
-    if isinstance(sat_img, dict):
-        src_x = sat_img["lons"]
-        src_y = sat_img["lats"]
+def make_xesmf_grid(satellite_image, transformer = None):
+    '''
+    give satellite_image as dict only if coordinates are aready lat lon, then no transformation necessary
+    '''
+    
+    #get x and y coordinates of pixel centers from the satellite image
+    if isinstance(satellite_image, dict):
+        x_pixel_centers = satellite_image['lons']
+        y_pixel_centers = satellite_image['lats']
     else:
-        src_x = sat_img.coords["x"].values
-        src_y = sat_img.coords["y"].values
-    src_x_b = add_corners_to_1d_grid(src_x)
-    src_y_b = add_corners_to_1d_grid(src_y)
+        x_pixel_centers = satellite_image.coords['x'].values
+        y_pixel_centers = satellite_image.coords['y'].values
 
-    X, Y = np.meshgrid(src_x, src_y)
-    X_b, Y_b = np.meshgrid(src_x_b, src_y_b)
+    #get the pixel corners from the pixel centers   
+    x_pixel_corners = get_corners_from_pixel_centers_1D(x_pixel_centers)
+    y_pixel_corners = get_corners_from_pixel_centers_1D(y_pixel_centers)
 
-    if not isinstance(sat_img, dict):
-        t = Transformer.from_crs(
-            sat_img.rio.crs, "+proj=longlat +datum=WGS84", always_xy=True
-        )
-        X, Y = t.transform(X, Y)
-        X_b, Y_b = t.transform(X_b, Y_b)
+    #make meshgrids
+    X_center_grid, Y_center_grid = np.meshgrid(x_pixel_centers, y_pixel_centers)
+    X_corner_grid, Y_corner_grid = np.meshgrid(x_pixel_corners, y_pixel_corners)
 
-    src_grid = xr.Dataset(
-        {
-            "lon": (["y", "x"], X, {"units": "degrees_east"}),
-            "lon_b": (["y_b", "x_b"], X_b, {"units": "degrees_east"}),
-            "lat": (["y", "x"], Y, {"units": "degrees_north"}),
-            "lat_b": (["y_b", "x_b"], Y_b, {"units": "degrees_north"}),
-        }
-    )
-    src_grid = src_grid.set_coords(["lon", "lat", "lon_b", "lat_b"])
-    return src_grid
+    #if coordinates are not already lat lon dict, define transformer to transform from the images crs to the defined crs of WGS84
+    if not isinstance(satellite_image, dict):    
+        #define transformer using crs of satellite_image
+        if transformer is None:
+            transformer = Transformer.from_crs(satellite_image.rio.crs,
+                            '+proj=longlat +datum=WGS84',
+                            always_xy=True)
+        #apply transformer to the grids
+        X_center_grid, Y_center_grid = transformer.transform(X_center_grid, Y_center_grid)
+        X_corner_grid, Y_corner_grid = transformer.transform(X_corner_grid, Y_corner_grid)
+
+   #put the grids in one xarray
+    pixel_grid = xr.Dataset({"lon": (["y", "x"], X_center_grid,
+                          {"units": "degrees_east"}),
+                         "lon_b": (["y_b", "x_b"], X_corner_grid,
+                         {"units": "degrees_east"}),
+                          "lat": (["y", "x"], Y_center_grid,
+                          {"units": "degrees_north"}),
+                         "lat_b": (["y_b", "x_b"], Y_corner_grid,
+                         {"units": "degrees_north"})
+                          })
+    pixel_grid = pixel_grid.set_coords(['lon', 'lat', "lon_b", "lat_b"])
+    return pixel_grid
 
 
 def to_esmf_grid(sat_img):

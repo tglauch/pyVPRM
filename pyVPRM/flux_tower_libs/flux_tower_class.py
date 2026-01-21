@@ -352,10 +352,12 @@ class icos(flux_tower_data):
         t_start=None,
         t_stop=None,
         icos_2025=True,
+        need_footprint_variables=False,
     ):
 
         self.data_path = data_path
         site_name = data_path.split("ICOSETC_")[1].split("_")[0]
+        self.need_footprint_variables = need_footprint_variables
 
         super().__init__(t_start, t_stop, ssrd_key, t2m_key, site_name)
 
@@ -385,8 +387,10 @@ class icos(flux_tower_data):
             self.vars = "all"
         else:
             self.vars = use_vars
-        if icos_2025:
-            site_info = pd.read_csv(
+        self.icos_2025 = icos_2025
+
+        if self.icos_2025:
+            self.site_info = pd.read_csv(
                 os.path.join(
                     os.path.dirname(self.data_path).replace('FLUXNET_HH_L2', 'ARCHIVE_L2'),
                     "ICOSETC_{}_SITEINFO_L2.csv".format(self.site_name),
@@ -410,7 +414,7 @@ class icos(flux_tower_data):
             else:
                 self.fetch90 = None
         else:
-            site_info = pd.read_csv(
+            self.site_info = pd.read_csv(
                 os.path.join(
                     os.path.dirname(self.data_path),
                     "ICOSETC_{}_SITEINFO_L2.csv".format(self.site_name),
@@ -419,15 +423,20 @@ class icos(flux_tower_data):
             )
             self.fetch90 = None # Not yet implemented
             
-        self.land_cover_type = site_info.loc[site_info["VARIABLE"] == "IGBP"][
+        self.land_cover_type = self.site_info.loc[self.site_info["VARIABLE"] == "IGBP"][
             "DATAVALUE"
         ].values[0]
         self.lat = float(
-            site_info.loc[site_info["VARIABLE"] == "LOCATION_LAT"]["DATAVALUE"].values
+            self.site_info.loc[self.site_info["VARIABLE"] == "LOCATION_LAT"]["DATAVALUE"].values
         )
         self.lon = float(
-            site_info.loc[site_info["VARIABLE"] == "LOCATION_LONG"]["DATAVALUE"].values
+            self.site_info.loc[self.site_info["VARIABLE"] == "LOCATION_LONG"]["DATAVALUE"].values
         )
+        try:
+            self.elev = float(self.site_info.loc[self.site_info['VARIABLE']=='LOCATION_ELEV']['DATAVALUE'].values[0])
+        except:
+            print('failed to load elevation. continue.')
+
 
         return
 
@@ -438,6 +447,58 @@ class icos(flux_tower_data):
             idata = pd.read_csv(
                 self.data_path, usecols=lambda x: x in self.vars, on_bad_lines="skip"
             )
+        if self.need_footprint_variables:
+            #get measurement height
+            if self.icos_2025:
+                variable_info = pd.read_csv(os.path.join(os.path.dirname(self.data_path).replace('FLUXNET_HH_L2', 'ARCHIVE_L2'),
+                                                         'ICOSETC_{}_VARINFO_FLUXNET_HH_L2.csv'.format(self.site_name)),
+                                    on_bad_lines='skip')
+            else:
+                variable_info = pd.read_csv(os.path.join(os.path.dirname(self.data_path),  'ICOSETC_{}_VARINFO_FLUXNET_HH_L2.csv'.format(self.site_name)),
+                                    on_bad_lines='skip')
+
+            #get groups of data that describe NEE_VUT_REF parameter
+            group_ids_nee_entries = variable_info['GROUP_ID'].iloc[variable_info.index[variable_info['DATAVALUE'] == 'NEE_VUT_REF']].values
+            #get indices of the groups
+            indices_group_id = variable_info.index[variable_info['GROUP_ID'].isin(group_ids_nee_entries)]
+            #get indices that describe heigth parameter
+            indices_height_parameter = variable_info.index[variable_info['VARIABLE'] == 'VAR_INFO_HEIGHT']
+            #get wanted measurement heights
+            indices_heights = indices_group_id.intersection(indices_height_parameter)
+            heights = variable_info['DATAVALUE'][indices_heights].values
+            
+            #get indices that describe measured times of the heights
+            indices_parameter_date = variable_info.index[variable_info['VARIABLE'] == 'VAR_INFO_DATE']
+            #get wanted dates
+            indices_dates = indices_group_id.intersection(indices_parameter_date)
+            dates_height_measurement = variable_info['DATAVALUE'][indices_dates].values
+            #print('Is sorted?', (dates_height_measurement == np.sort(dates_height_measurement)).all())
+            if not (dates_height_measurement == np.sort(dates_height_measurement)).all():
+                sorting_indices = np.argsort(dates_height_measurement)
+                dates_height_measurement = dates_height_measurement[sorting_indices]
+                heights = heights[sorting_indices]
+            
+            #add height parameter
+            idata['z_measurement'] = float(heights[0])
+            for idx_height, height in enumerate(heights):
+                mask = (idata['TIMESTAMP_END'] >= float(dates_height_measurement[idx_height]))
+                idata.loc[mask, 'z_measurement'] = float(heights[idx_height])
+            #float(variable_info['DATAVALUE'].iloc[variable_info.index[variable_info['DATAVALUE']=='NEE_VUT_REF']+1].values[0])
+            #print(idata['z_measurement'])
+            self.mean_z_measurement = idata['z_measurement'].mean()
+
+            #get FLUXES file data
+            wanted_fluxes_variables = ['TIMESTAMP_END', 'MO_LENGTH',' PBLH','ZL' ,'V_SIGMA', 'FETCH_MAX', 'FETCH_70', 'FETCH_80', 'FETCH_90']
+            if self.icos_2025:
+                fluxes_file_data = pd.read_csv(os.path.join(os.path.dirname(self.data_path).replace('FLUXNET_HH_L2', 'ARCHIVE_L2'),
+                                                            'ICOSETC_{}_FLUXES_L2.csv'.format(self.site_name)),
+                                               usecols=lambda x: x in wanted_fluxes_variables, on_bad_lines='skip')
+            else:
+                fluxes_file_data = pd.read_csv(os.path.join(os.path.dirname(self.data_path),
+                                                            'ICOSETC_{}_FLUXES_L2.csv'.format(self.site_name)),
+                                               usecols=lambda x: x in wanted_fluxes_variables, on_bad_lines='skip')
+            print('loaded from fluxes file:', fluxes_file_data.columns)
+            print('not available in fluxes file:', [col for col in wanted_fluxes_variables if col not in fluxes_file_data.columns])
         idata.rename({self.ssrd_key: "ssrd", self.t2m_key: "t2m"}, inplace=True, axis=1)
         tf = TimezoneFinder()
         timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
@@ -459,7 +520,49 @@ class icos(flux_tower_data):
             flux_data = idata[mask]
         else:
             flux_data = idata
+
+        if self.need_footprint_variables:
+            #get utc datetime from local time for FLUXES data
+            fluxes_file_data['datetime_utc'] = self.get_utc_times(fluxes_file_data)
+            if (self.tstart is not None) & (self.tstop is not None):
+                mask = (fluxes_file_data['datetime_utc'] >= self.tstart) & (fluxes_file_data['datetime_utc'] < self.tstop)
+                fluxes_file_data = fluxes_file_data[mask]
+            #merge FLUXNET and FLUXES data  
+            flux_data = flux_data.merge(fluxes_file_data, how='inner', on=['datetime_utc', 'TIMESTAMP_END'])
+
         this_len = len(flux_data)
+        if self.need_footprint_variables:
+            if 'MO_LENGTH' in flux_data.columns:
+                flux_data['z_footprint'] = np.nan 
+                for idx in range(len(dates_height_measurement)+1):
+                    if idx == 0:
+                        lower_lim = 0
+                        upper_lim = float(dates_height_measurement[idx])
+                    elif idx == len(dates_height_measurement):
+                        upper_lim = 1000000000000000000
+                        lower_lim = float(dates_height_measurement[idx-1])
+                    else:
+                        lower_lim = float(dates_height_measurement[idx-1])
+                        upper_lim = float(dates_height_measurement[idx])
+                    mask = (flux_data['TIMESTAMP_END'] >= lower_lim) & (flux_data['TIMESTAMP_END'] <= upper_lim)
+                    #print(mask)
+                    try:
+                        
+                        flux_data.loc[mask, 'z_footprint'] = np.max([0, np.nanmean(np.where(flux_data.loc[mask, 'ZL']>-9999, flux_data.loc[mask,'ZL'], np.nan)*np.where(flux_data.loc[mask,'MO_LENGTH']>-9999, flux_data.loc[mask,'MO_LENGTH'], np.nan))])
+                    except RuntimeWarning: 
+                        print('no valid data between', lower_lim, upper_lim)
+                #print(flux_data['z_footprint'])
+            
+            elif missing_displacement_heights_dict is not None and self.site_name in missing_displacement_heights_dict.keys(): 
+                flux_data['z_footprint'] = flux_data['z_measurement'] - missing_displacement_heights_dict[self.site_name]
+            else: 
+                flux_data['z_footprint'] = flux_data['z_measurement']
+            flux_data['z_displacement'] = flux_data['z_measurement'] - flux_data['z_footprint']
+            self.mean_z_footprint = flux_data['z_footprint'].mean()
+            self.mean_z_displacement = flux_data['z_displacement'].mean()
+            print('sensor height above ground:', self.mean_z_measurement)
+            print('distance footprint/u(0) and sensor:', self.mean_z_footprint)
+            print('displacement height above ground:', self.mean_z_displacement)
 
         if this_len < 2:
             print("No data for {} in given time range".format(self.site_name))
@@ -469,3 +572,13 @@ class icos(flux_tower_data):
         else:
             self.flux_data = flux_data
             return True
+
+    def get_utc_times(self, dataframe):
+        tf = TimezoneFinder()
+        timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
+        timezone = pytz.timezone(timezone_str)
+        dt = parser.parse('200001010000') # pick a date that is definitely standard time and not DST 
+        utc_datetime = []
+        for i, row in dataframe.iterrows():
+            utc_datetime.append(parser.parse(str(int(row['TIMESTAMP_END'])))  -  timezone.utcoffset(dt))
+        return np.array(utc_datetime)
