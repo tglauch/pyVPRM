@@ -964,8 +964,8 @@ class vprm_preprocessor:
             {"time_gap_filled": list(xvals)}
         )
         return
-'''
-    def karman(self, keys, lonlats=None, n_cpus=None, smooth_all=False):
+
+    def kalman(self, keys, times=None, lonlats=None, n_cpus=None, smooth_all=False):
         """
         Performs the lowess smoothing
 
@@ -1001,7 +1001,7 @@ class vprm_preprocessor:
             ]
         elif isinstance(times, str):
             if times == "daily":
-                xvals = np.arange(self.tot_num_days)
+                xvals = np.arange(self.tot_num_days+1)
             else:
                 logger.info("{} is not a valid str for times".format(times))
                 return
@@ -1018,16 +1018,13 @@ class vprm_preprocessor:
                                 ["time_gap_filled", "site_names"],
                                 np.array(
                                     [
-                                        do_lowess_smoothing(
+                                        do_kalman_smoothing(
                                             self.sat_imgs.sat_img.sel(site_names=i)[
                                                 key
                                             ].values,
                                             timestamps=self.sat_imgs.sat_img.sel(
                                                 site_names=i
                                             )["timestamps"].values,
-                                            xvals=xvals,
-                                            frac=frac,
-                                            it=it,
                                         )
                                         for i in self.sat_imgs.sat_img.site_names.values
                                     ]
@@ -1043,16 +1040,13 @@ class vprm_preprocessor:
                                 ["time_gap_filled", "site_names"],
                                 np.array(
                                     [
-                                        do_lowess_smoothing(
+                                        do_kalman_smoothing(
                                             self.sat_imgs.sat_img.sel(site_names=i)[
                                                 key
                                             ].values,
                                             timestamps=self.sat_imgs.sat_img[
                                                 "time"
                                             ].values,
-                                            xvals=xvals,
-                                            frac=frac,
-                                            it=it,
                                         )
                                         for i in self.sat_imgs.sat_img.site_names.values
                                     ]
@@ -1070,14 +1064,11 @@ class vprm_preprocessor:
                                 ["time_gap_filled", "y", "x"],
                                 np.array(
                                     Parallel(n_jobs=n_cpus, max_nbytes=None)(
-                                        delayed(do_lowess_smoothing)(
+                                        delayed(do_kalman_smoothing)(
                                             self.sat_imgs.sat_img[key][:, :, i].values,
                                             timestamps=self.sat_imgs.sat_img[
                                                 "timestamps"
                                             ][:, :, i].values,
-                                            xvals=xvals,
-                                            frac=frac,
-                                            it=it,
                                         )
                                         for i, x_coord in enumerate(
                                             self.sat_imgs.sat_img.x.values
@@ -1095,14 +1086,11 @@ class vprm_preprocessor:
                                 ["time_gap_filled", "y", "x"],
                                 np.array(
                                     Parallel(n_jobs=n_cpus, max_nbytes=None)(
-                                        delayed(do_lowess_smoothing)(
+                                        delayed(do_kalman_smoothing)(
                                             self.sat_imgs.sat_img[key][:, :, i].values,
                                             timestamps=self.sat_imgs.sat_img[
                                                 "time"
                                             ].values,
-                                            xvals=xvals,
-                                            frac=frac,
-                                            it=it,
                                         )
                                         for i, x_coord in enumerate(
                                             self.sat_imgs.sat_img.x.values
@@ -1121,10 +1109,11 @@ class vprm_preprocessor:
 
         self.time_key = "time_gap_filled"
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords(
-            {"time_gap_filled": list(xvals)}
+            {"time_gap_filled": list(np.arange(self.tot_num_days+1))}
         )
+        self.sat_imgs.sat_img = self.sat_imgs.sat_img.sel({"time_gap_filled": list(xvals)})
         return
-'''
+
     def clip_values(self, key, min_val, max_val, to_nan=False):
         if to_nan:
             self.sat_imgs.sat_img[key].values[
