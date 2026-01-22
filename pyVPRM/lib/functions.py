@@ -209,7 +209,7 @@ def to_esmf_grid(sat_img):
 
 
 
-def do_karman_smoothing(array_to_smooth, t, transition_covariance=0.01,
+def do_karman_smoothing(array_to_smooth, timestamps, transition_covariance=0.01,
                         observation_covariance = 0.05):
     ### ToDo: Choose frac adaptively from the data.
 
@@ -226,7 +226,7 @@ def do_karman_smoothing(array_to_smooth, t, transition_covariance=0.01,
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
         ret = []
-        t_unique = np.unique(t)
+        t_unique = np.unique(timestamps)
         t_daily = np.arange(t_unique.min(), t_unique.max() + 1)        
         if array_to_smooth.ndim == 1:
             y_mean = np.array([np.nanmean(array_to_smooth[t == ti]) for ti in t_unique])
