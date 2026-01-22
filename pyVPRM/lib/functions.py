@@ -209,7 +209,7 @@ def to_esmf_grid(sat_img):
 
 
 
-def do_karman_smoothing(array_to_smooth, timestamps, transition_covariance=0.01,
+def do_kalman_smoothing(array_to_smooth, timestamps, transition_covariance=0.01,
                         observation_covariance = 0.05):
     ### ToDo: Choose frac adaptively from the data.
 
