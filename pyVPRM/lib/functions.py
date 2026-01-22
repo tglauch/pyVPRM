@@ -208,7 +208,111 @@ def to_esmf_grid(sat_img):
     return dso
 
 
+def do_kalman_smoothing(array_to_smooth, timestamps,
+                        transition_covariance=0.01,
+                        observation_covariance=0.05):
 
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+
+        ### CHANGE: early exit for empty input
+        if array_to_smooth.size == 0:
+            return np.full_like(array_to_smooth, np.nan, dtype=float)
+
+        t_unique, inv = np.unique(timestamps, return_inverse=True)  ### CHANGE (performance)
+        if len(t_unique) == 0:
+            return np.full_like(array_to_smooth, np.nan, dtype=float)
+
+        t_daily = np.arange(t_unique.min(), t_unique.max() + 1)
+
+        # =======================
+        # 1D CASE
+        # =======================
+        if array_to_smooth.ndim == 1:
+
+            ### CHANGE: vectorized nanmean by time index
+            y_mean = np.array([
+                np.nanmean(array_to_smooth[inv == k])
+                for k in range(len(t_unique))
+            ])
+
+            ### CHANGE: guard against all-NaN series
+            if np.all(np.isnan(y_mean)):
+                return np.full(len(t_daily), np.nan)
+
+            y_daily = np.full(len(t_daily), np.nan, dtype=float)
+            idx = (t_unique - t_daily[0]).astype(int)
+            y_daily[idx] = y_mean
+
+            ### CHANGE: safe first valid lookup
+            valid = np.where(~np.isnan(y_daily))[0]
+            if len(valid) == 0:
+                return np.full(len(t_daily), np.nan)
+
+            y0 = y_daily[valid[0]]
+
+            kf = KalmanFilter(
+                transition_matrices=1.0,
+                observation_matrices=1.0,
+                transition_covariance=transition_covariance,
+                observation_covariance=observation_covariance,
+                initial_state_mean=y0,
+                initial_state_covariance=1.0
+            )
+
+            y_masked = np.ma.masked_invalid(y_daily)
+            state_mean, _ = kf.smooth(y_masked)
+
+            return state_mean[:, 0]
+
+        # =======================
+        # 2D CASE
+        # =======================
+        else:
+            ret_array = np.full((len(t_daily), array_to_smooth.shape[1]), np.nan)  ### CHANGE
+
+            for j in range(array_to_smooth.shape[1]):
+
+                ### CHANGE: vectorized nanmean
+                y_mean = np.array([
+                    np.nanmean(array_to_smooth[:, j][inv == k])
+                    for k in range(len(t_unique))
+                ])
+
+                ### CHANGE: skip all-NaN pixels
+                if np.all(np.isnan(y_mean)):
+                    continue
+
+                y_daily = np.full(len(t_daily), np.nan, dtype=float)
+                idx = (t_unique - t_daily[0]).astype(int)
+                y_daily[idx] = y_mean
+
+                ### CHANGE: safe initialization
+                valid = np.where(~np.isnan(y_daily))[0]
+                if len(valid) == 0:
+                    continue
+
+                y0 = y_daily[valid[0]]
+
+                kf = KalmanFilter(
+                    transition_matrices=1.0,
+                    observation_matrices=1.0,
+                    transition_covariance=transition_covariance,
+                    observation_covariance=observation_covariance,
+                    initial_state_mean=y0,
+                    initial_state_covariance=1.0
+                )
+
+                y_masked = np.ma.masked_invalid(y_daily)
+                state_mean, _ = kf.smooth(y_masked)
+
+                ret_array[:, j] = state_mean[:, 0]
+
+            return ret_array.T
+
+
+
+'''
 def do_kalman_smoothing(array_to_smooth, timestamps, transition_covariance=0.01,
                         observation_covariance = 0.05):
     ### ToDo: Choose frac adaptively from the data.
@@ -229,12 +333,12 @@ def do_kalman_smoothing(array_to_smooth, timestamps, transition_covariance=0.01,
         t_unique = np.unique(timestamps)
         t_daily = np.arange(t_unique.min(), t_unique.max() + 1)        
         if array_to_smooth.ndim == 1:
-            y_mean = np.array([np.nanmean(array_to_smooth[t == ti]) for ti in t_unique])
+            y_mean = np.array([np.nanmean(array_to_smooth[timestamps == ti]) for ti in t_unique])
             y_daily = np.full_like(t_daily, np.nan, dtype=float)
             idx = (t_unique - t_daily[0]).astype(int)
             y_daily[idx] = y_mean
-            first_valid = np.where(~np.isnan(y))[0][0]
-            y0 = y[first_valid]
+            first_valid = np.where(~np.isnan(y_daily))[0][0]
+            y0 = y_daily[first_valid]
             kf = KalmanFilter(
                 transition_matrices=1.0,
                 observation_matrices=1.0,
@@ -245,7 +349,7 @@ def do_kalman_smoothing(array_to_smooth, timestamps, transition_covariance=0.01,
                 initial_state_mean=y0,
                 initial_state_covariance=1.0)
             
-            y_masked = np.ma.masked_invalid(y)
+            y_masked = np.ma.masked_invalid(y_daily)
             state_mean, state_cov = kf.smooth(y_masked)
             
             kalman_smooth = state_mean[:, 0]
@@ -254,12 +358,12 @@ def do_kalman_smoothing(array_to_smooth, timestamps, transition_covariance=0.01,
         else:
             ret_array = np.zeros((len(t_daily), np.shape(array_to_smooth)[1]))
             for j in range(np.shape(array_to_smooth)[1]):
-                y_mean = np.array([np.nanmean(array_to_smooth[:, j][t == ti]) for ti in t_unique])
+                y_mean = np.array([np.nanmean(array_to_smooth[:, j][timestamps == ti]) for ti in t_unique])
                 y_daily = np.full_like(t_daily, np.nan, dtype=float)
                 idx = (t_unique - t_daily[0]).astype(int)
                 y_daily[idx] = y_mean
-                first_valid = np.where(~np.isnan(y))[0][0]
-                y0 = y[first_valid]
+                first_valid = np.where(~np.isnan(y_daily))[0][0]
+                y0 = y_daily[first_valid]
                 kf = KalmanFilter(
                     transition_matrices=1.0,
                     observation_matrices=1.0,
@@ -270,11 +374,11 @@ def do_kalman_smoothing(array_to_smooth, timestamps, transition_covariance=0.01,
                     initial_state_mean=y0,
                     initial_state_covariance=1.0)
                 
-                y_masked = np.ma.masked_invalid(y)
+                y_masked = np.ma.masked_invalid(y_daily)
                 state_mean, state_cov = kf.smooth(y_masked)
                 ret_array[:, j] = state_mean[:, 0]
             return ret_array.T
-
+'''
 
 
 def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, frac=0.25, it=3):

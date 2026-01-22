@@ -10,7 +10,7 @@ from pyVPRM.sat_managers.base_manager import satellite_data_manager
 from pyVPRM.lib.functions import (
     add_corners_to_1d_grid,
     do_lowess_smoothing,
-    do_karman_smoothing,
+    do_kalman_smoothing,
     make_xesmf_grid,
     to_esmf_grid,
     replace_inf_runs_ignore_nans
