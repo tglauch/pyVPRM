@@ -33,6 +33,12 @@ DOI = {10.5194/gmd-18-4713-2025}
 
 In case of any questions please write an E-Mail to theo.glauch@dlr.de.
 
+# Latest Update
+
+With the new version - pyVPRM 5.3 - it is possible to replace the lowess filtering with a more stable Kalman filter. An example of the difference is shown below for the cropland site DE-RuS using Sentinel-2 data for 2022. The function can be used by kalling ```vprm_inst.kalman(...)``` instead of ```vprm_inst.lowess(...)``` for some instance of the VPRM preprocessor class. 
+
+
+
 # About
 
 
