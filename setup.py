@@ -50,6 +50,7 @@ setup(
         "statsmodels",
         "loguru",
         "fiona",
+        "pykalman",
     ],
     include_package_data=True,
     zip_safe=False,
