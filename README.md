@@ -39,7 +39,7 @@ With the new version - pyVPRM 5.3 - it is possible to replace the lowess filteri
 
 
 <figure>
-<img src="[https://github.com/user-attachments/assets/c099ef1f-6c5a-445c-bc6e-f6697c47b641](https://github.com/user-attachments/assets/e4d10e21-a639-4cef-8254-100ab326041a)", height=300pt>
+<img src="https://github.com/user-attachments/assets/e4d10e21-a639-4cef-8254-100ab326041a", height=300pt>
 </figure> 
 
 # About
