@@ -785,12 +785,6 @@ class vprm_preprocessor:
         self.min_max_evi = copy.deepcopy(self.prototype_satellite_manager)
         shortcut = self.sat_imgs.sat_img
         # if self.flux_tower_instances is None:
-        self.min_lswi.sat_img["min_lswi"] = shortcut["lswi"].min(
-            self.time_key, skipna=True
-        )
-        self.max_lswi.sat_img["max_lswi"] = shortcut["lswi"].max(
-            self.time_key, skipna=True
-        )
         
         self.min_max_evi.sat_img["min_evi"] = shortcut["evi"].min(
             self.time_key, skipna=True
@@ -806,6 +800,13 @@ class vprm_preprocessor:
             shortcut["evi"].max(self.time_key, skipna=True)
             - shortcut["evi"].min(self.time_key, skipna=True)
         )
+
+        th = self.min_max_evi.sat_img["th"]
+        
+        lswi_masked = shortcut["lswi"].where(shortcut["evi"] > th)
+        
+        self.min_lswi.sat_img["min_lswi"] = lswi_masked.min(self.time_key, skipna=True)
+        self.max_lswi.sat_img["max_lswi"] = lswi_masked.max(self.time_key, skipna=True)
         return
 
     def lowess(self, keys, lonlats=None, times=False, frac=0.25, it=3,
