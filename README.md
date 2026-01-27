@@ -69,7 +69,7 @@ pyVPRM can be used for, among others:
    the Weather Research and Forecasting (WRF) model
 
 
-## Example Net Ecosystem Fluxes generated with pyVPRM
+### Examples of pyVPRM Net Ecosystem Exchange
 
 <figure>
 <img src="https://github.com/user-attachments/assets/c099ef1f-6c5a-445c-bc6e-f6697c47b641", height=300pt>
@@ -83,19 +83,36 @@ pyVPRM can be used for, among others:
 
 ## Installation
 
-In general we recommmend to set up a new virtual environment for the use of ```pyVPRM```, where you install all the required software. You might also want to consider the best practice about the use of conda and pip here (https://www.anaconda.com/blog/using-pip-in-a-conda-environment).
+We generally recommend setting up a **dedicated virtual environment** for using `pyVPRM` and installing all required dependencies there.
 
-Prerequisites: ```pyVPRM``` requires an installation of the Earth System Modelling Framework (ESMF) and its python interface - ESMFpy - to use all functionalities that include regridding. On many HPCs specialized for Earth System Modelling and Climate Research ESMF is pre-installed. If you need to install it yourself you find instructions on the ESMF Github here: https://github.com/esmf-org. Installation through conda is possible as explained here here https://github.com/conda-forge/esmf-feedstock. It is recommendend to also install NETCDF4 to use all the functionalities of ESMF.
+If you are using **conda**, you may want to follow best practices for mixing `conda` and `pip`. The following blog post provides a good overview:  
+https://www.anaconda.com/blog/using-pip-in-a-conda-environment
 
-```
+### Prerequisites
+
+`pyVPRM` requires the **Earth System Modeling Framework (ESMF)** and its Python interface **ESMFpy** for all functionalities that involve regridding.
+
+On many HPC systems specialized for Earth system modeling and climate research, ESMF is already pre-installed. If this is the case, make sure that both `esmf` and `esmpy` are available in your environment.
+
+If you need to install ESMF yourself, you can find installation instructions here:
+- ESMF GitHub repository: https://github.com/esmf-org
+- Conda-forge ESMF package: https://github.com/conda-forge/esmf-feedstock
+
+To ensure full ESMF functionality, it is also recommended to install **netCDF4**.
+
+### Example conda setup
+
+```bash
+conda create -n pyvprm python=3.10
+conda activate pyvprm
+
 conda config --add channels conda-forge
 conda config --set channel_priority strict
-conda install -c conda-forge dask netCDF4
-conda install esmf
-conda install esmpy
+
+conda install dask netCDF4 esmf esmpy
 ```
 
-Afterwards install ```pyVPRM``` using pip via
+Then install ```pyVPRM``` via pip
 
 ```
 pip install pyVPRM
