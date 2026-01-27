@@ -169,35 +169,20 @@ class vprm_base_model:
         # if (self.new is False) & ('w_scale' in self.buffer.keys()):
         #     return self.buffer['w_scale']
         lswi = self.get_lswi(lon, lat, site_name)
-        if land_cover_type == 1:
-            # How to calculate Max LSWI for Evergreen? What's the growing season?
-            key = "max_lswi_evergreen"
-            if key not in self.vprm_pre.max_lswi.sat_img.keys():
-                self.vprm_pre.max_lswi.sat_img[key] = (
-                    self.vprm_pre.sat_imgs.sat_img["lswi"]
-                    .where(
-                        (
-                            self.vprm_pre.sat_imgs.sat_img["evi"]
-                            > self.vprm_pre.min_max_evi.sat_img["th"]
-                        ),
-                        np.nan,
-                    )
-                    .max(self.vprm_pre.time_key, skipna=True)
+        
+        key = "max_lswi_evergreen" if land_cover_type == 1 else "max_lswi_others"
+        
+        if key not in self.vprm_pre.max_lswi.sat_img.keys():
+            self.vprm_pre.max_lswi.sat_img[key] = (
+                self.vprm_pre.sat_imgs.sat_img["lswi"]
+                .where(
+                    self.vprm_pre.sat_imgs.sat_img["evi"]
+                    > self.vprm_pre.min_max_evi.sat_img["th"],
+                    np.nan,
                 )
-        else:
-            key = "max_lswi_others"
-            if key not in self.vprm_pre.max_lswi.sat_img.keys():
-                self.vprm_pre.max_lswi.sat_img[key] = (
-                    self.vprm_pre.sat_imgs.sat_img["lswi"]
-                    .where(
-                        (
-                            self.vprm_pre.sat_imgs.sat_img["evi"]
-                            > self.vprm_pre.min_max_evi.sat_img["th"]
-                        ),
-                        np.nan,
-                    )
-                    .max(self.vprm_pre.time_key, skipna=True)
-                )
+                .max(self.vprm_pre.time_key, skipna=True)
+            )
+
 
         if site_name is not None:
             max_lswi = float(
