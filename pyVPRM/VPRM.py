@@ -23,7 +23,7 @@ import xarray as xr
 import scipy
 import uuid
 import time
-from scipy.optimize import curve_fitƒmin
+from scipy.optimize import curve_fit
 import pandas as pd
 import datetime
 from dateutil import parser
