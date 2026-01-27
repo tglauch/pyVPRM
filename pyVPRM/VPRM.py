@@ -23,7 +23,7 @@ import xarray as xr
 import scipy
 import uuid
 import time
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fitƒmin
 import pandas as pd
 import datetime
 from dateutil import parser
@@ -788,6 +788,10 @@ class vprm_preprocessor:
         self.min_lswi.sat_img["min_lswi"] = shortcut["lswi"].min(
             self.time_key, skipna=True
         )
+        self.max_lswi.sat_img["max_lswi"] = shortcut["lswi"].max(
+            self.time_key, skipna=True
+        )
+        
         self.min_max_evi.sat_img["min_evi"] = shortcut["evi"].min(
             self.time_key, skipna=True
         )
