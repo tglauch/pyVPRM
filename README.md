@@ -37,13 +37,11 @@ In case of any questions please write an E-Mail to theo.glauch@dlr.de. If you li
 
 With the new version - pyVPRM 5.3 - it is possible to replace the lowess filtering with a more stable Kalman filter. An example of the difference for EVI is shown below for the cropland site DE-RuS using Sentinel-2 data for 2022. The new function can be used by kalling ```vprm_inst.kalman(...)``` instead of ```vprm_inst.lowess(...)``` for some instance of the VPRM preprocessor class. 
 
-
 <figure>
 <img src="https://github.com/user-attachments/assets/8acdfa3f-26e8-4c40-9cd6-8c91002c22a8", height=300pt>
 </figure> 
 
 # About
-
 
 `pyVPRM` is a software package to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respriation Model (VPRM). It takes into account both, the primary productivity (GPP) as well as the respiration. The net flux between both of them is the net ecosystem exchange (NEE). The implementation is flexible and can be run with different satellite products (Sentinel-2, MODIS, VIIRS,...), land cover products (Copernicus Land Cover Service, ESA 10-m World Cover Map, MapBiomas) and meteorological drivers like ECMWFS ERA5 Reanalysis. Through its modular structure it is also easily extendable.  
 
@@ -62,7 +60,6 @@ Among others it can be used for
 <figure>
 <img src="https://github.com/user-attachments/assets/26913805-f188-477a-9a85-08911a165b1e", height=300pt>
 </figure> 
-
 
 # How to use
 
