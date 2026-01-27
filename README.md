@@ -31,7 +31,7 @@ DOI = {10.5194/gmd-18-4713-2025}
 }
 ```
 
-In case of any questions please write an E-Mail to theo.glauch@dlr.de. 
+In case of any questions please write an E-Mail to theo.glauch@dlr.de. If you like the model leave a :star:.
 
 # Latest Update
 
