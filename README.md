@@ -43,13 +43,31 @@ With the new version - pyVPRM 5.3 - it is possible to replace the lowess filteri
 
 # About
 
-`pyVPRM` is a software package to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respriation Model (VPRM). It takes into account both, the primary productivity (GPP) as well as the respiration. The net flux between both of them is the net ecosystem exchange (NEE). The implementation is flexible and can be run with different satellite products (Sentinel-2, MODIS, VIIRS,...), land cover products (Copernicus Land Cover Service, ESA 10-m World Cover Map, MapBiomas) and meteorological drivers like ECMWFS ERA5 Reanalysis. Through its modular structure it is also easily extendable.  
+**pyVPRM** is a Python package for estimating the exchange of CO₂ between the atmosphere and the terrestrial biosphere using the **Vegetation Photosynthesis and Respiration Model (VPRM)**.
 
-Among others it can be used for 
+The model represents both:
+- **Gross Primary Productivity (GPP)**  
+- **Ecosystem respiration (Reco)**  
 
-1. Fitting the parameters of a VPRM model against Eddy-Covariance Fluxtower measurements (e.g. FLUXNET or ICOS)
-2. Making CO2 flux predictions for a given region of interest
-3. Generating input files to run VPRM in the Weather Research and Forecasting Model (WRF)
+The balance between these two components yields the **Net Ecosystem Exchange (NEE)**.
+
+pyVPRM provides a flexible and modular implementation of VPRM, allowing users to combine different data sources for vegetation, land cover, and meteorological forcing.
+
+- Supports multiple **satellite products**  
+  (e.g. Sentinel-2, MODIS, VIIRS)
+- Compatible with various **land-cover datasets**  
+  (e.g. Copernicus Land Cover Service, ESA WorldCover 10 m, MapBiomas)
+- Uses standard **meteorological reanalyses**, such as ECMWF ERA5
+- Modular design that facilitates **extension and customization**
+
+pyVPRM can be used for, among others:
+
+1. **Parameter optimization** of VPRM against eddy-covariance flux tower observations  
+   (e.g. FLUXNET, ICOS)
+2. **Regional CO₂ flux estimation and prediction** for user-defined domains
+3. **Generation of VPRM input fields** for coupled atmospheric models such as  
+   the Weather Research and Forecasting (WRF) model
+
 
 ## Example Net Ecosystem Fluxes generated with pyVPRM
 
