@@ -31,7 +31,7 @@ DOI = {10.5194/gmd-18-4713-2025}
 }
 ```
 
-In case of any questions please write an E-Mail to theo.glauch@dlr.de. If you like the model leave a :star:.
+In case of any questions please write an E-Mail to theo.glauch@dlr.de. If you enjoy the model leave a :star:.
 
 # Latest Update | 26-01-2026
 
@@ -118,21 +118,29 @@ Then install ```pyVPRM``` via pip
 pip install pyVPRM
 ```
 
-## Start your own project
+## Start your Project
 
-In order to start your own project you need to at least follow theses steps: 
+To start your own `pyVPRM` project, you typically need to follow these steps:
 
-1. Get the necessary satellite data for your region of interest 
-2. Get the land cover maps for your region of interest
-3. Create a config file for your project
-4. Generate your project scripts based on the functions of the vprm class in `VPRM.py`
+1. Obtain the required **satellite data** for your region of interest
+2. Obtain the corresponding **land-cover maps** for your region of interest
+3. Create a **project configuration file**
+4. Generate project-specific scripts using the functionality provided by the `VPRM` class in `VPRM.py`
 5. Run the calculations
 
-Remarks: 
-- If there is not yet an interface for your satellite data or land cover map, implement a new subclass in `pyVPRM/sat_managers/`
-- For new land cover maps you need to additionaly provide a mapping of the land cover classes to the VPRM classes in a config file which is stored in  `pyVPRM/vprm_configs`
-- Open access to land cover maps: Copernicus: https://land.copernicus.eu/en/products/global-dynamic-land-cover/copernicus-global-land-service-land-cover-100m-collection-3-epoch-2019-globe#download | ESA World Cover: https://viewer.esa-worldcover.org
-- Open access to satellite data: MODIS,VIIRS: https://e4ftl01.cr.usgs.gov | Sentinel-2: https://scihub.copernicus.eu/
+### Remarks
+
+- If no interface exists yet for your satellite product or land-cover dataset, implement a new subclass in  
+  `pyVPRM/sat_managers/`
+- For new land-cover products, you must additionally provide a **mapping from land-cover classes to VPRM classes**.  
+  This mapping is defined in a configuration file stored in `pyVPRM/vprm_configs/`
+- Open-access land-cover datasets:
+  - **Copernicus Global Land Service**: https://land.copernicus.eu/en/products/global-dynamic-land-cover
+  - **ESA WorldCover**:  https://viewer.esa-worldcover.org
+- Open-access satellite data:
+  - **MODIS, VIIRS**:  https://e4ftl01.cr.usgs.gov
+  - **Sentinel-2**:  https://scihub.copernicus.eu
+
 
 ## Examples
 
