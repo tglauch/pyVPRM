@@ -99,7 +99,7 @@ To ensure full ESMF functionality, it is also recommended to install **netCDF4**
 ### Example conda setup
 
 ```bash
-conda create -n pyvprm python=3.10
+conda create -n pyvprm python=3.14
 conda activate pyvprm
 
 conda config --add channels conda-forge
