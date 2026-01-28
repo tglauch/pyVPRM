@@ -144,19 +144,23 @@ To start your own `pyVPRM` project, you typically need to follow these steps:
 
 ## Examples
 
-In order to get started with ```pyVPRM``` there are a number of example scripts with corresponding `README` and comments available in the github respository: https://github.com/tglauch/pyVPRM_examples.git. It contains example scripts for:
+To help you get started with `pyVPRM`, we provide a companion repository containing example scripts, each with their own `README` files and in-line comments:
 
-- Generating WRF inputs under ``./wrf_preprocessor``
-- Generating VPRM fluxes (GPP / NEE): ``./vprm_predictions``
-- Fitting VPRM parameters: ``./fit_vprm_parameters``
-- Downloading MODIS/VIIRS data using ``pyVPRM``: ``./sat_data_download``
+https://github.com/tglauch/pyVPRM_examples.git
 
-To download the entire example repository run
+The repository includes examples for:
+
+- **Generating WRF input files**: `./wrf_preprocessor`
+- **Generating VPRM fluxes (GPP / NEE)**: `./vprm_predictions`
+- **Fitting VPRM parameters**: `./fit_vprm_parameters`
+- **Downloading MODIS/VIIRS data using `pyVPRM`**: `./sat_data_download`
+  
+Clone the full example repository with:
 ```
 git clone https://github.com/tglauch/pyVPRM_examples.git
 ```
 
-The repositorty comes with pre-prepared input data, so you do not need to care about getting the data first. Check it out!
+The repository comes with pre-prepared input data, so you can run the examples immediately without downloading or preprocessing any datasets.
 
 # Modular Structure
 
