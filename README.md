@@ -53,20 +53,16 @@ The balance between these two components yields the **Net Ecosystem Exchange (NE
 
 pyVPRM provides a flexible and modular implementation of VPRM, allowing users to combine different data sources for vegetation, land cover, and meteorological forcing.
 
-- Supports multiple **satellite products**  
-  (e.g. Sentinel-2, MODIS, VIIRS)
-- Compatible with various **land-cover datasets**  
-  (e.g. Copernicus Land Cover Service, ESA WorldCover 10 m, MapBiomas)
+- Supports multiple **satellite products** (e.g. Sentinel-2, MODIS, VIIRS)
+- Compatible with various **land-cover datasets** (e.g. Copernicus Land Cover Service, ESA WorldCover 10 m, MapBiomas)
 - Uses standard **meteorological reanalyses**, such as ECMWF ERA5
 - Modular design that facilitates **extension and customization**
 
 pyVPRM can be used for, among others:
 
-1. **Parameter optimization** of VPRM against eddy-covariance flux tower observations  
-   (e.g. FLUXNET, ICOS)
+1. **Parameter optimization** of VPRM against eddy-covariance flux tower observations (e.g. FLUXNET, ICOS)
 2. **Regional CO₂ flux estimation and prediction** for user-defined domains
-3. **Generation of VPRM input fields** for coupled atmospheric models such as  
-   the Weather Research and Forecasting (WRF) model
+3. **Generation of VPRM input fields** for coupled atmospheric models such as the Weather Research and Forecasting (WRF) model
 
 
 ### Examples of pyVPRM Net Ecosystem Exchange
