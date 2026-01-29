@@ -11,6 +11,7 @@ import uuid
 import datetime
 from pyVPRM.meteorologies.met_base_class import met_data_handler_base
 from loguru import logger
+import pandas as pd
 
 map_function = lambda lon: (lon - 360) if (lon > 180) else lon
 
@@ -21,26 +22,26 @@ class met_data_handler(met_data_handler_base):
     Class for using ERA5 data available on Levante's DKRZ cluster.
     """
 
-    def __init__(self, year, month, day=None, hour=None,
-                 PAT=None, keys=[], lat_slice=None, lon_slice=None,
+    def __init__(self, PAT=None, year=None, month=None, day=None, hour=None,
+                 keys=[], lat_slice=None, lon_slice=None,
                  mpi=False):
         if PAT is None:
-            print('Need to set the access token. Check https://platform.destine.eu/.')
+            print('Need to set the access token via the PAT argument. Check https://platform.destine.eu/.')
             return
         super().__init__()
         self.PAT = PAT
-        self.in_era5_grid = True
+        self.regridded = False
         self.regridder = None
         self.rearranged = False
         self.lat_slice = lat_slice
         self.lon_slice = lon_slice
         self.mpi = mpi
+        self.instantaneous=False
         if self.lon_slice is not None:
             self.lon_slice[0] = map_function_inv(self.lon_slice[0])
             self.lon_slice[1] = map_function_inv(self.lon_slice[1])
         self.keys = keys
         self.load_ds()
-        self.change_date(year, month, day, hour)
 
     def load_ds(self):
         self.ds = xr.open_dataset(
@@ -68,14 +69,45 @@ class met_data_handler(met_data_handler_base):
         if self.lon_slice is not None:
             sel_dict['lon'] = slice(self.lon_slice[0], self.lon_slice[1])
         self.ds_out = self.ds.sel(sel_dict).compute()
+        self.instantaneous=False
         self.rearranged = False
-        self.in_era5_grid = True
+        self.regridded = False
+        self.accumulated_to_inst()
+        self.rearrange_lons_lats()
 
     def get_all_interpolators(self, day, hour):
         ret_dict = dict()
         for key in self.keys:
             ret_dict[key] = self.get_interpolator()
         return ret_dict
+
+    def accumulated_to_inst(self):
+        if self.instantaneous is True:
+            return
+        acc_keys = []
+        for key in self.ds_out.keys():
+            if self.ds_out[key].attrs['GRIB_stepType'] == 'accum':
+                acc_keys.append(key)
+        for k in acc_keys:
+            acc = self.ds_out[k]
+            acc = acc.assign_coords(
+                begin_time=acc['valid_time'] - pd.Timedelta(hours=1)
+            )
+            # Group by day and compute per-day diff with reset
+            diff = acc.groupby('begin_time.date').map(
+                lambda x: xr.concat(
+                    [
+                        x.isel(valid_time=0),            # first value of day
+                        x.diff('valid_time')             # increments
+                    ],
+                    dim='valid_time'
+                )
+            )
+            # Align time coordinate (concat loses it)
+            diff = diff.assign_coords(valid_time=acc['valid_time'])
+            self.ds_out[k]= diff
+        self.ds_out = self.ds_out.isel(valid_time=slice(1, None))
+        return
 
     def regrid(
         self,
@@ -89,10 +121,10 @@ class met_data_handler(met_data_handler_base):
 
         import xesmf as xe
 
-        if self.in_era5_grid is False:
+        if self.regridded:
             return
 
-        self.rearrange_lons()
+        self.rearrange_lons_lats()
 
         if (self.regridder is None) | (overwrite_regridder):
             if (lats is not None) and (lons is not None):
@@ -132,7 +164,7 @@ class met_data_handler(met_data_handler_base):
                 self.ds_out, t_ds_out, "bilinear", weights=weights, reuse_weights=True
             )
         self.ds_out = self.regridder(self.ds_out)
-        self.in_era5_grid = False
+        self.regridded = False
         return
 
     def reduce_time(self, t0, t1):
@@ -141,7 +173,12 @@ class met_data_handler(met_data_handler_base):
             sel_dict['lat'] = slice(self.lat_slice[1], self.lat_slice[0])
         if self.lon_slice is not None:
             sel_dict['lon'] = slice(self.lon_slice[0], self.lon_slice[1])
-        self.ds = self.ds.sel(sel_dict).compute()
+        self.ds_out = self.ds.sel(sel_dict).compute()
+        self.instantaneous=False
+        self.rearranged = False
+        self.regridded = False
+        self.accumulated_to_inst()
+        self.rearrange_lons_lats()
         return
         
     def reduce_along_lonlat(self, lon, lat, interp_method='nearest'):
@@ -151,21 +188,26 @@ class met_data_handler(met_data_handler_base):
                                        method=interp_method)
         return
     
-    def rearrange_lons(self):
+    def rearrange_lons_lats(self):
       if self.ds_out['lon'].values.max() > 180:
           self.ds_out = self.ds_out.assign_coords({'lon': [map_function(i) for i in
                                                             self.ds_out.coords['lon'].values]})
-          self.ds_out = self.ds_out.sortby('lon')  
+          self.ds_out = self.ds_out.sortby('lon') 
+      if float(self.ds_out['lat'][0])>float(self.ds_out['lat'][-1]):
+          self.ds_out = self.ds_out.sortby('lat') 
           self.rearranged = True
       return
 
-    def load(self):
-        self.ds = self.ds.compute()
-        return
+    # def load(self):
+    #     self.ds = self.ds.compute()
+    #     return
 
-    def get_data(self, lonlat=None, key=None, interp_method='nearest'):
+    def get_data(self, lonlat=None, key=None,
+                 interp_method='nearest'):
+        if self.instantaneous is False:
+            self.accumulated_to_inst()
         if lonlat is None:
-            self.rearrange_lons()
+            self.rearrange_lons_lats()
         if key is not None:
             tmp = self.ds_out[key]
         else:

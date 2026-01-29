@@ -169,7 +169,7 @@ class vprm_base_model_footprint:
                     LSWI array
         """
 
-    def data_for_fitting(self, footprint_regridder_path='./'):
+    def data_for_fitting(self, footprint_regridder_path='./', met_variables=dict()):
         ds = vprm_pre.sat_imgs.sat_img.drop(['scl','ndvi']).drop(['time'])
         ds = ds.assign_attrs(crs=ds.rio.crs)
         ds['min_evi'] = vprm_pre.min_max_evi.sat_img['min_evi']
