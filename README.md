@@ -158,16 +158,57 @@ git clone https://github.com/tglauch/pyVPRM_examples.git
 
 The repository comes with pre-prepared input data, so you can run the examples immediately without downloading or preprocessing any datasets.
 
-# Modular Structure
+## Package Structure
 
-The pyVPRM implementation has a modular structure to allow for an easy replacement of satellite images and land cover maps, as well as the meteorologies. The file structure is as follows
+The pyVPRM implementation follows a **modular design** that allows easy replacement and extension of  
+satellite imagery, land cover maps, meteorological data, flux tower datasets, and VPRM model implementations.
 
+The directory structure is outlined below.
 
-```pyVPRM/sat_managers```
+---
 
-The ```satellite_data_manager``` class in this library is the basic data structure for all satellite image and land cover maps calcuations in pyVPRM. It provides function to reproject, transform, merge and crop satellite images. All other classes for specific satellite images or land cover maps, with the respective loading routines, are derived from this base class and implemented in the respective class files in the folder. 
+### `pyVPRM/sat_managers`
 
+This directory contains the core classes for handling satellite imagery and land cover maps.
 
-```pyVPRM/meteorologies```
+The `satellite_data_manager` class provides the **base data structure** for all satellite- and land-cover-related calculations in pyVPRM. It implements common functionality such as:
 
-The classes in this folder provide the interface for the satellite data. This will usually strongly depend on the data availability. You'll likely need to make modifications here or implement your own class. All meteorology classes are derived from the base class in ```met_base_class.py```. An example to implement a new meteorology class can be found in ```era5_class_draft.py```.
+- reprojection  
+- transformation  
+- merging  
+- cropping  
+
+All satellite- or land-cover-specific classes (including their respective data loading routines) inherit from this base class and are implemented as separate class files within this directory.
+
+---
+
+### `pyVPRM/meteorologies`
+
+This directory contains classes that provide the **meteorological interface** for the model.
+
+Meteorological data handling typically depends on the data availability on the user’s system.  
+A generic and widely applicable option is the **Destination Earth platform**  
+(https://platform.destine.eu/).
+
+All meteorology classes inherit from the base class defined in `met_base_class.py`.  
+An example implementation for adding a new meteorology source is provided in `era5_class_draft.py`.
+
+---
+
+### `pyVPRM/vprm_models`
+
+This directory contains the different implementations of the VPRM model.
+
+Each model requires:
+- an instance of the **VPRM preprocessor** class, and  
+- a corresponding **meteorology** object  
+
+as input.
+
+---
+
+### `pyVPRM/flux_tower_libs`
+
+This directory provides interfaces to different **flux tower datasets** (e.g. FLUXNET, ICOS, etc.).
+
+It also includes functionality to compute **tower footprints** from eddy covariance measurements.
