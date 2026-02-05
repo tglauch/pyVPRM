@@ -77,6 +77,69 @@ class satellite_data_manager:
 
         return
 
+    def safe_divide(self, numerator, denominator, fill_value=np.nan):
+        """xarray-safe division preserving coords and dims"""
+        result = numerator / denominator
+        return result.where(np.isfinite(result), fill_value)
+
+    def add_ndvi(self, nir='nir08', red='red'):
+        nir = self.sat_img[nir]
+        red = self.sat_img[red]
+        self.sat_img['ndvi'] = self.safe_divide(nir - red, nir + red)
+        return True
+
+    def add_nirv(self, nir='nir08', red='red'):
+        # Ensure NDVI exists
+        if 'ndvi' not in self.sat_img:
+            self.add_ndvi(nir, red)
+        nir = self.sat_img[nir]
+        self.sat_img['nirv'] = self.sat_img['ndvi'] * nir
+        return True
+
+    def add_ndre(self, nir='nir08', red='rededge'):
+        nir = self.sat_img['nir08']
+        # No red-edge in default_bands, using red as proxy
+        red_edge = self.sat_img['red']
+        self.sat_img['ndre'] = self.safe_divide(nir - red_edge, nir + red_edge)
+        return True
+
+    def add_ndwi(self, nir='nir08', swir='swir16'):
+        nir = self.sat_img['nir08']
+        swir1 = self.sat_img['swir16']
+        self.sat_img['ndwi'] = self.safe_divide(nir - swir1, nir + swir1)
+        return True
+
+    def add_evi(self, nir='nir08', red='red', blue='blue'):
+        nir = self.sat_img[nir]
+        red = self.sat_img[red]
+        blue = self.sat_img[blue]
+        evi = 2.5 * self.safe_divide(
+            nir - red,
+            nir + 6.0 * red - 7.5 * blue + 1.0)
+        evi = evi.where((evi >= 0.0) & (evi <= 1.0))
+        self.sat_img['evi'] = evi
+        return True
+
+    def add_evi2(self, nir='nir08', red='red'):
+        nir = self.sat_img[nir]
+        red = self.sat_img[red]
+    
+        self.sat_img['evi2'] = 2.5 * self.safe_divide(
+            nir - red,
+            nir + 2.4 * red + 1.0
+        )
+        return True
+
+    def add_lswi(self, nir='nir08', swir='swir16'):
+        nir = self.sat_img[nir]
+        swir = self.sat_img[swir]
+    
+        self.sat_img['lswi'] = self.safe_divide(
+            nir - swir,
+            nir + swir
+        )
+        return True
+
     def value_at_lonlat(
         self, lon, lat, as_array=True, key=None, isel={}, interp_method="nearest"
     ):

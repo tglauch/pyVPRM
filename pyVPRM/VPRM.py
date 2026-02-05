@@ -309,9 +309,11 @@ class vprm_preprocessor:
         b_red=None,
         b_blue=None,
         b_swir=None,
+        b_red_edge=None,
         drop_bands=False,
         which_evi=None,
         add_ndvi=False,
+        satellite_indices=[],
         timestamp_key=None,
         mask_bad_pixels=True,
         mask_clouds=True,
@@ -338,18 +340,18 @@ class vprm_preprocessor:
                     None
         """
 
-        evi_params = {"g": 2.5, "c1": 6.0, "c2": 7.5, "l": 1}
-        evi2_params = {"g": 2.5, "l": 1, "c": 2.4}
-
         if not isinstance(handler, satellite_data_manager):
             logger.info(
-                "Satellite image needs to be an object of the satellite_data_manager class"
+                "Satellite image needs to bet an object of the satellite_data_manager class"
             )
             return
+        if which_evi is not None:
+            satellite_indices.append(which_evi)
+        if add_ndvi:
+            satellite_indices.append('ndvi')
+        self.satellite_indices = satellite_indices
         bands_to_mask = []
-        bands = [b_nir, b_red, b_blue, b_swir]
-        if which_evi == 'evi2':
-            bands = [b_nir, b_red, b_swir]    
+        bands = [b_nir, b_red, b_blue, b_swir, b_red_edge]  
         for btm in bands:
             if btm is not None:
                 bands_to_mask.append(btm)
@@ -358,52 +360,31 @@ class vprm_preprocessor:
                 handler.mask_bad_pixels()
             else:
                 handler.mask_bad_pixels(bands_to_mask)
-
-        if which_evi in ["evi", "evi2"]:
-            nir = handler.sat_img[b_nir]
-            red = handler.sat_img[b_red]
-            swir = handler.sat_img[b_swir]
-            if which_evi == "evi":
-                blue = handler.sat_img[b_blue]
-                temp_evi = (
-                    evi_params["g"]
-                    * (nir - red)
-                    / (
-                        nir
-                        + evi_params["c1"] * red
-                        - evi_params["c2"] * blue
-                        + evi_params["l"]
-                    )
-                )
-            elif which_evi == "evi2":
-                temp_evi = (
-                    evi2_params["g"]
-                    * (nir - red)
-                    / (nir + evi2_params["c"] * red + evi2_params["l"])
-                )
-            temp_evi = xr.where((temp_evi <= 0) | (temp_evi > 1), np.nan, temp_evi)
-            temp_lswi = (nir - swir) / (nir + swir)
-            temp_lswi = xr.where((temp_lswi < -1) | (temp_lswi > 1), np.nan, temp_lswi)
-            handler.sat_img["evi"] = temp_evi
-            handler.sat_img["lswi"] = temp_lswi
-        if add_ndvi:
-            nir = handler.sat_img[b_nir]
-            red = handler.sat_img[b_red]
-            temp_ndvi = (nir-red)/(nir+red)
-            handler.sat_img['ndvi'] = temp_ndvi
+        for sat_ind in self.satellite_indices:
+            if sat_ind == 'ndvi':
+               handler.add_ndvi(nir=b_nir, red=b_red) 
+            elif sat_ind == 'evi':
+               handler.add_evi(nir=b_nir, red=b_red, blue=b_blue)        
+            elif sat_ind == 'lswi':
+                handler.add_lswi(nir=b_nir, swir=b_swir)
+            elif sat_ind == 'evi2':
+                handler.add_evi2(nir=b_nir, red=b_red)
+            elif sat_ind == 'ndwi':
+                handler.add_ndwi(nir=b_nir, swir=b_red)  
+            elif sat_ind == 'ndre':
+                handler.add_ndre(nir=b_nir, red=b_red_edge)  
+            elif sat_ind == 'nirv':
+                handler.add_nirv(nir=b_nir, red=b_red)
+            else:
+                print('No function implemented for {}'.format(sat_ind))
             
         if timestamp_key is not None:
             handler.sat_img = handler.sat_img.rename({timestamp_key: "timestamps"})
 
-        bands_to_mask = []
-        if which_evi in ["evi", "evi2"]:
-            bands_to_mask = ["evi", "lswi"]
-        if add_ndvi:
-            bands_to_mask.append('ndvi')
-        else:
-            for btm in [b_nir, b_red, b_blue, b_swir]:
-                if btm is not None:
-                    bands_to_mask.append(btm)
+        bands_to_mask = copy.deepcopy(self.satellite_indices)
+        for btm in [b_nir, b_red, b_blue, b_swir]:
+            if btm is not None:
+                bands_to_mask.append(btm)
         if mask_snow:
             if bands_to_mask == []:
                 handler.mask_snow()
@@ -559,30 +540,10 @@ class vprm_preprocessor:
         self.time_key = "time"
 
         N = int(min_lenght_snow_period / np.diff(self.sat_imgs.sat_img['time']).mean())
-        if "evi" in list(self.sat_imgs.sat_img.data_vars):
-            self.sat_imgs.sat_img["evi"] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img["evi"],
+        for sat_ind in self.satellite_indices:
+            self.sat_imgs.sat_img[sat_ind] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img[sat_ind],
                                                                         N = N,
                                                                         time_dim = self.time_key)
-            # self.sat_imgs.sat_img["evi"] = xr.where(
-            #     (self.sat_imgs.sat_img["evi"] == np.inf),
-            #     self.sat_imgs.sat_img["evi"].min(dim=self.time_key),
-            #     self.sat_imgs.sat_img["evi"],
-            # )
-
-        if "lswi" in list(self.sat_imgs.sat_img.data_vars):
-            self.sat_imgs.sat_img["lswi"] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img["lswi"],
-                                                                         N = N,
-                                                                         time_dim = self.time_key)
-            # self.sat_imgs.sat_img["lswi"] = xr.where(
-            #     (self.sat_imgs.sat_img["lswi"] == np.inf),
-            #     self.sat_imgs.sat_img["lswi"].min(dim=self.time_key),
-            #     self.sat_imgs.sat_img["lswi"],
-            # )
-
-        if "ndvi" in list(self.sat_imgs.sat_img.data_vars):
-            self.sat_imgs.sat_img["ndvi"] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img["ndvi"],
-                                                                         N = N,
-                                                                         time_dim = self.time_key)
             
         return
 
@@ -970,7 +931,10 @@ class vprm_preprocessor:
         )
         return
 
-    def kalman(self, keys, times=None, lonlats=None, n_cpus=None, smooth_all=False):
+    def kalman(self, keys, times=None, 
+               transition_covariance=0.01,
+               observation_covariance=0.05,
+               lonlats=None, n_cpus=None, smooth_all=False):
         """
         Performs the lowess smoothing
 
@@ -1030,6 +994,8 @@ class vprm_preprocessor:
                                             timestamps=self.sat_imgs.sat_img.sel(
                                                 site_names=i
                                             )["timestamps"].values,
+                                            transition_covariance=transition_covariance,
+                                            observation_covariance=observation_covariance,
                                         )
                                         for i in self.sat_imgs.sat_img.site_names.values
                                     ]
@@ -1052,6 +1018,8 @@ class vprm_preprocessor:
                                             timestamps=self.sat_imgs.sat_img[
                                                 "time"
                                             ].values,
+                                            transition_covariance=transition_covariance,
+                                            observation_covariance=observation_covariance,
                                         )
                                         for i in self.sat_imgs.sat_img.site_names.values
                                     ]
@@ -1074,6 +1042,8 @@ class vprm_preprocessor:
                                             timestamps=self.sat_imgs.sat_img[
                                                 "timestamps"
                                             ][:, :, i].values,
+                                            transition_covariance=transition_covariance,
+                                            observation_covariance=observation_covariance,
                                         )
                                         for i, x_coord in enumerate(
                                             self.sat_imgs.sat_img.x.values
@@ -1096,6 +1066,8 @@ class vprm_preprocessor:
                                             timestamps=self.sat_imgs.sat_img[
                                                 "time"
                                             ].values,
+                                            transition_covariance=transition_covariance,
+                                            observation_covariance=observation_covariance,
                                         )
                                         for i, x_coord in enumerate(
                                             self.sat_imgs.sat_img.x.values
