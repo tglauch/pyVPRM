@@ -120,7 +120,7 @@ class brazil_flux_data(flux_tower_data):
         self.lat = site_info_dict[site_name]["lat"]
         self.lon = site_info_dict[site_name]["lon"]
 
-    def add_tower_data(self):
+    def add_tower_data(self, missing_displacement_heights_dict = None):
         if self.vars == "all":
             idata = pd.read_csv(self.data_path, delim_whitespace=True, skiprows=[1])
         else:
@@ -305,7 +305,7 @@ class fluxnet(flux_tower_data):
         ].values
         return
 
-    def add_tower_data(self):
+    def add_tower_data(self, missing_displacement_heights_dict = None):
         if self.vars == "all":
             idata = pd.read_csv(self.data_path)
         else:
@@ -440,7 +440,7 @@ class icos(flux_tower_data):
 
         return
 
-    def add_tower_data(self):
+    def add_tower_data(self, missing_displacement_heights_dict = None):
         if self.vars == "all":
             idata = pd.read_csv(self.data_path, on_bad_lines="skip")
         else:
