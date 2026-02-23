@@ -473,7 +473,7 @@ class vprm_preprocessor:
             {"site_names": [i.get_site_name() for i in self.flux_tower_instances]}
         )
 
-    def sort_and_merge_by_timestamp(self, min_lenght_snow_period=21): 
+    def sort_and_merge_by_timestamp(self, min_lenght_snow_period=None): 
         """
         Called after adding the satellite images with 'add_sat_img'. Sorts the satellite
         images by timestamp and merges everything to one satellite_data_manager.
@@ -539,12 +539,16 @@ class vprm_preprocessor:
             )
         self.time_key = "time"
 
-        N = int(min_lenght_snow_period / np.diff(self.sat_imgs.sat_img['time']).mean())
-        for sat_ind in self.satellite_indices:
-            self.sat_imgs.sat_img[sat_ind] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img[sat_ind],
-                                                                        N = N,
-                                                                        time_dim = self.time_key)
-            
+        if min_lenght_snow_period is not None:
+            N = int(min_lenght_snow_period / np.diff(self.sat_imgs.sat_img['time']).mean())
+            for sat_ind in self.satellite_indices:
+                self.sat_imgs.sat_img[sat_ind] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img[sat_ind],
+                                                                            N = N,
+                                                                            time_dim = self.time_key)
+        else:
+            for sat_ind in self.satellite_indices:
+                da = self.sat_imgs.sat_img[sat_ind]
+                self.sat_imgs.sat_img[sat_ind] = da.where(np.isfinite(da))
         return
 
     def clip_to_box(self, sat_to_crop):
