@@ -473,7 +473,7 @@ class vprm_preprocessor:
             {"site_names": [i.get_site_name() for i in self.flux_tower_instances]}
         )
 
-    def sort_and_merge_by_timestamp(self, min_lenght_snow_period=None): 
+    def sort_and_merge_by_timestamp(self, min_lenght_snow_period=21): 
         """
         Called after adding the satellite images with 'add_sat_img'. Sorts the satellite
         images by timestamp and merges everything to one satellite_data_manager.
