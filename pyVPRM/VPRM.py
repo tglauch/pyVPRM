@@ -319,6 +319,7 @@ class vprm_preprocessor:
         mask_clouds=True,
         mask_snow=True,
         mask_water=True,
+        mask_non_vegetated=False,
     ):
         """
         Add a new satellite image and calculate EVI and LSWI if desired
@@ -395,6 +396,11 @@ class vprm_preprocessor:
                 handler.mask_water()
             else:
                 handler.mask_water(bands_to_mask)
+        if mask_non_vegetated:
+            if bands_to_mask == []:
+                handler.mask_non_vegetated()
+            else:
+                handler.mask_non_vegetated(bands_to_mask)
         if mask_clouds:
             if bands_to_mask == []:
                 handler.mask_clouds()
