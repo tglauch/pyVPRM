@@ -156,7 +156,8 @@ class sentinel2(satellite_data_manager):
             (self.sat_img["scl"] == 0)
             | (self.sat_img["scl"] == 1)
             | (self.sat_img["scl"] == 2)
-            | (self.sat_img["scl"] == 3),
+            | (self.sat_img["scl"] == 3)
+            | (self.sat_img["scl"] == 7),
             np.nan,
             self.sat_img[bands],
         )
