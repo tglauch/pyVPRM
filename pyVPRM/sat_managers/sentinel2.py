@@ -157,7 +157,6 @@ class sentinel2(satellite_data_manager):
             | (self.sat_img["scl"] == 1)
             | (self.sat_img["scl"] == 2)
             | (self.sat_img["scl"] == 3)
-            | (self.sat_img["scl"] == 5)
             | (self.sat_img["scl"] == 7),
             np.nan,
             self.sat_img[bands],
@@ -170,6 +169,17 @@ class sentinel2(satellite_data_manager):
             bands = self.bands
         self.sat_img[bands] = xr.where(
             (self.sat_img["scl"] == 6),
+            np.nan,
+            self.sat_img[bands],
+        )
+        return
+
+    def mask_non_vegetated(self, bands=None):
+        # mask water (and land, i.e. roads and similar)
+        if bands is None:
+            bands = self.bands
+        self.sat_img[bands] = xr.where(
+            (self.sat_img["scl"] == 5),
             np.nan,
             self.sat_img[bands],
         )
