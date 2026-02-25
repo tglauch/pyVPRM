@@ -479,13 +479,13 @@ class vprm_preprocessor:
             {"site_names": [i.get_site_name() for i in self.flux_tower_instances]}
         )
 
-    def sort_and_merge_by_timestamp(self, min_lenght_snow_period=21): 
+    def sort_and_merge_by_timestamp(self, min_length_snow_period=21): 
         """
         Called after adding the satellite images with 'add_sat_img'. Sorts the satellite
         images by timestamp and merges everything to one satellite_data_manager.
 
             Parameters:
-            min_lenght_snow_period defines how long a period should be until gaps are 
+            min_length_snow_period defines how long a period should be until gaps are 
             filled to stabilize lowess fits
             Returns:
                     None
@@ -545,8 +545,8 @@ class vprm_preprocessor:
             )
         self.time_key = "time"
 
-        if min_lenght_snow_period is not None:
-            N = int(min_lenght_snow_period / np.diff(self.sat_imgs.sat_img['time']).mean())
+        if min_length_snow_period is not None:
+            N = int(min_length_snow_period / np.diff(self.sat_imgs.sat_img['time']).mean())
             for sat_ind in self.satellite_indices:
                 self.sat_imgs.sat_img[sat_ind] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img[sat_ind],
                                                                             N = N,
