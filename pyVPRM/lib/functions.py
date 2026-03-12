@@ -11,6 +11,83 @@ import rioxarray
 import warnings
 from pykalman import KalmanFilter
 
+def sel_nearest_valid(ds, lon, lat):
+    """
+    Drop-in replacement for:
+        ds.sel(lon=lon, lat=lat, method="nearest")
+
+    But avoids masked (NaN) grid cells.
+    Returns full Dataset at nearest valid grid cell.
+    """
+
+    # stack spatial dims
+    stacked = ds.stack(_points=("lat", "lon"))
+
+    # compute distance
+    dist = np.sqrt(
+        (stacked.lon - lon) ** 2 +
+        (stacked.lat - lat) ** 2
+    )
+
+    # define validity: at least one variable is non-NaN
+    valid_mask = None
+    for v in stacked.data_vars:
+        mask = ~np.isnan(stacked[v])
+        valid_mask = mask if valid_mask is None else (valid_mask | mask)
+
+    dist = dist.where(valid_mask)
+
+    if dist.isnull().all():
+        raise ValueError("No valid grid cell found.")
+
+    idx = dist.argmin(dim="_points")
+
+    # select and unstack back to dataset structure
+    return stacked.isel(_points=idx).drop_vars("_points")
+
+def central_nxn_mean(da, n, y_dim="y", x_dim="x"):
+    """
+    Compute the mean of the central n x n pixels of an xarray DataArray,
+    ignoring NaNs.
+
+    Parameters
+    ----------
+    da : xr.DataArray
+        Input DataArray with spatial dimensions (y_dim, x_dim).
+        Can have additional dimensions (e.g. time).
+    n : int
+        Window size (must be a positive odd integer, e.g. 3, 5, 7).
+    y_dim : str, default "y"
+        Name of the y (row) dimension.
+    x_dim : str, default "x"
+        Name of the x (column) dimension.
+
+    Returns
+    -------
+    xr.DataArray
+        Mean over the central n x n window, with spatial dimensions removed.
+    """
+    if n <= 0 or n % 2 == 0:
+        raise ValueError("n must be a positive odd integer")
+
+    ny = da.sizes[y_dim]
+    nx = da.sizes[x_dim]
+
+    cy = ny // 2
+    cx = nx // 2
+    r = n // 2
+
+    return (
+        da.isel(
+            **{
+                y_dim: slice(cy - r, cy + r + 1),
+                x_dim: slice(cx - r, cx + r + 1),
+            }
+        )
+        .mean(dim=(y_dim, x_dim), skipna=True)
+    )
+
+
 def get_corners_from_pixel_centers_1D(pixel_centers_1D):
     half_pixel_width = np.unique(np.diff(pixel_centers_1D))[0]/2       #get smallest difference between two pixel centers (why not just take first?)
     pixel_corners = pixel_centers_1D - half_pixel_width                #shift from center to top/left corners
