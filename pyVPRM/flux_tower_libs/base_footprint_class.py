@@ -31,12 +31,20 @@ class base_footprint_manager:
         self.side_length_pixel = self.calculation_grid_side_length/self.calculation_grid_resolution
         self.footprint_on_calculation_grid = None
         self.footprint_on_satellite_grid = None   
+        return
 
     def set_timestamps(self, time_stamps):
         self.time_stamps = time_stamps
         if (self.flux_tower_manager is not None) & (self.time_stamps is not None) :
             self.setup()
         return
+
+    def set_flux_tower_manager(self, flux_tower_manager):
+        self.flux_tower_manager = flux_tower_manager
+        if (self.flux_tower_manager is not None) & (self.time_stamps is not None) :
+            self.setup()
+        return
+        
         
     def setup(self):
         flux_tower_data = self.flux_tower_manager.flux_data.where(self.flux_tower_manager.flux_data != -9999.) #set invalid values to nan, don't drop
@@ -82,6 +90,7 @@ class base_footprint_manager:
         self.u_dir = flux_tower_data['WD'].values
         self.u_star = flux_tower_data['USTAR'].values
         self.sigma_v = flux_tower_data['V_SIGMA'].values
+        return
 
 
     def make_calculation_grid(self):
