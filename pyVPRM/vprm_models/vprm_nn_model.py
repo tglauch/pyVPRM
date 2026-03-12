@@ -43,7 +43,7 @@ class pyvprnn:
     Base class for all pyvprnn models
     """
     def __init__(self, vprm_pre=None, met=None, footprint=None,
-                 flux_tower=None, ffp_handler, met_keys=[]):
+                 flux_tower=None, ffp_handler=None, met_keys=[]):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
         self.met_keys = met_keys
