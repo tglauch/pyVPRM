@@ -98,7 +98,9 @@ class pyvprnn:
         footprint_timestamps = (
             self.ds["datetime_utc"]
             .where(mask, drop=True))
-        
+
+
+        self.ffp_handler.set_timestamps(footprint_timestamps)
         self.ffp_handler.make_calculation_grid()
         self.ffp_handler.calculate_footprints()
         self.ffp_handler.regrid_calculation_grid_to_satellite_grid(self.vprm_pre.sat_imgs.sat_img, base_path)
