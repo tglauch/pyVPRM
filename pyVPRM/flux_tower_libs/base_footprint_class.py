@@ -18,62 +18,71 @@ import cartopy.crs as ccrs
 from pyVPRM.lib.functions import get_corners_from_pixel_centers_1D, make_xesmf_grid
 
 class base_footprint_manager:
-    def __init__(self, time_stamps, flux_tower_manager, calculation_grid_side_length = 5000, calculation_grid_pixels_per_side = 1000, era5_instance=None):
+    def __init__(self, time_stamps=None, flux_tower_manager=None,
+                 calculation_grid_side_length = 5000, calculation_grid_pixels_per_side = 1000, era5_instance=None):
         #print('make footprint manager')
         self.site_ID = flux_tower_manager.site_name
         self.time_stamps = time_stamps
-        if flux_tower_manager is not None:
-            flux_tower_data = flux_tower_manager.flux_data.where(flux_tower_manager.flux_data != -9999.) #set invalid values to nan, don't drop
-            t_Frame = pd.DataFrame(data = self.time_stamps, columns=['datetime_utc'])
-            t_Frame['datetime_utc'] = pd.to_datetime(t_Frame['datetime_utc'], utc = True)
-            flux_tower_data['datetime_utc'] = pd.to_datetime(flux_tower_data['datetime_utc'], utc = True)
-            #print(t_Frame)
-            #print(flux_tower_manager.flux_data.datetime_utc)
-            flux_tower_data = pd.merge(flux_tower_data, t_Frame, on='datetime_utc', how='right') #merge on t_frame
-            self.time_stamps = flux_tower_data['datetime_utc'].values
-            self.z = flux_tower_data['z_footprint'].values 
-            self.lon = flux_tower_manager.lon
-            self.lat = flux_tower_manager.lat
-            self.elev = flux_tower_manager.elev
-            self.z_displacement = flux_tower_manager.mean_z_displacement
-            if 'MO_LENGTH' in flux_tower_data.columns:
-                self.L = flux_tower_data['MO_LENGTH'].values
-            if 'ZL' in flux_tower_data.columns:
-                self.ZL = flux_tower_data['ZL'].values
-            if 'PBLH' in flux_tower_data.columns:
-                self.h_pbl = flux_tower_data['PBLH'].values
-            elif era5_instance is not None:
-                era5_instance.get_data_series(flux_tower_manager.get_lonlat(), 'blh', self.time_stamps)
-            else:
-                self.h_pbl = np.ones(len(self.time_stamps))*1000
-            if 'FETCH_70' in flux_tower_data.columns:
-                self.fetch_70 = flux_tower_data['FETCH_70'].values
-            else:
-                self.fetch_70 = None
-            if 'FETCH_80' in flux_tower_data.columns:
-                self.fetch_80 = flux_tower_data['FETCH_80'].values
-            else:
-                self.fetch_80 = None
-            if 'FETCH_90' in flux_tower_data.columns:
-                self.fetch_90 = flux_tower_data['FETCH_90'].values
-            else:
-                self.fetch_90 = None
-            if 'FETCH_MAX' in flux_tower_data.columns:
-                self.fetch_max = flux_tower_data['FETCH_MAX'].values
-            else:
-                self.fetch_max = None
-            self.u = flux_tower_data['WS'].values
-            self.u_dir = flux_tower_data['WD'].values
-            self.u_star = flux_tower_data['USTAR'].values
-            self.sigma_v = flux_tower_data['V_SIGMA'].values
+        self.flux_tower_manager = flux_tower_manager
+        if (self.flux_tower_manager is not None) & (self.time_stamps is not None) :
+            self.setup()
         self.calculation_grid_side_length = calculation_grid_side_length  #in meters
         self.calculation_grid_resolution = calculation_grid_pixels_per_side
         self.side_length_pixel = self.calculation_grid_side_length/self.calculation_grid_resolution
         self.footprint_on_calculation_grid = None
         self.footprint_on_satellite_grid = None   
 
+    def set_timestamps(self, time_stamps):
+        self.time_stamps = time_stamps
+        if (self.flux_tower_manager is not None) & (self.time_stamps is not None) :
+            self.setup()
+        return
+        
+    def setup(self):
+        flux_tower_data = self.flux_tower_manager.flux_data.where(self.flux_tower_manager.flux_data != -9999.) #set invalid values to nan, don't drop
+        t_Frame = pd.DataFrame(data = self.time_stamps, columns=['datetime_utc'])
+        t_Frame['datetime_utc'] = pd.to_datetime(t_Frame['datetime_utc'], utc = True)
+        flux_tower_data['datetime_utc'] = pd.to_datetime(flux_tower_data['datetime_utc'], utc = True)
+        #print(t_Frame)
+        #print(self.flux_tower_manager.flux_data.datetime_utc)
+        flux_tower_data = pd.merge(flux_tower_data, t_Frame, on='datetime_utc', how='right') #merge on t_frame
+        self.time_stamps = flux_tower_data['datetime_utc'].values
+        self.z = flux_tower_data['z_footprint'].values 
+        self.lon = self.flux_tower_manager.lon
+        self.lat = self.flux_tower_manager.lat
+        self.elev = self.flux_tower_manager.elev
+        self.z_displacement = self.flux_tower_manager.mean_z_displacement
+        if 'MO_LENGTH' in flux_tower_data.columns:
+            self.L = flux_tower_data['MO_LENGTH'].values
+        if 'ZL' in flux_tower_data.columns:
+            self.ZL = flux_tower_data['ZL'].values
+        if 'PBLH' in flux_tower_data.columns:
+            self.h_pbl = flux_tower_data['PBLH'].values
+        elif era5_instance is not None:
+            era5_instance.get_data_series(self.flux_tower_manager.get_lonlat(), 'blh', self.time_stamps)
+        else:
+            self.h_pbl = np.ones(len(self.time_stamps))*1000
+        if 'FETCH_70' in flux_tower_data.columns:
+            self.fetch_70 = flux_tower_data['FETCH_70'].values
+        else:
+            self.fetch_70 = None
+        if 'FETCH_80' in flux_tower_data.columns:
+            self.fetch_80 = flux_tower_data['FETCH_80'].values
+        else:
+            self.fetch_80 = None
+        if 'FETCH_90' in flux_tower_data.columns:
+            self.fetch_90 = flux_tower_data['FETCH_90'].values
+        else:
+            self.fetch_90 = None
+        if 'FETCH_MAX' in flux_tower_data.columns:
+            self.fetch_max = flux_tower_data['FETCH_MAX'].values
+        else:
+            self.fetch_max = None
+        self.u = flux_tower_data['WS'].values
+        self.u_dir = flux_tower_data['WD'].values
+        self.u_star = flux_tower_data['USTAR'].values
+        self.sigma_v = flux_tower_data['V_SIGMA'].values
 
-    
 
     def make_calculation_grid(self):
         #make a finer grid to calculate the footprints on
