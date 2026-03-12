@@ -52,7 +52,7 @@ class pyvprnn:
         self.ffp_handler = ffp_handler
         return
 
-    def get_training_data(self):
+    def get_training_data(self, opath):
         ds = vprm_pre.sat_imgs.sat_img.drop(['scl', 'ndvi']).drop(['time'])
         ds = ds.assign_attrs(crs=ds.rio.crs)
         ds['min_evi'] = vprm_pre.min_max_evi.sat_img['min_evi']
@@ -116,29 +116,25 @@ class pyvprnn:
                       'stl1': lambda x: x - 273.15,
                       'stl2': lambda x: x - 273.15,}
         
-        PAT = 'edh_pat_5279479e4fadb6e2e40eefb6968120720ee447ad535d04ded458097df3d5bfc2757f063e9b05130459593d516b308c79'
-        inst = met_data_handler(PAT=PAT, keys=list(meteo_vars.keys()),
-                                lat_slice=[flux_tower_inst.lat-0.2, flux_tower_inst.lat+0.2],
-                                lon_slice=[flux_tower_inst.lon-0.2, flux_tower_inst.lon+0.2])
-        inst.reduce_time(flux_tower_inst.flux_data['datetime_utc'].iloc[0],
+        self.era5_inst.reduce_time(flux_tower_inst.flux_data['datetime_utc'].iloc[0],
                          flux_tower_inst.flux_data['datetime_utc'].iloc[-1])
         
-        inst.ds_out = sel_nearest_valid(inst.ds_out, lon, lat) #inst.ds_out.sel({'lon': lon, 'lat': lat}, method='nearest') # .sel({'valid_time': ds['datetime_utc']}, method='nearest')
+        self.era5_inst.ds_out = sel_nearest_valid(self.era5_inst.ds_out, lon, lat) 
         for k in list(meteo_vars.keys()):
             if meteo_vars[k] is not None:
-                inst.ds_out[k] = meteo_vars[k](inst.ds_out[k])
+                self.era5_inst.ds_out[k] = meteo_vars[k](self.era5_inst.ds_out[k])
         
-        es = calculate_saturation_vapor_pressure(inst.ds_out['t2m'])
-        ea = calculate_actual_vapor_pressure(inst.ds_out['d2m'])
-        inst.ds_out['vpd'] =  es - ea
-        inst.ds_out['vpd_decorrelated'] = inst.ds_out['vpd']/es
-        inst.ds_out['vpd_decorrelated_log'] = np.log(np.maximum(inst.ds_out['vpd'], 0.01)) - np.log(es)
-        for key in inst.ds_out.keys():
+        es = calculate_saturation_vapor_pressure(self.era5_inst.ds_out['t2m'])
+        ea = calculate_actual_vapor_pressure(self.era5_inst.ds_out['d2m'])
+        self.era5_inst.ds_out['vpd'] =  es - ea
+        self.era5_inst.ds_out['vpd_decorrelated'] = self.era5_inst.ds_out['vpd']/es
+        self.era5_inst.ds_out['vpd_decorrelated_log'] = np.log(np.maximum(self.era5_inst.ds_out['vpd'], 0.01)) - np.log(es)
+        for key in self.era5_inst.ds_out.keys():
             print(key)
-            ds[key+'_era5'] = inst.ds_out[key].sel({'valid_time': ds['datetime_utc']}, method='nearest')
+            ds[key+'_era5'] = self.era5_inst.ds_out[key].sel({'valid_time': ds['datetime_utc']}, method='nearest')
         
         all_meteo_vars = np.concatenate([['t2m', 'ssrd', 'NEE_VUT_REF', gpp_key, 'RECO_DT_VUT_REF'],
-                                        [i+'_era5' for i in inst.ds_out.keys()]])
+                                        [i+'_era5' for i in self.era5_inst.ds_out.keys()]])
         meteos = ds[all_meteo_vars].sel({'datetime_utc': ds['t']})
         
         sat_vars = ['lswi','evi', 'nirv', 'ndre']
