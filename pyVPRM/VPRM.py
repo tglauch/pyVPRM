@@ -546,7 +546,7 @@ class vprm_preprocessor:
         self.time_key = "time"
 
         if min_length_snow_period is not None:
-            N = int(min_lenght_snow_period / np.diff(self.sat_imgs.sat_img['time']).mean())
+            N = int(min_length_snow_period / np.diff(self.sat_imgs.sat_img['time']).mean())
             for sat_ind in self.satellite_indices:
                 self.sat_imgs.sat_img[sat_ind] = replace_inf_runs_ignore_nans(self.sat_imgs.sat_img[sat_ind],
                                                                             N = N,
