@@ -10,140 +10,102 @@ import uuid
 import datetime
 import pandas as pd
 import itertools
-from scipy.optimize import curve_fit
 from loguru import logger
 
-class vprm_base:
+class pyvprnn:
     """
-    Base class for all meteorologies
+    Base class for all pyvprnn models
     """
-
-    def __init__(self, vprm_pre=None, met=None, met_keys=[]):
+    def __init__(self, vprm_pre=None, met=None, footprint=None met_keys=[]):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
-        self.buffer = dict()
-        self.buffer["cur_lat"] = None
-        self.buffer["cur_lon"] = None
-        self.fit_params_dict = fit_params_dict
         self.met_keys = met_keys
+        self.footprint= footprint
         return
 
-    def load_weather_data(self, hour, day, month, year):
-        """
-        Load meteorlocial data from the available (on DKRZ's levante) data storage
+    def get_training_data(self):
 
-            Parameters:
-                    hour (int): hour in UTC
-                    day (int): day in UTC
-                    month (int): month in UTC
-                    year (int): year in UTC
-            Returns:
-                    None
-        """
-        if self.era5_inst is None:
-            logger.info(
-                "Not meteorology given. Provide meteorology instance using the set_met method first."
-            )
 
-        self.era5_inst.change_date(year=year, month=month, day=day, hour=hour)
-        self.hour = hour
-        self.day = day
-        self.year = year
-        self.month = month
-        self.date = "{}-{}-{} {}:00:00".format(year, month, day, hour)
-        return
+    def make_sat_imgs_plot(self, ind_x, ind_y, opath=None):
+        from pyVPRM.lib.fancy_plot import *
+        import matplotlib.colors as mcolors
+        import matplotlib.gridspec as gridspec
         
-    def data_for_fitting(self):
-        self.vprm_pre.sat_imgs.sat_img.load()
-        for s in self.vprm_pre.sites:
-            self.new = True
-            site_name = s.get_site_name()
-            ret_dict = dict()
-            for k in self.vprm_pre.sat_imgs.sat_img.keys():
-                ret_dict[k] = []
-            drop_rows = []
-            for index, row in s.get_data().iterrows():
-                datetime_utc = row["datetime_utc"]
-                img_status = self.vprm_pre._set_sat_img_counter(datetime_utc)
-                if self.era5_inst is not None:
-                    hour = datetime_utc.hour
-                    day = datetime_utc.day
-                    month = datetime_utc.month
-                    year = datetime_utc.year
-                    self.load_weather_data(hour, day, month, year,
-                                           era_keys=self.met_keys)
-                # logger.info(self.counter)
-                if img_status == False:
-                    drop_rows.append(index)
-                    continue
-                temp_data = self.vprm_pre.get_sat_img_values_for_all_keys()
-                for k in temp_data.keys():
-                    ret_dict[k].append(temp_data[k])
-                if self.era5_inst is None:
-                    print('For neural network applications an ERA5 instance needs to be provided')
-                else:
-                    lonlat = s.get_lonlat()
-                    for key in met_keys:
-                        ret_dict[key].append(float(self.era5_inst.get_data(lonlat=(lon, lat), key=key)))
-            s.drop_rows_by_index(drop_rows)
-            s.add_columns(ret_dict)
-        return self.vprm_pre.sites
+        timestamp_start_np = np.datetime64(vprm_inst.timestamp_start)  # convert to numpy.datetime64
+        days_array = vprm_inst.sat_imgs.sat_img['time_gap_filled'].values  # NumPy array
+        
+        plt_times = timestamp_start_np + np.timedelta64(1, 'D') * days_array
+        
+        plt_times_pre_smoothing = timestamp_start_np + np.timedelta64(1, 'D') * handler_pre_smoothing['time']
+        # --- Extract values ---
+        nirv_pre  = handler_pre_smoothing['nirv'].values[:, ind_x, ind_y]
+        evi_pre   = handler_pre_smoothing['evi'].values[:, ind_x, ind_y]
+        ndre_pre  = handler_pre_smoothing['ndre'].values[:, ind_x, ind_y]
+        evi2_pre  = handler_pre_smoothing['evi2'].values[:, ind_x, ind_y]
+        lswi_pre  = handler_pre_smoothing['lswi'].values[:, ind_x, ind_y]
+        scl_vals  = handler_pre_smoothing['scl'].values[:, ind_x, ind_y]
+        
+        nirv_smooth = vprm_inst.sat_imgs.sat_img['nirv'].values[:, ind_x, ind_y]
+        evi_smooth  = vprm_inst.sat_imgs.sat_img['evi'].values[:, ind_x, ind_y]
+        ndre_smooth = vprm_inst.sat_imgs.sat_img['ndre'].values[:, ind_x, ind_y]
+        evi2_smooth = vprm_inst.sat_imgs.sat_img['evi2'].values[:, ind_x, ind_y]
+        lswi_smooth = vprm_inst.sat_imgs.sat_img['lswi'].values[:, ind_x, ind_y]
+        
+        # --- Discrete SCL colormap (0–11) ---
+        cmap = plt.cm.get_cmap('tab20', 12)
+        norm = mcolors.BoundaryNorm(np.arange(-0.5, 12.5, 1), cmap.N)
+        
+        # --- Figure with 3 panels ---
+        fig = plt.figure(figsize=figsize(1.0, 1.0))
+        gs = gridspec.GridSpec(5, 2, width_ratios=[30, 1], wspace=0.05)
+        
+        axes = [fig.add_subplot(gs[i, 0]) for i in range(5)]
+        cax = fig.add_subplot(gs[:, 1])  # colorbar spans all rows
+        
+        indices = [
+            ("NIRv", nirv_pre, nirv_smooth),
+            ("EVI",  evi_pre,  evi_smooth),
+            ("NDRE", ndre_pre, ndre_smooth),
+            ("EVI2", evi2_pre, evi2_smooth),
+            ("LSWI", lswi_pre, lswi_smooth),
+        ]
+        
+        for i, (ax, (name, raw_vals, smooth_vals)) in enumerate(zip(axes, indices)):
+        
+            sc = ax.scatter(
+                plt_times_pre_smoothing,
+                raw_vals,
+                c=scl_vals,
+                cmap=cmap,
+                norm=norm,
+                s=5,
+                alpha=0.9
+            )
+        
+            ax.plot(
+                plt_times,
+                smooth_vals,
+                color='k',
+                lw=1.5
+            )
+        
+            ax.set_ylabel(name)
+            # ax.set_ylim(-0.1, 1)
+            ax.grid(alpha=0.3)
+            # Only show x-axis tick labels for bottom panel
+            if i < 3:
+                ax.set_xticklabels([])
+        
+        axes[-1].set_xlabel("Time")
+        
+        # --- Shared colorbar ---
+        cbar = fig.colorbar(sc, cax=cax, ticks=np.arange(12))
+        cbar.set_label("SCL class")
 
-    def _get_vprm_variables(
-        self,
-        land_cover_type,
-        datetime_utc=None,
-        lat=None,
-        lon=None,
-        add_era_variables=[],
-        regridder_weights=None,
-    ):
-        """
-        Get the variables for the Vegetation Photosynthesis and Respiration Model
+        if opath is not None:
+            fig.savefig(opath=None,dpi=300, bbox_inches='tight')
 
-            Parameters:
-                datetime_utc (datetime): The time of interest
-                lat (float): A latitude (optional)
-                lon (float): A longitude (optional)
-                add_era_variables (list): Additional era variables for modifications of the VPRM
-                regridder_weights (str): Path to the pre-computed weights for the ERA5 regridder
-                tower_dict (dict): Alternatively to a model meteorology and land cover map also the data from the flux tower can be passed in a dictionary Minimaly required are the variables 't2m', 'ssrd', 'land_cover_type'
-            Returns:
-                    None
-        """
-        pass
+    
 
-    def make_vprm_predictions(
-        self,
-        date=None,
-        met_regridder_weights=None,
-        inputs=None,
-        no_flux_veg_types=[0, 8],
-        land_cover_type=None,
-        concatenate_fluxes=True,
-    ):
-        """
-        Using the VPRM fit parameters make predictions on the entire satellite image.
-
-            Parameters:
-                date (datetime object): The date for the prediction
-                regridder_weights (str): Path to the weights file for regridding from ERA5
-                                         to the satellite grid
-                no_flux_veg_types (list of ints): flux type ids that get a default GPP/NEE of 0
-                                                  (e.g. oceans, deserts...)
-            Returns:
-                    None
-        """
-        pass
-
-    def fit_vprm_data(
-        self,
-        data_list,
-        variable_dict,
-        same_length=True,
-        fit_nee=True,
-        fit_resp=True,
-        fit_combined=False,
-        best_fit_params_dict=None,
-    ):
-        pass
+  
+      
