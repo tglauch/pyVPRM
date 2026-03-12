@@ -145,6 +145,7 @@ class pyvprnn:
             .fillna(0.0)
         )
         self.ds["ffp_footprint"] = self.ds["ffp_footprint"].fillna(0.0)
+        self.ds.attrs["crs"] = self.ds.attrs["crs"].to_wkt()
         if opath is not None:
             self.ds.to_netcdf(opath)
     
