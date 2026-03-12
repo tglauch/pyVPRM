@@ -43,13 +43,12 @@ class pyvprnn:
     Base class for all pyvprnn models
     """
     def __init__(self, vprm_pre=None, met=None, footprint=None,
-                 flux_tower=None, ffp_handler=None, met_keys=[]):
+                 flux_tower=None, met_keys=[]):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
         self.met_keys = met_keys
-        self.footprint= footprint
         self.flux_tower = flux_tower
-        self.ffp_handler = ffp_handler
+        self.ffp_handler = footprint
         return
 
     def get_training_data(self, opath=None):
