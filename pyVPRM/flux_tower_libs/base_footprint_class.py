@@ -19,18 +19,20 @@ from pyVPRM.lib.functions import get_corners_from_pixel_centers_1D, make_xesmf_g
 
 class base_footprint_manager:
     def __init__(self, time_stamps=None, flux_tower_manager=None,
-                 calculation_grid_side_length = 5000, calculation_grid_pixels_per_side = 1000, era5_instance=None):
+                 calculation_grid_side_length = 5000, calculation_grid_pixels_per_side = 1000,
+                 era5_instance=None):
         #print('make footprint manager')
         self.site_ID = flux_tower_manager.site_name
         self.time_stamps = time_stamps
         self.flux_tower_manager = flux_tower_manager
+        self.era5_instance = era5_instance
         if (self.flux_tower_manager is not None) & (self.time_stamps is not None) :
             self.setup()
         self.calculation_grid_side_length = calculation_grid_side_length  #in meters
         self.calculation_grid_resolution = calculation_grid_pixels_per_side
         self.side_length_pixel = self.calculation_grid_side_length/self.calculation_grid_resolution
         self.footprint_on_calculation_grid = None
-        self.footprint_on_satellite_grid = None   
+        self.footprint_on_satellite_grid = None  
         return
 
     def set_timestamps(self, time_stamps):
@@ -66,8 +68,8 @@ class base_footprint_manager:
             self.ZL = flux_tower_data['ZL'].values
         if 'PBLH' in flux_tower_data.columns:
             self.h_pbl = flux_tower_data['PBLH'].values
-        elif era5_instance is not None:
-            era5_instance.get_data_series(self.flux_tower_manager.get_lonlat(), 'blh', self.time_stamps)
+        elif self.era5_instance is not None:
+            self.era5_instance.get_data_series(self.flux_tower_manager.get_lonlat(), 'blh', self.time_stamps)
         else:
             self.h_pbl = np.ones(len(self.time_stamps))*1000
         if 'FETCH_70' in flux_tower_data.columns:
@@ -287,7 +289,7 @@ class base_footprint_manager:
         ani = animation.FuncAnimation(fig, update, frames=len(self.time_stamps), interval=1)
         ani.save(os.path.join(output_image_path,'{}_{}_footprint_percentiles.gif'.format(self.site_ID, self.footprint_model)), writer='pillow')
 
-#------------------------------------------------------------------------------------------------------------------------------------------------------
+#-------------------------
 
 
 def get_corners_from_pixel_centers_1D(pixel_centers_1D):
