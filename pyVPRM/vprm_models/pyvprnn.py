@@ -94,10 +94,9 @@ class pyvprnn:
         self.ds['min_lswi'] =  self.vprm_pre.min_lswi.sat_img['min_lswi']
         self.ds['max_lswi'] =  self.vprm_pre.max_lswi.sat_img['max_lswi']
 
-        flux_tower_keys = ['t2m', 'ssrd', 'ZL', 'FETCH_90',
-                          'NEE_VUT_REF', 'GPP_DT_VUT_REF', 'RECO_DT_VUT_REF',
-                           'NEE_VUT_REF_QC', 'GPP_NT_VUT_REF',
-                           'RECO_NT_VUT_REF']
+        flux_tower_keys = flux_tower.flux_data.keys()
+        # ['t2m', 'ssrd', 'ZL', 'FETCH_90', 'NEE_VUT_REF', 'GPP_DT_VUT_REF', 'RECO_DT_VUT_REF',
+        #  'NEE_VUT_REF_QC', 'GPP_NT_VUT_REF', 'RECO_NT_VUT_REF']
         for key in flux_tower_keys:
             try:
                 self.ds[key] = xr.DataArray(
@@ -144,8 +143,8 @@ class pyvprnn:
         self.era5_inst.reduce_time(self.flux_tower.flux_data['datetime_utc'].iloc[0],
                          self.flux_tower.flux_data['datetime_utc'].iloc[-1])
         
-        self.era5_inst.ds_out = sel_nearest_valid(self.era5_inst.ds_out,
-                                                  flux_tower.lon, flux_tower.lat) 
+        # self.era5_inst.ds_out = sel_nearest_valid(self.era5_inst.ds_out,
+        #                                           flux_tower.lon, flux_tower.lat) 
         for k in list(meteo_vars.keys()):
             if meteo_vars[k] is not None:
                 self.era5_inst.ds_out[k] = meteo_vars[k](self.era5_inst.ds_out[k])
@@ -165,6 +164,9 @@ class pyvprnn:
             .fillna(0.0))
         self.ds["ffp_footprint"] = self.ds["ffp_footprint"].fillna(0.0)
         self.ds.attrs["crs"] = self.ds.attrs["crs"].to_wkt()
+        self.ds.attrs["site"] = flux_tower.site_name
+        self.ds.attrs["site_lat"] = flux_tower.lat    
+        self.ds.attrs["site_lon"] = flux_tower.lon  
         self.ds.to_netcdf(os.path.join(base_path, 'out.nc'))
         return
 
@@ -344,7 +346,7 @@ class pyvprnn:
         for j, val in enumerate(f_values):
             X_met_tmp = X_met_c.copy()
             X_met_tmp[:, feature_idx] = val
-            y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp, X_mask_c], verbose=0)[output_var_idx].squeeze()
+            y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp[:,np.newaxis, np.newaxis,:], X_mask_c], verbose=0)[output_var_idx].squeeze()
             ice[:, j] = y_pred
     
         # Normalize ICE curves (optional)
