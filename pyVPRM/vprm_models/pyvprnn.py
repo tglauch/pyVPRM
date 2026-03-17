@@ -177,7 +177,7 @@ class pyvprnn:
         time_dim="t",
         x_dim="x",
         y_dim="y",
-        mass_fraction=0.999,
+        mass_fraction=0.99,
     ):
         """
         Crop dataset to smallest rectangular region containing
@@ -346,7 +346,7 @@ class pyvprnn:
         for j, val in enumerate(f_values):
             X_met_tmp = X_met_c.copy()
             X_met_tmp[:, feature_idx] = val
-            y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp[:,np.newaxis, np.newaxis,:], X_mask_c], verbose=0)[output_var_idx].squeeze()
+            y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp[:,np.newaxis, np.newaxis,:], X_mask_c], verbose=0)[output_var_idx].squeeze() # 
             ice[:, j] = y_pred
     
         # Normalize ICE curves (optional)

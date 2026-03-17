@@ -20,6 +20,7 @@ from tensorflow.keras import layers, Model
 from tensorflow.keras import backend as K
 from tensorflow.keras.models import load_model
 from pyproj import Transformer
+from pyVPRM.lib.functions import sel_nearest_valid
 
 import tensorflow as tf
 
@@ -201,7 +202,7 @@ class pyvprnn_v1(pyvprnn):
             flag_low_class4 = (frac_4 >= 0.1).astype(int)
             self.ds["class4_ge10pct"] = flag_low_class4
 
-        self.crop_to_mass_fraction(mass_fraction=0.99)
+        self.crop_to_mass_fraction(mass_fraction=0.98)
         spatial_sum = self.ds_cropped['ffp_footprint'].sum(dim=['x', 'y'])
         self.ds_cropped['ffp_footprint'] = self.ds_cropped['ffp_footprint'] / spatial_sum
         
@@ -231,58 +232,225 @@ class pyvprnn_v1(pyvprnn):
         print('Valid times per year:', counts)
         return
 
-    def split_train_test(self, test_fraction=0.2):
+    def split_train_val_test(self, test_frac=0.15, val_frac=0.15, random_state=42):
+        """
+        Randomly split timestamps into train, validation, and test sets.
+    
+        Fractions refer to total number of timestamps.
+        """
+    
         times = np.array(self.common_times)
-        split_idx = int(len(times)*(1-test_fraction))
-        self.train_times = times[:split_idx]
-        self.test_times = times[split_idx:]
+    
+        # --- shuffle ---
+        rng = np.random.default_rng(random_state)
+        shuffled = rng.permutation(times)
+    
+        n = len(shuffled)
+        n_test = int(n * test_frac)
+        n_val = int(n * val_frac)
+    
+        # --- split ---
+        self.test_times = shuffled[:n_test]
+        self.val_times = shuffled[n_test:n_test + n_val]
+        self.train_times = shuffled[n_test + n_val:]
+    
         return
 
-    def split_train_test_by_year(self, num_test_years=1,
-                                 test_year=None, test_size=0.2):
+    def split_train_val_test_daywise(self, test_frac=0.15, val_frac=0.15, random_state=42):
+        """
+        Split timestamps into train, validation, and test sets purely day by day.
+    
+        Parameters
+        ----------
+        test_frac : float
+            Fraction of total unique days for test set
+        val_frac : float
+            Fraction of total unique days for validation set
+        random_state : int
+            Random seed for reproducibility
+        """
     
         times = pd.to_datetime(self.common_times)
-        years = np.unique(times.year)
-
-        if test_year is not None:
-            test_years = [y for y in years if y not in test_year] 
-            train_years = [y for y in years if y not in test_years]  
-        else:
-            test_years = years[-num_test_years:]
-            train_years = [y for y in years if y not in test_years]    
-            
-        self.train_times = times[times.year.isin(train_years)]
-        self.test_times = times[times.year.isin(test_years)]
+        days = times.normalize()
+        unique_days = np.array(np.unique(days))
+        n_days = len(unique_days)
+    
+        # --- compute number of days for each set ---
+        n_test = int(np.round(n_days * test_frac))
+        n_val = int(np.round(n_days * val_frac))
+        n_train = n_days - n_test - n_val
+    
+        # --- shuffle days ---
+        rng = np.random.default_rng(random_state)
+        shuffled_days = rng.permutation(unique_days)
+    
+        # --- assign splits ---
+        test_days = shuffled_days[:n_test]
+        val_days = shuffled_days[n_test:n_test + n_val]
+        train_days = shuffled_days[n_test + n_val:]
+    
+        # --- map timestamps to splits ---
+        self.test_times = times[np.isin(days, test_days)]
+        self.val_times = times[np.isin(days, val_days)]
+        self.train_times = times[np.isin(days, train_days)]
         return
 
-    def balance_training_set(self):
     
-        df = pd.DataFrame({"time": self.train_times})
-        df["hour"] = df["time"].dt.hour
-        df["month"] = df["time"].dt.month
+    def split_train_val_test_years(self, num_test_years=1, test_year=None, val_size=0.2, random_state=42, max_factor=5):
+        """
+        Split timestamps into train, validation, and test sets.
         
-        max_count = df.groupby(["month","hour"]).size().max()
-        max_factor = 5  # each row can appear at most 5x
+        - Test set is based on full years (no leakage).
+        - Train/validation split is by unique days within train years.
+        - Oversampling is applied independently to train and validation sets.
+        """
+        times = pd.to_datetime(self.common_times)
+        years = np.unique(times.year)
+        if test_year is not None:
+            test_years = [y for y in years if y in test_year]
+            train_years = [y for y in years if y not in test_years]
+            print(train_years)
+        else:
+            test_years = years[-num_test_years:]
+            train_years = [y for y in years if y not in test_years]
+    
+        # Split timestamps
+        self.test_times = times[times.year.isin(test_years)]
+        train_times = times[times.year.isin(train_years)]
+    
+        days = train_times.normalize()
+        unique_days = np.unique(days)
+    
+        train_days, val_days = train_test_split(
+            unique_days,
+            test_size=val_size,
+            random_state=random_state
+        )
+    
+        self.train_times = train_times[np.isin(days, train_days)]
+        self.val_times = train_times[np.isin(days, val_days)]
+        return
+
+    def balance_subset(self, times_subset, random_state=41):
+        """
+        Oversample times_subset to balance t2m.
+        """
+        # --- get t2m values at the given times ---
+        t2m_vals = self.ds_cropped["t2m"].sel(datetime_utc=times_subset).values
+    
+        # --- make dataframe for balancing ---
+        df = pd.DataFrame({
+            "time": times_subset,
+            "t2m": t2m_vals
+        })
+    
+        # --- define bins for t2m ---
+        bins_fixed = pd.cut(df["t2m"], bins=np.arange(-2, 31, 4))  # e.g., -2 to 30 °C in 4°C bins
+        max_count = df.groupby(bins_fixed).size().max()
+        max_factor = 2  # allow each row to appear up to 2x
+    
+        # --- oversample within bins ---
+        df_balanced = (
+            df.groupby(bins_fixed, group_keys=False)
+              .apply(lambda x: x.sample(
+                  min(len(x)*max_factor, max_count),
+                  replace=True,
+                  random_state=random_state))
+        )
+    
+        # --- shuffle rows ---
+        df_balanced = df_balanced.sample(frac=1, random_state=random_state)
+    
+        return df_balanced["time"].values
+
+    def compute_sample_weights_t2m_vpd_global(
+        self,
+        times_train,
+        times_apply,
+        vpd_var='VPD_F',
+        temp_var='t2m',
+        n_bins=20,
+        alpha=0.5,
+        clip_max=5.0
+    ):
+        """
+        Compute sample weights based on train distribution, apply to train or validation.
+    
+        Parameters
+        ----------
+        times_train : array-like
+            Times to compute the reference rank/frequency (training set)
+        times_apply : array-like
+            Times to map and compute weights for (train or validation)
+        """
+        # --- extract values ---
+        df_train = pd.DataFrame({
+            "t2m": self.ds_cropped[temp_var].sel(datetime_utc=times_train).values,
+            "vpd": self.ds_cropped[vpd_var].sel(datetime_utc=times_train).values
+        })
         
-        balanced = (
-            df.groupby(["month","hour"], group_keys=False)
-              .apply(lambda x: x.sample(min(len(x)*max_factor, max_count), replace=True, random_state=42))
+        df_apply = pd.DataFrame({
+            "t2m": self.ds_cropped[temp_var].sel(datetime_utc=times_apply).values,
+            "vpd": self.ds_cropped[vpd_var].sel(datetime_utc=times_apply).values
+        })
+    
+        # --- rank thresholds based on train ---
+        t_edges = np.linspace(df_train["t2m"].min(), df_train["t2m"].max(), n_bins+1)
+        vpd_edges = np.linspace(df_train["vpd"].min(), df_train["vpd"].max(), n_bins+1)
+        
+        # --- bin the train set to compute frequency ---
+        t_bin_train = np.digitize(df_train["t2m"], bins=t_edges) - 1
+        vpd_bin_train = np.digitize(df_train["vpd"], bins=vpd_edges) - 1
+        joint_train = t_bin_train * 10000 + vpd_bin_train
+        counts = pd.Series(joint_train).value_counts()
+    
+        # --- bin the apply set using same edges ---
+        t_bin_apply = np.digitize(df_apply["t2m"], bins=t_edges) - 1
+        vpd_bin_apply = np.digitize(df_apply["vpd"], bins=vpd_edges) - 1
+        joint_apply = t_bin_apply * 10000 + vpd_bin_apply
+    
+        # --- inverse frequency weighting ---
+        weights = pd.Series(joint_apply).map(lambda x: 1 / (counts.get(x, 1) ** alpha))
+
+        weights = weights / weights.mean()
+        weights = np.clip(weights, 0, clip_max)
+        return weights.values
+    
+    def calculate_train_val_weights(self, alpha=0.5, clip_max=5.0):
+        """
+        Apply oversampling independently to train and validation sets
+        after day-level splitting.
+        """
+        self.train_weights = self.compute_sample_weights_t2m_vpd_global(
+            times_train=self.train_times,
+            times_apply=self.train_times,
+            alpha=alpha,
+            clip_max=clip_max,
         )
 
-        balanced = balanced.sample(frac=1, random_state=42)
-        self.train_times_balanced = balanced["time"].values       
+        print(self.train_weights.min(), self.train_weights.max())
+        self.valid_weights = self.compute_sample_weights_t2m_vpd_global(
+            times_train=self.train_times,  # same reference
+            times_apply=self.val_times,
+            alpha=alpha,
+            clip_max=clip_max,
+        )
+        return
+    
+    def balance_train_val(self):
+        """
+        Apply oversampling independently to train and validation sets
+        after day-level splitting.
+        """
+        self.train_times_balanced = self.balance_subset(self.train_times)
+        self.valid_times_balanced = self.balance_subset(self.val_times)
         return
 
     def build_nn_arrays(self, times, met_dim=1):
-        self.met_vars = ["t2m", "ssrd", 'VPD_F',
-                         'SWC_F_MDS_1', 'SWC_F_MDS_2']
-        
-        # --- transformer from ds CRS to WGS84 ---
-        transformer = Transformer.from_crs(self.ds_cropped.crs, "EPSG:4326", always_xy=True)
-        X, Y = np.meshgrid(self.ds_cropped.x.values, self.ds_cropped.y.values)
-        lon, lat = transformer.transform(X, Y)
-        lon_da = xr.DataArray(lon, dims=("y", "x"))
-        lat_da = xr.DataArray(lat, dims=("y", "x"))
+        self.met_vars = ["t2m", "ssrd", 'RH_from_VDP', #VPD_F',
+                         'swvl1_era5', 'swvl2_era5'] # 
+        # self.met_vars = ["t2m", "ssrd", 'VPD_F',
+        #                  'swvl1_era5', 'swvl2_era5']
         
         # --- times as DataArray ---
         times = xr.DataArray(times, dims="datetime_utc")
@@ -291,19 +459,26 @@ class pyvprnn_v1(pyvprnn):
         if met_dim == 1:
             for var in self.met_vars:
                 if var.endswith("_era5"):
-                    selected = self.ds_cropped[var].sel(
-                        lon=ds_cropped.attrs['site_lon'],
-                        lat=lat_da.attrs['site_lat'],
-                        method="nearest"
-                    ).sel(datetime_utc=times)
+                    selected = sel_nearest_valid(self.ds_cropped[[var]],
+                        lon=self.ds_cropped.attrs['site_lon'],
+                        lat=self.ds_cropped.attrs['site_lat'])[var].sel(datetime_utc=times)
                     arr = selected.values
+                   #arr = self.ds_cropped[var].sel(datetime_utc=times).values
                 else:
                     arr = self.ds_cropped[var].sel(datetime_utc=times).values
                     if var == "ssrd":
                         arr = arr / 1000
+                    elif var in ['SWC_F_MDS_1', 'SWC_F_MDS_2']:
+                        arr = arr / 10
                 met_stack_list.append(arr)
                 print(var, arr.min(), arr.max())
         elif met_dim ==2 :
+            # --- transformer from ds CRS to WGS84 ---
+            transformer = Transformer.from_crs(self.ds_cropped.crs, "EPSG:4326", always_xy=True)
+            X, Y = np.meshgrid(self.ds_cropped.x.values, self.ds_cropped.y.values)
+            lon, lat = transformer.transform(X, Y)
+            lon_da = xr.DataArray(lon, dims=("y", "x"))
+            lat_da = xr.DataArray(lat, dims=("y", "x"))
             for var in self.met_vars:
                 if var.endswith("_era5"):
                     selected = self.ds_cropped[var].sel(
@@ -318,6 +493,8 @@ class pyvprnn_v1(pyvprnn):
                     arr = np.broadcast_to(arr_1d[:, None, None], (len(times), len(self.ds_cropped.y), len(self.ds_cropped.x)))
                     if var == "ssrd":
                         arr = arr / 1000
+                    elif var in ['SWC_F_MDS_1', 'SWC_F_MDS_2']:
+                        arr = arr / 10
                 print(var, arr.min(), arr.max())
                 met_stack_list.append(arr)
         else:
@@ -359,20 +536,15 @@ class pyvprnn_v1(pyvprnn):
               test_size=0.15,
               train_params={'batch_size': 42,
                             'epochs': 1000,
-                            'patience': 20,
+                            'patience': 10,
+                            'plateau_patience': 5,
                             'learning rate': 5e-4},
               random_state=41):
         
-        self.train_times_balanced_split, self.valid_times_balanced_split = train_test_split(
-            self.train_times_balanced,
-            test_size=test_size,
-            random_state=42
-        )
-        
-        Xmet_train, Xsat_train, fp_train, flux_mask_train, y_train =\
-            self.build_nn_arrays(self.train_times_balanced_split, met_dim=1)
+        Xmet_train, Xsat_train, fp_train, flux_mask_train, y_train = \
+            self.build_nn_arrays(self.train_times, met_dim=1) # 
         Xmet_test, Xsat_test, fp_test, flux_mask_test, y_test =\
-            self.build_nn_arrays(self.valid_times_balanced_split, met_dim=1)
+            self.build_nn_arrays(self.val_times, met_dim=1) # 
         
         # =========================================================
         # Indices
@@ -382,13 +554,13 @@ class pyvprnn_v1(pyvprnn):
         n_met_features = Xmet_train.shape[-1]
         
         ssrd_idx = self.met_vars.index("ssrd")
-        swvl2_idx = self.met_vars.index('SWC_F_MDS_2')
-        swvl1_idx = self.met_vars.index('SWC_F_MDS_1')
+        swvl2_idx = self.met_vars.index('swvl2_era5')
+        swvl1_idx = self.met_vars.index('swvl1_era5')
         #skt_idx = met_vars.index("skt_era5")
         
         # RECO must NOT see ssrd
         reco_met_idx = [i for i in range(n_met_features)
-                        if i not in [ssrd_idx, swvl2_idx]] 
+                        if i not in [ssrd_idx, swvl2_idx]] # swvl2_idx 
         
         gpp_met_idx = [i for i in range(n_met_features)
                         if i not in [swvl1_idx]] #skt_idx
@@ -398,51 +570,49 @@ class pyvprnn_v1(pyvprnn):
         # Inputs
         # =========================================================
         
-        sat_input = layers.Input(
+        self.sat_input = layers.Input(
             shape=(None, None, n_sat_features),
             name="sat")
         
-        met_input = layers.Input(
+        self.met_input = layers.Input(
             shape=(None, None, n_met_features),
             name="met")
         
-        fp_input = layers.Input(
+        self.fp_input = layers.Input(
             shape=(None, None),
             name="fp")
         
-        flux_mask_input = layers.Input(
+        self.flux_mask_input = layers.Input(
             shape=(None, None),
             name="flux_mask")
         
-        flux_mask_exp = ExpandLastDim(name="flux_mask_exp")(flux_mask_input)
+        flux_mask_exp = ExpandLastDim(name="flux_mask_exp")(self.flux_mask_input)
         
-        fp_exp = ExpandLastDim(name="fp_exp")(fp_input)
+        fp_exp = ExpandLastDim(name="fp_exp")(self.fp_input)
         
         # =========================================================
         # Meteorology branches
         # =========================================================
         
-        # ---- GPP: full meteorology (including ssrd)
         met_gpp = SelectFeatures(
             gpp_met_idx,
-            name="met_gpp")(met_input)
-        met_bc_gpp = BroadcastToImage(name="met_bc_gpp")([met_gpp, sat_input])
+            name="met_gpp")(self.met_input)
+        met_bc_gpp = BroadcastToImage(name="met_bc_gpp")([met_gpp, self.sat_input])
         
-        # ---- RECO: meteorology WITHOUT ssrd
         met_reco = SelectFeatures(
             reco_met_idx,
-            name="met_reco")(met_input)
-        met_bc_reco = BroadcastToImage(name="met_bc_reco")([met_reco, sat_input])
+            name="met_reco")(self.met_input)
+        met_bc_reco = BroadcastToImage(name="met_bc_reco")([met_reco, self.sat_input])
         
         # =========================================================
         # GPP branch
         # =========================================================
         
         x_gpp = layers.Concatenate(name="gpp_concat")([
-            sat_input,
+            self.sat_input,
             met_bc_gpp])
         
-        for i in range(8):
+        for i in range(6):
             x_gpp = layers.Conv2D(
                 32, filter_size, padding="same",
                 activation="softplus",
@@ -483,7 +653,7 @@ class pyvprnn_v1(pyvprnn):
         # =========================================================
         
         x_reco = layers.Concatenate(name="reco_concat")([
-            sat_input,
+            self.sat_input,
             met_bc_reco])
         
         for i in range(6):
@@ -497,7 +667,8 @@ class pyvprnn_v1(pyvprnn):
             activation="softplus",
             kernel_initializer="he_normal",
             bias_initializer=tf.keras.initializers.Constant(0.7),
-            name="x_reco_map",)(x_reco)
+            name="x_reco_map")(x_reco)
+        
         reco_map = layers.Multiply(name="reco_map")([
             x_reco_map,
             flux_mask_exp])
@@ -520,17 +691,20 @@ class pyvprnn_v1(pyvprnn):
         # Model
         # =========================================================
         
-        model = Model(
-            inputs=[sat_input, met_input, fp_input, flux_mask_input],
+        self.model = Model(
+            inputs=[self.sat_input, self.met_input,
+                    self.fp_input, self.flux_mask_input], #  
             outputs=nee)
+
+        from tensorflow.keras.losses import Huber
         
-        model.compile(
+        self.model.compile(
             optimizer=tf.keras.optimizers.Adam(
                 learning_rate=train_params['learning rate']),
-            loss="mse",
-            metrics=["mae"])
+            loss='mse', #Huber(delta=5.0), #'mse'
+            metrics=["mae", "mse"])
         
-        model.summary()
+        self.model.summary()
         
         early_stop = EarlyStopping(
             monitor='val_loss',
@@ -542,17 +716,22 @@ class pyvprnn_v1(pyvprnn):
         reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss",
             factor=0.5,
-            patience=10,
+            patience=train_params['plateau_patience'],
             min_lr=1e-6,
             verbose=1)
         
-        history = model.fit(
-            x=[Xsat_train, Xmet_train, fp_train, flux_mask_train],
-            y=y_train,
-            validation_data=([Xsat_test, Xmet_test, fp_test, flux_mask_test], y_test),
+        history = self.model.fit(
+            x=[Xsat_train, Xmet_train, fp_train, flux_mask_train], # 
+            y=y_train, 
+            validation_data=([Xsat_test, Xmet_test, fp_test, flux_mask_test],
+                             y_test, self.valid_weights), # 
             epochs=train_params['epochs'],
             batch_size=batch_size,
+            sample_weight=self.train_weights,
             callbacks=[early_stop, reduce_lr])
+        
+        best_val_loss = min(history.history["val_loss"])
+        print("Best val_loss:", best_val_loss)
         
         # Convert to DataFrame
         hist_df = pd.DataFrame(history.history)
@@ -565,10 +744,10 @@ class pyvprnn_v1(pyvprnn):
                 save_path_history,
                 index=False)
         self.pixel_model = Model(
-            inputs=[sat_input, met_input, flux_mask_input],
+            inputs=[self.sat_input, self.met_input, self.flux_mask_input],
             outputs=[
-                model.get_layer("gpp_map").output,
-                model.get_layer("reco_map").output],
+                self.model.get_layer("gpp_map").output,
+                self.model.get_layer("reco_map").output],
             name="pixel_flux_model")
 
         self.pixel_model.save(save_path_model)
