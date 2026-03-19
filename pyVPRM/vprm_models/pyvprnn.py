@@ -49,6 +49,272 @@ class pyvprnn:
     def set_ds(self, ds):
         self.ds = ds
 
+    def prepare_base_dataset(self, opath=None):
+        self.ds['nirv_90pct'] = self.ds['nirv'].quantile(0.9, dim='time_gap_filled')
+        self.ds['nirv_10pct'] = self.ds['nirv'].quantile(0.1, dim='time_gap_filled')
+        scl = self.ds["scl"]
+        valid_classes = [4, 5, 6]
+        # mask invalid classes
+        scl_valid = scl.where(scl.isin(valid_classes))
+        counts = xr.concat(
+            [(scl_valid == c).sum(dim="time") for c in valid_classes],
+            dim="class"
+        )
+        counts = counts.assign_coords({"class": valid_classes})
+        if "dominant_scl" not in self.ds:
+            dominant = counts.idxmax(dim="class")
+            self.ds['dominant_scl'] = dominant
+        if "class4_ge10pct" not in self.ds:
+            count_4 = counts.sel({"class": 4})
+            total_valid = counts.sum(dim="class")
+            frac_4 = count_4 / total_valid
+            flag_low_class4 = (frac_4 >= 0.1).astype(int)
+            self.ds["class4_ge10pct"] = flag_low_class4
+
+        self.crop_to_mass_fraction(mass_fraction=0.99)
+        spatial_sum = self.ds_cropped['ffp_footprint'].sum(dim=['x', 'y'])
+        self.ds_cropped['ffp_footprint'] = self.ds_cropped['ffp_footprint'] / spatial_sum
+        
+        fracs = (self.ds_cropped['land_cover_map']*self.ds_cropped['ffp_footprint']).sum(dim=['x', 'y'])
+        valid_footprint_mask = fracs.sum(dim='vprm_classes') != 0
+        
+        vars_datetime = [
+            v for v in self.ds.data_vars
+            if "datetime_utc" in self.ds[v].dims]
+        
+        valid_mask = self.ds_cropped["NEE_VUT_REF_QC"] == 0
+        valid_times = self.ds_cropped.datetime_utc.where(valid_mask, drop=True)
+        self.ds_cropped = self.ds_cropped.sel(datetime_utc=valid_times)
+        
+        common_times = valid_times.sel(
+            datetime_utc=valid_times.isin(self.ds_cropped['ffp_footprint'].where(valid_footprint_mask, drop=True)['t']))
+        
+        footprint_sum = (
+            self.ds_cropped['ffp_footprint']
+            .sel(t=common_times)
+            .sum(dim=['x', 'y']))
+        
+        common_times = common_times.where(footprint_sum > 1e-5, drop=True)
+        self.common_times = pd.to_datetime(common_times.values)
+        
+        counts = pd.Series(self.common_times.values).dt.year.value_counts().sort_index()
+        print('Valid times per year:', counts)
+        return
+
+    def split_train_val_test(self, test_frac=0.15, val_frac=0.15, random_state=42):
+        """
+        Randomly split timestamps into train, validation, and test sets.
+    
+        Fractions refer to total number of timestamps.
+        """
+    
+        times = np.array(self.common_times)
+    
+        # --- shuffle ---
+        rng = np.random.default_rng(random_state)
+        shuffled = rng.permutation(times)
+    
+        n = len(shuffled)
+        n_test = int(n * test_frac)
+        n_val = int(n * val_frac)
+    
+        # --- split ---
+        self.test_times = shuffled[:n_test]
+        self.val_times = shuffled[n_test:n_test + n_val]
+        self.train_times = shuffled[n_test + n_val:]
+    
+        return
+
+    def split_train_val_test_daywise(self, test_frac=0.15, val_frac=0.15, random_state=42):
+        """
+        Split timestamps into train, validation, and test sets purely day by day.
+    
+        Parameters
+        ----------
+        test_frac : float
+            Fraction of total unique days for test set
+        val_frac : float
+            Fraction of total unique days for validation set
+        random_state : int
+            Random seed for reproducibility
+        """
+    
+        times = pd.to_datetime(self.common_times)
+        days = times.normalize()
+        unique_days = np.array(np.unique(days))
+        n_days = len(unique_days)
+    
+        # --- compute number of days for each set ---
+        n_test = int(np.round(n_days * test_frac))
+        n_val = int(np.round(n_days * val_frac))
+        n_train = n_days - n_test - n_val
+    
+        # --- shuffle days ---
+        rng = np.random.default_rng(random_state)
+        shuffled_days = rng.permutation(unique_days)
+    
+        # --- assign splits ---
+        test_days = shuffled_days[:n_test]
+        val_days = shuffled_days[n_test:n_test + n_val]
+        train_days = shuffled_days[n_test + n_val:]
+    
+        # --- map timestamps to splits ---
+        self.test_times = times[np.isin(days, test_days)]
+        self.val_times = times[np.isin(days, val_days)]
+        self.train_times = times[np.isin(days, train_days)]
+        return
+
+    
+    def split_train_val_test_years(self, num_test_years=1, test_year=None, val_size=0.2, random_state=42, max_factor=5):
+        """
+        Split timestamps into train, validation, and test sets.
+        
+        - Test set is based on full years (no leakage).
+        - Train/validation split is by unique days within train years.
+        - Oversampling is applied independently to train and validation sets.
+        """
+        times = pd.to_datetime(self.common_times)
+        years = np.unique(times.year)
+        if test_year is not None:
+            test_years = [y for y in years if y in test_year]
+            train_years = [y for y in years if y not in test_years]
+            print(train_years)
+        else:
+            test_years = years[-num_test_years:]
+            train_years = [y for y in years if y not in test_years]
+    
+        # Split timestamps
+        self.test_times = times[times.year.isin(test_years)]
+        train_times = times[times.year.isin(train_years)]
+    
+        days = train_times.normalize()
+        unique_days = np.unique(days)
+    
+        train_days, val_days = train_test_split(
+            unique_days,
+            test_size=val_size,
+            random_state=random_state
+        )
+    
+        self.train_times = train_times[np.isin(days, train_days)]
+        self.val_times = train_times[np.isin(days, val_days)]
+        return
+
+    def balance_subset(self, times_subset, random_state=41):
+        """
+        Oversample times_subset to balance t2m.
+        """
+        # --- get t2m values at the given times ---
+        t2m_vals = self.ds_cropped["t2m"].sel(datetime_utc=times_subset).values
+    
+        # --- make dataframe for balancing ---
+        df = pd.DataFrame({
+            "time": times_subset,
+            "t2m": t2m_vals
+        })
+    
+        # --- define bins for t2m ---
+        bins_fixed = pd.cut(df["t2m"], bins=np.arange(-2, 31, 4))  # e.g., -2 to 30 °C in 4°C bins
+        max_count = df.groupby(bins_fixed).size().max()
+        max_factor = 2  # allow each row to appear up to 2x
+    
+        # --- oversample within bins ---
+        df_balanced = (
+            df.groupby(bins_fixed, group_keys=False)
+              .apply(lambda x: x.sample(
+                  min(len(x)*max_factor, max_count),
+                  replace=True,
+                  random_state=random_state))
+        )
+    
+        # --- shuffle rows ---
+        df_balanced = df_balanced.sample(frac=1, random_state=random_state)
+    
+        return df_balanced["time"].values
+
+    def compute_sample_weights_t2m_vpd_global(
+        self,
+        times_train,
+        times_apply,
+        vpd_var='VPD_F',
+        temp_var='t2m',
+        n_bins=20,
+        alpha=0.5,
+        clip_max=5.0
+    ):
+        """
+        Compute sample weights based on train distribution, apply to train or validation.
+    
+        Parameters
+        ----------
+        times_train : array-like
+            Times to compute the reference rank/frequency (training set)
+        times_apply : array-like
+            Times to map and compute weights for (train or validation)
+        """
+        # --- extract values ---
+        df_train = pd.DataFrame({
+            "t2m": self.ds_cropped[temp_var].sel(datetime_utc=times_train).values,
+            "vpd": self.ds_cropped[vpd_var].sel(datetime_utc=times_train).values
+        })
+        
+        df_apply = pd.DataFrame({
+            "t2m": self.ds_cropped[temp_var].sel(datetime_utc=times_apply).values,
+            "vpd": self.ds_cropped[vpd_var].sel(datetime_utc=times_apply).values
+        })
+    
+        # --- rank thresholds based on train ---
+        t_edges = np.linspace(df_train["t2m"].min(), df_train["t2m"].max(), n_bins+1)
+        vpd_edges = np.linspace(df_train["vpd"].min(), df_train["vpd"].max(), n_bins+1)
+        
+        # --- bin the train set to compute frequency ---
+        t_bin_train = np.digitize(df_train["t2m"], bins=t_edges) - 1
+        vpd_bin_train = np.digitize(df_train["vpd"], bins=vpd_edges) - 1
+        joint_train = t_bin_train * 10000 + vpd_bin_train
+        counts = pd.Series(joint_train).value_counts()
+    
+        # --- bin the apply set using same edges ---
+        t_bin_apply = np.digitize(df_apply["t2m"], bins=t_edges) - 1
+        vpd_bin_apply = np.digitize(df_apply["vpd"], bins=vpd_edges) - 1
+        joint_apply = t_bin_apply * 10000 + vpd_bin_apply
+    
+        # --- inverse frequency weighting ---
+        weights = pd.Series(joint_apply).map(lambda x: 1 / (counts.get(x, 1) ** alpha))
+
+        weights = weights / weights.mean()
+        weights = np.clip(weights, 0, clip_max)
+        return weights.values
+    
+    def calculate_train_val_weights(self, alpha=0.5, clip_max=5.0):
+        """
+        Apply oversampling independently to train and validation sets
+        after day-level splitting.
+        """
+        self.train_weights = self.compute_sample_weights_t2m_vpd_global(
+            times_train=self.train_times,
+            times_apply=self.train_times,
+            alpha=alpha,
+            clip_max=clip_max,
+        )
+
+        print(self.train_weights.min(), self.train_weights.max())
+        self.valid_weights = self.compute_sample_weights_t2m_vpd_global(
+            times_train=self.train_times,  # same reference
+            times_apply=self.val_times,
+            alpha=alpha,
+            clip_max=clip_max,
+        )
+        return
+    
+    def balance_train_val(self):
+        """
+        Apply oversampling independently to train and validation sets
+        after day-level splitting.
+        """
+        self.train_times_balanced = self.balance_subset(self.train_times)
+        self.valid_times_balanced = self.balance_subset(self.val_times)
+        return
+
     def get_data_for_upscaling(self,vprm_pre=None, met=None, datetimes=None,
                                base_path=None, meteo_vars=None):
         self.era5_inst = met
@@ -88,15 +354,8 @@ class pyvprnn:
         self.ffp_handler = footprint
         self.ds = self.vprm_pre.sat_imgs.sat_img.drop(['time'])
         self.ds = self.ds.assign_attrs(crs=self.ds.rio.crs)
-        self.ds['min_evi'] =self.vprm_pre.min_max_evi.sat_img['min_evi']
-        self.ds['max_evi'] = self.vprm_pre.min_max_evi.sat_img['max_evi']
-        self.ds['th'] = self.vprm_pre.min_max_evi.sat_img['th']
-        self.ds['min_lswi'] =  self.vprm_pre.min_lswi.sat_img['min_lswi']
-        self.ds['max_lswi'] =  self.vprm_pre.max_lswi.sat_img['max_lswi']
 
         flux_tower_keys = flux_tower.flux_data.keys()
-        # ['t2m', 'ssrd', 'ZL', 'FETCH_90', 'NEE_VUT_REF', 'GPP_DT_VUT_REF', 'RECO_DT_VUT_REF',
-        #  'NEE_VUT_REF_QC', 'GPP_NT_VUT_REF', 'RECO_NT_VUT_REF']
         for key in flux_tower_keys:
             try:
                 self.ds[key] = xr.DataArray(
@@ -116,13 +375,6 @@ class pyvprnn:
             days_since_t0=(
                 "datetime_utc",
                 ((self.ds.datetime_utc.data - t0) / np.timedelta64(1, "D")).astype(int)))
-        
-        if 'GPP_DT_VUT_REF' in list(self.ds.keys()):
-            gpp_key = 'GPP_DT_VUT_REF'
-        elif 'GPP_NT_VUT_REF' in list(self.ds.keys()):
-            gpp_key = 'GPP_NT_VUT_REF'
-        else:
-            print('No GPP variable available')
         
         mask = (
             (self.ds["NEE_VUT_REF_QC"] < 2) &

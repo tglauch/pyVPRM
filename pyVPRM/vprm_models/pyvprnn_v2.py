@@ -127,7 +127,7 @@ class GPPPenalty(layers.Layer):
         })
         return cfg
 
-class pyvprnn_v1(pyvprnn):
+class pyvprnn_v2(pyvprnn):
     """
     Base class for all pyvprnn models
     """
@@ -182,92 +182,74 @@ class pyvprnn_v1(pyvprnn):
                 bbox_inches="tight")
         return
 
-    def build_nn_arrays(self, times, met_dim=1):
-        self.met_vars = ["t2m", "ssrd", 'RH_from_VDP',  #
-                         'swvl1_era5', 'swvl2_era5', 'stl2_era5'] # 'TS_F_MDS_1''skt_era5'
-        # self.met_vars = ["t2m", "ssrd", 'VPD_F',
-        #                  'swvl1_era5', 'swvl2_era5']
-        
-        # --- times as DataArray ---
-        times = xr.DataArray(times, dims="datetime_utc")
+    def build_nn_arrays(self, times, met_dim=1, window=48, subsample_step=2):
+        self.met_vars = ["t2m", "ssrd", "VPD_F", "swvl1_era5", "swvl2_era5", 'stl2_era5']
+        self.lagged_met_vars = ["t2m", 'swvl1_era5', 'stl2_era5'] #'TS_F_MDS_1']
+    
+        times = np.sort(np.asarray(times))
+        idx = self.ds.indexes["datetime_utc"].get_indexer(times)
+        assert np.all(idx >= 0), "Some times not found in ds_cropped.datetime_utc"
+    
         met_stack_list = []
-
         if met_dim == 1:
             for var in self.met_vars:
                 if var.endswith("_era5"):
-                    selected = sel_nearest_valid(self.ds_cropped[[var]],
-                        lon=self.ds_cropped.attrs['site_lon'],
-                        lat=self.ds_cropped.attrs['site_lat'])[var].sel(datetime_utc=times)
+                    selected = sel_nearest_valid(
+                        self.ds[[var]],
+                        lon=self.ds_cropped.attrs["site_lon"],
+                        lat=self.ds_cropped.attrs["site_lat"]
+                    )[var]
                     arr = selected.values
-                   #arr = self.ds_cropped[var].sel(datetime_utc=times).values
                 else:
-                    arr = self.ds_cropped[var].sel(datetime_utc=times).values
+                    arr = self.ds[var].values
                     if var == "ssrd":
                         arr = arr / 1000
-                    elif var in ['SWC_F_MDS_1', 'SWC_F_MDS_2']:
-                        arr = arr / 10
-                met_stack_list.append(arr)
+                met_stack_list.append(arr.astype(np.float32))
                 print(var, arr.min(), arr.max())
-        elif met_dim ==2 :
-            # --- transformer from ds CRS to WGS84 ---
-            transformer = Transformer.from_crs(self.ds_cropped.crs, "EPSG:4326", always_xy=True)
-            X, Y = np.meshgrid(self.ds_cropped.x.values, self.ds_cropped.y.values)
-            lon, lat = transformer.transform(X, Y)
-            lon_da = xr.DataArray(lon, dims=("y", "x"))
-            lat_da = xr.DataArray(lat, dims=("y", "x"))
-            for var in self.met_vars:
-                if var.endswith("_era5"):
-                    selected = self.ds_cropped[var].sel(
-                        lon=lon_da,
-                        lat=lat_da,
-                        method="nearest"
-                    ).sel(datetime_utc=times)
-                    arr = selected.values
-                    print(np.shape(arr))
-                else:
-                    arr_1d = self.ds_cropped[var].sel(datetime_utc=times).values
-                    arr = np.broadcast_to(arr_1d[:, None, None], (len(times), len(self.ds_cropped.y), len(self.ds_cropped.x)))
-                    if var == "ssrd":
-                        arr = arr / 1000
-                    elif var in ['SWC_F_MDS_1', 'SWC_F_MDS_2']:
-                        arr = arr / 10
-                print(var, arr.min(), arr.max())
-                met_stack_list.append(arr)
-        else:
-            print('met_dim kwarg should be 1 or 2')
-        
-        # --- stack along the last axis to get (time, y, x, n_vars) ---
+    
         met_stack = np.stack(met_stack_list, axis=-1).astype(np.float32)
+        lag_indices = [self.met_vars.index(var) for var in self.lagged_met_vars]
+    
+        target_idx = idx[window:]
+        target_times = times[window:]
+    
+        Xmet = met_stack[target_idx]
+    
+        Xmet_windowed = np.stack([
+            met_stack[i - window:i, lag_indices][::subsample_step]
+            for i in target_idx
+        ]).astype(np.float32)
+    
         if met_dim == 1:
-            met_stack = met_stack[:,np.newaxis, np.newaxis, :]
-        print(np.shape(met_stack))
-        # meteos = self.ds_cropped[self.met_vars].sel(datetime_utc=times)
-        # met_stack = np.stack([meteos[v].values for v in self.met_vars], axis=-1)
-        # met_stack[:,self.met_vars.index("ssrd")] = met_stack[:,self.met_vars.index("ssrd")]/1000
-        y_target = self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=times).values.astype(np.float32)
+            Xmet = Xmet[:, None, None, :]
+    
+        y_target = self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=target_times).values.astype(np.float32)
     
         footprints = (
             self.ds_cropped["ffp_footprint"]
-            .sel(t=times)
+            .sel(t=target_times)
             .fillna(0.0)
             .values
-        ).astype(np.float32)
+            .astype(np.float32)
+        )
     
-        sat_vars = ['lswi','nirv','ndre']
-        sat_imgs = self.ds_cropped[sat_vars].sel(
-            {'time_gap_filled': self.ds_cropped.sel(datetime_utc=times)['days_since_t0']})
+        sat_vars = ["lswi", "nirv", "ndre"]
+        days = self.ds_cropped.sel(datetime_utc=target_times)["days_since_t0"]
+        sat_imgs = self.ds_cropped[sat_vars].sel(time_gap_filled=days)
     
         sat_stack = np.stack([sat_imgs[v].values for v in sat_vars], axis=-1)
-        lc = np.moveaxis(self.ds_cropped['land_cover_map'].values, 0, -1)
+    
+        lc = np.moveaxis(self.ds_cropped["land_cover_map"].values, 0, -1)
         T = sat_stack.shape[0]
         lc_time = np.repeat(lc[None, ...], T, axis=0)
-        nirv_max = np.repeat(self.ds_cropped['nirv_90pct'].values[None, ..., None], T, axis=0)
-        nirv_min = np.repeat(self.ds_cropped['nirv_10pct'].values[None, ..., None], T, axis=0)
+        nirv_max = np.repeat(self.ds_cropped["nirv_90pct"].values[None, ..., None], T, axis=0)
+        nirv_min = np.repeat(self.ds_cropped["nirv_10pct"].values[None, ..., None], T, axis=0)
+    
         sat_stack = np.concatenate([sat_stack, nirv_max, nirv_min, lc_time], axis=-1).astype(np.float32)
-        print(np.shape(sat_stack))
         flux_mask = np.repeat(self.ds_cropped["class4_ge10pct"].values[None, ...], T, axis=0).astype(np.float32)
     
-        return met_stack, sat_stack, footprints, flux_mask, y_target
+        return Xmet, Xmet_windowed, sat_stack, footprints, flux_mask, y_target
+
          
     def train(self, save_path_model,
               save_path_history=None,
@@ -279,9 +261,9 @@ class pyvprnn_v1(pyvprnn):
                             'learning rate': 5e-4},
               random_state=41):
         
-        Xmet_train, Xsat_train, fp_train, flux_mask_train, y_train = \
+        Xmet_train, Xmet_windowed_train, Xsat_train, fp_train, flux_mask_train, y_train = \
             self.build_nn_arrays(self.train_times, met_dim=1) # 
-        Xmet_test, Xsat_test, fp_test, flux_mask_test, y_test =\
+        Xmet_test, Xmet_windowed_test, Xsat_test, fp_test, flux_mask_test, y_test =\
             self.build_nn_arrays(self.val_times, met_dim=1) # 
         
         # =========================================================
@@ -294,8 +276,7 @@ class pyvprnn_v1(pyvprnn):
         ssrd_idx = self.met_vars.index("ssrd")
         swvl2_idx = self.met_vars.index('swvl2_era5')
         swvl1_idx = self.met_vars.index('swvl1_era5')
-        skt_idx = self.met_vars.index('stl2_era5') # "skt_era5"
-        t2m_idx = self.met_vars.index("t2m")        
+        skt_idx = self.met_vars.index("stl2_era5")
         
         # RECO must NOT see ssrd
         reco_met_idx = [i for i in range(n_met_features)
@@ -316,6 +297,10 @@ class pyvprnn_v1(pyvprnn):
         self.met_input = layers.Input(
             shape=(None, None, n_met_features),
             name="met")
+
+        self.met_input_lagged = layers.Input(
+            shape=(Xmet_windowed_train.shape[1], Xmet_windowed_train.shape[2]),
+            name="met_lagged")
         
         self.fp_input = layers.Input(
             shape=(None, None),
@@ -342,14 +327,37 @@ class pyvprnn_v1(pyvprnn):
             reco_met_idx,
             name="met_reco")(self.met_input)
         met_bc_reco = BroadcastToImage(name="met_bc_reco")([met_reco, self.sat_input])
+
+        # =========================================================
+        # Shared encoder: lagged temperature + soil moisture
+        # =========================================================
+        temp_swvl_idx = [self.lagged_met_vars.index("swvl1_era5"),
+                         self.lagged_met_vars.index('stl2_era5')]
+        x_met_lagged = SelectFeatures(temp_swvl_idx, name="select_temp_swvl")(self.met_input_lagged)
         
+        x_met_lagged = layers.Conv1D(
+            filters=16, kernel_size=4, padding="causal",
+            activation="softplus", kernel_initializer="he_normal",
+            name="conv1d_temp_swvl_1"
+        )(x_met_lagged)
+        
+        x_met_lagged = layers.Conv1D(
+            filters=16, kernel_size=4, padding="causal",
+            activation="softplus", kernel_initializer="he_normal",
+            name="conv1d_temp_swvl_2"
+        )(x_met_lagged)
+
+        x_met_lagged = layers.Dense(3, activation="softplus", name="dense_lagged_summary")(x_met_lagged[:, -1, :])
+
+        met_bc_lagged = BroadcastToImage(name="met_bc_lagged")([x_met_lagged, self.sat_input])
+                
         # =========================================================
         # GPP branch
         # =========================================================
         
         x_gpp = layers.Concatenate(name="gpp_concat")([
             self.sat_input,
-            met_bc_gpp])
+            met_bc_gpp,])
         
         for i in range(6):
             x_gpp = layers.Conv2D(
@@ -393,7 +401,8 @@ class pyvprnn_v1(pyvprnn):
         
         x_reco = layers.Concatenate(name="reco_concat")([
             self.sat_input,
-            met_bc_reco])
+            met_bc_reco,
+            met_bc_lagged])
         
         for i in range(6):
             x_reco = layers.Conv2D(
@@ -432,6 +441,7 @@ class pyvprnn_v1(pyvprnn):
         
         self.model = Model(
             inputs=[self.sat_input, self.met_input,
+                    self.met_input_lagged,
                     self.fp_input, self.flux_mask_input], #  
             outputs=nee)
 
@@ -460,13 +470,15 @@ class pyvprnn_v1(pyvprnn):
             verbose=1)
         
         history = self.model.fit(
-            x=[Xsat_train, Xmet_train, fp_train, flux_mask_train], # 
+            x=[Xsat_train, Xmet_train, Xmet_windowed_train,
+               fp_train, flux_mask_train], # 
             y=y_train, 
-            validation_data=([Xsat_test, Xmet_test, fp_test, flux_mask_test],
-                             y_test, self.valid_weights), # 
+            validation_data=([Xsat_test, Xmet_test, Xmet_windowed_test, 
+                              fp_test, flux_mask_test],
+                             y_test), #  self.valid_weights
             epochs=train_params['epochs'],
             batch_size=batch_size,
-            sample_weight=self.train_weights,
+          #  sample_weight=self.train_weights,
             callbacks=[early_stop, reduce_lr])
         
         best_val_loss = min(history.history["val_loss"])
@@ -483,7 +495,9 @@ class pyvprnn_v1(pyvprnn):
                 save_path_history,
                 index=False)
         self.pixel_model = Model(
-            inputs=[self.sat_input, self.met_input, self.flux_mask_input],
+            inputs=[self.sat_input, self.met_input,
+                    self.met_input_lagged,
+                    self.flux_mask_input],
             outputs=[
                 self.model.get_layer("gpp_map").output,
                 self.model.get_layer("reco_map").output],
