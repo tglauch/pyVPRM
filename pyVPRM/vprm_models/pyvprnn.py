@@ -11,7 +11,7 @@ import datetime
 import pandas as pd
 import itertools
 from loguru import logger
-from pyVPRM.lib.functions import sel_nearest_valid, central_nxn_mean
+from pyVPRM.lib.functions import sel_nearest_valid, central_nxn_mean, vpd_hpa_to_rh
 from pyVPRM.lib.fancy_plot import *
 
 def all_files_exist(item):
@@ -43,15 +43,17 @@ class pyvprnn:
     """
     Base class for all pyvprnn models
     """
-    def __init__(self, ):
+    def __init__(self, lag_window=0):
+        self.lag_window=lag_window
         return
 
     def set_ds(self, ds):
         self.ds = ds
 
-    def prepare_base_dataset(self, opath=None):
+    def prepare_base_dataset(self, nee_qc_flags=[0], opath=None):
         self.ds['nirv_90pct'] = self.ds['nirv'].quantile(0.9, dim='time_gap_filled')
         self.ds['nirv_10pct'] = self.ds['nirv'].quantile(0.1, dim='time_gap_filled')
+        self.ds['RH_from_VDP']= vpd_hpa_to_rh(self.ds['VPD_F'], self.ds['t2m'])/100
         scl = self.ds["scl"]
         valid_classes = [4, 5, 6]
         # mask invalid classes
@@ -82,7 +84,7 @@ class pyvprnn:
             v for v in self.ds.data_vars
             if "datetime_utc" in self.ds[v].dims]
         
-        valid_mask = self.ds_cropped["NEE_VUT_REF_QC"] == 0
+        valid_mask = (self.ds_cropped["NEE_VUT_REF_QC"].isin(nee_qc_flags))
         valid_times = self.ds_cropped.datetime_utc.where(valid_mask, drop=True)
         self.ds_cropped = self.ds_cropped.sel(datetime_utc=valid_times)
         
@@ -96,76 +98,194 @@ class pyvprnn:
         
         common_times = common_times.where(footprint_sum > 1e-5, drop=True)
         self.common_times = pd.to_datetime(common_times.values)
+        self.common_times = np.sort(self.common_times)
+        if self.lag_window > 0:
+            self.common_times = self.common_times[self.lag_window:]
         
-        counts = pd.Series(self.common_times.values).dt.year.value_counts().sort_index()
+        counts = pd.Series(self.common_times).dt.year.value_counts().sort_index()
+        self.ds_cropped = self.ds_cropped.sel(datetime_utc=self.common_times)
+        self.ds_cropped = self.ds_cropped.sel(t=self.common_times)
         print('Valid times per year:', counts)
         return
 
-    def split_train_val_test(self, test_frac=0.15, val_frac=0.15, random_state=42):
+    def split_train_val_test(self, k=5, val_frac=0.15, random_state=42):
         """
-        Randomly split timestamps into train, validation, and test sets.
+        K-fold random (non-daywise) cross-validation:
+            - Randomly shuffles timestamps
+            - Splits them into k equally sized test folds
+            - For each fold:
+                 - test = fold f
+                 - remaining = train+val
+                 - val_frac of remaining -> validation set
+                 - the rest -> training set
+        
+        Output format matches daywise K-fold:
+            self.cv_folds = [
+                { "train_times", "val_times", "test_times" },
+                ...
+            ]
+        """
     
-        Fractions refer to total number of timestamps.
-        """
+        import numpy as np
     
         times = np.array(self.common_times)
     
-        # --- shuffle ---
+        # --- shuffle all timestamps ---
         rng = np.random.default_rng(random_state)
-        shuffled = rng.permutation(times)
+        times_shuffled = rng.permutation(times)
     
-        n = len(shuffled)
-        n_test = int(n * test_frac)
-        n_val = int(n * val_frac)
+        n = len(times_shuffled)
     
-        # --- split ---
-        self.test_times = shuffled[:n_test]
-        self.val_times = shuffled[n_test:n_test + n_val]
-        self.train_times = shuffled[n_test + n_val:]
+        # --- partition indices into k folds (balanced) ---
+        fold_sizes = np.full(k, n // k, dtype=int)
+        fold_sizes[: n % k] += 1
+    
+        folds_idx = []
+        start = 0
+        for fs in fold_sizes:
+            folds_idx.append(times_shuffled[start : start + fs])
+            start += fs
+    
+        # --- generate cv_folds in same API as daywise kfold ---
+        self.cv_folds = []
+    
+        for i in range(k):
+            test_times = np.sort(folds_idx[i])
+    
+            # remaining timestamps (train + val)
+            remaining = np.concatenate([folds_idx[j] for j in range(k) if j != i])
+    
+            # shuffle remaining for val split
+            rem_shuffled = rng.permutation(remaining)
+    
+            n_rem = len(rem_shuffled)
+            n_val = int(n_rem * val_frac)
+    
+            val_times   = np.sort(rem_shuffled[:n_val])
+            train_times = np.sort(rem_shuffled[n_val:])
+    
+            self.cv_folds.append(
+                dict(
+                    train_times=train_times,
+                    val_times=val_times,
+                    test_times=test_times,
+                    train_weights=np.ones(len(train_times)),
+                    val_weights=np.ones(len(val_times)),
+                )
+            )
     
         return
 
-    def split_train_val_test_daywise(self, test_frac=0.15, val_frac=0.15, random_state=42):
+    def split_train_val_test_daywise(
+            self,
+            k=5,
+            val_frac=0.15,
+            block_days=1,
+            shuffle=True,
+            random_state=42
+        ):
         """
-        Split timestamps into train, validation, and test sets purely day by day.
+        K-fold daywise cross-validation with separate validation folds.
     
-        Parameters
-        ----------
-        test_frac : float
-            Fraction of total unique days for test set
-        val_frac : float
-            Fraction of total unique days for validation set
-        random_state : int
-            Random seed for reproducibility
+        For each fold f:
+            - test blocks = fold f
+            - remaining blocks split into train/val using val_frac
+    
+        Sets:
+            self.cv_folds = [
+                {
+                    "train_times": np.array([...]),
+                    "val_times":   np.array([...]),
+                    "test_times":  np.array([...])
+                },
+                ...
+            ]
         """
     
+        import numpy as np
+        import pandas as pd
+    
+        # --- ensure datetime ---
         times = pd.to_datetime(self.common_times)
-        days = times.normalize()
-        unique_days = np.array(np.unique(days))
-        n_days = len(unique_days)
+        times = times.sort_values()
     
-        # --- compute number of days for each set ---
-        n_test = int(np.round(n_days * test_frac))
-        n_val = int(np.round(n_days * val_frac))
-        n_train = n_days - n_test - n_val
+        # --- extract unique days ---
+        dates = np.array([t.date() for t in times])
+        unique_days = np.unique(dates)
     
-        # --- shuffle days ---
-        rng = np.random.default_rng(random_state)
-        shuffled_days = rng.permutation(unique_days)
+        # --- construct N-day blocks ---
+        day_blocks = [
+            unique_days[i:i + block_days]
+            for i in range(0, len(unique_days), block_days)
+        ]
+        day_blocks = np.array(day_blocks, dtype=object)
     
-        # --- assign splits ---
-        test_days = shuffled_days[:n_test]
-        val_days = shuffled_days[n_test:n_test + n_val]
-        train_days = shuffled_days[n_test + n_val:]
+        # --- shuffle blocks ---
+        if shuffle:
+            rng = np.random.default_rng(random_state)
+            day_blocks = rng.permutation(day_blocks)
+        else:
+            rng = np.random.default_rng(random_state)  # still needed for val split
     
-        # --- map timestamps to splits ---
-        self.test_times = times[np.isin(days, test_days)]
-        self.val_times = times[np.isin(days, val_days)]
-        self.train_times = times[np.isin(days, train_days)]
+        # --- split blocks into k test-folds ---
+        n_blocks = len(day_blocks)
+        fold_sizes = np.full(k, n_blocks // k, dtype=int)
+        fold_sizes[:n_blocks % k] += 1
+    
+        block_folds = []
+        start = 0
+        for fs in fold_sizes:
+            block_folds.append(day_blocks[start:start + fs])
+            start += fs
+    
+        # --- map day → timestamps ---
+        day_to_times = {}
+        for t in times:
+            d = t.date()
+            day_to_times.setdefault(d, []).append(t)
+    
+        def blocks_to_times(blocks):
+            out = []
+            for block in blocks:
+                for d in block:
+                    out.extend(day_to_times[d])
+            return np.array(out, dtype="datetime64[ns]")
+    
+        # --- build all folds ---
+        self.cv_folds = []
+    
+        for i in range(k):
+            # Test blocks for this fold
+            test_blocks = block_folds[i]
+    
+            # Remaining blocks for train+val
+            remaining_blocks = np.concatenate(
+                [block_folds[j] for j in range(k) if j != i]
+            )
+    
+            # --- validation split inside remaining blocks ---
+            n_rem = len(remaining_blocks)
+            n_val = int(val_frac * n_rem)
+    
+            # shuffle remaining blocks for val split
+            rem_shuffled = rng.permutation(remaining_blocks)
+            val_blocks = rem_shuffled[:n_val]
+            train_blocks = rem_shuffled[n_val:]
+    
+            # --- convert to timestamps ---
+            fold = dict(
+                train_times=np.sort(blocks_to_times(train_blocks)),
+                val_times=np.sort(blocks_to_times(val_blocks)),
+                test_times=np.sort(blocks_to_times(test_blocks)),
+                train_weights=np.ones(len(blocks_to_times(train_blocks))),
+                val_weights=np.ones(len(blocks_to_times(val_blocks))),
+            )
+    
+            self.cv_folds.append(fold)
         return
-
     
-    def split_train_val_test_years(self, num_test_years=1, test_year=None, val_size=0.2, random_state=42, max_factor=5):
+    def split_train_val_test_years(self, num_test_years=1, test_year=None,
+                                   val_size=0.2, random_state=42, max_factor=5):
         """
         Split timestamps into train, validation, and test sets.
         
@@ -196,8 +316,8 @@ class pyvprnn:
             random_state=random_state
         )
     
-        self.train_times = train_times[np.isin(days, train_days)]
-        self.val_times = train_times[np.isin(days, val_days)]
+        self.train_times = np.sort(train_times[np.isin(days, train_days)])
+        self.val_times = np.sort(train_times[np.isin(days, val_days)])
         return
 
     def balance_subset(self, times_subset, random_state=41):
@@ -344,7 +464,6 @@ class pyvprnn:
         self.ds.attrs["crs"] = self.ds.attrs["crs"].to_wkt()
         self.ds.to_netcdf(os.path.join(base_path, 'out.nc'))
         return
-
     
     def get_training_data(self, vprm_pre=None, met=None, footprint=None,
                  flux_tower=None, base_path=None, meteo_vars=None):
@@ -550,6 +669,7 @@ class pyvprnn:
         X_sat,
         X_met,
         X_mask,
+        X_met_lagged,
         feature_idx,
         condition_mask=None,
         normalize_ice_curves=False,
@@ -570,10 +690,14 @@ class pyvprnn:
             X_met_c = X_met[condition_mask]
             X_sat_c = X_sat[condition_mask]
             X_mask_c = X_mask[condition_mask]
+            if X_met_lagged is not None:
+                X_met_lagged_c = X_met_lagged[condition_mask]
         else:
             X_met_c = X_met
             X_sat_c = X_sat
             X_mask_c = X_mask
+            if X_met_lagged is not None:
+                X_met_lagged_c = X_met_lagged
     
         n_samples = X_met_c.shape[0]
     
@@ -586,6 +710,8 @@ class pyvprnn:
             X_met_c = X_met_c[subsample_idx]
             X_sat_c = X_sat_c[subsample_idx]
             X_mask_c = X_mask_c[subsample_idx]
+            if X_met_lagged is not None:
+                X_met_lagged_c = X_met_lagged_c[condition_mask]
         else:
             subsample_idx = np.arange(n_samples)
     
@@ -598,7 +724,11 @@ class pyvprnn:
         for j, val in enumerate(f_values):
             X_met_tmp = X_met_c.copy()
             X_met_tmp[:, feature_idx] = val
-            y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp[:,np.newaxis, np.newaxis,:], X_mask_c], verbose=0)[output_var_idx].squeeze() # 
+            if X_met_lagged is not None:
+                y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp[:,np.newaxis, np.newaxis,:],
+                                                   X_met_lagged_c, X_mask_c], verbose=0)[output_var_idx].squeeze() # 
+            else:
+                y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp[:,np.newaxis, np.newaxis,:], X_mask_c], verbose=0)[output_var_idx].squeeze() # 
             ice[:, j] = y_pred
     
         # Normalize ICE curves (optional)

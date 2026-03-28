@@ -11,6 +11,36 @@ import rioxarray
 import warnings
 from pykalman import KalmanFilter
 
+def vpd_hpa_to_rh(vpd_hpa, T):
+    """
+    Convert VPD (hPa) to relative humidity (%) given temperature (°C).
+    
+    Parameters
+    ----------
+    vpd_hpa : float or np.array
+        Vapor pressure deficit in hPa
+    T : float or np.array
+        Air temperature in Celsius
+        
+    Returns
+    -------
+    RH : float or np.array
+        Relative humidity in %
+    """
+    # Convert VPD from hPa → kPa
+    vpd = vpd_hpa / 10.0
+    
+    # Saturation vapor pressure (kPa)
+    e_s = 0.6108 * np.exp(17.27 * T / (T + 237.3))
+    
+    # Actual vapor pressure
+    e_a = e_s - vpd
+    
+    # Relative humidity (%)
+    RH = (e_a / e_s) * 100
+    RH = np.clip(RH, 0, 100)  # constrain to 0–100%
+    return RH
+
 def sel_nearest_valid(ds, lon, lat):
     """
     Drop-in replacement for:

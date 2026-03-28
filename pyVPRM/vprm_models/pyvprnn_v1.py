@@ -30,14 +30,11 @@ class BroadcastToImage(tf.keras.layers.Layer):
         m_shape = tf.shape(m)
         ref_shape = tf.shape(ref)
         
-        # Rank 2 → (batch, features)
         if m.shape.rank == 2:
             m = tf.expand_dims(tf.expand_dims(m, axis=1), axis=1)  # (B,1,1,F)
             m = tf.tile(m, [1, ref_shape[1], ref_shape[2], 1])
         
-        # Rank 4 → (batch, H, W, features)
         elif m.shape.rank == 4:
-            # Broadcast along any dimension that is 1
             tile_h = tf.math.floordiv(ref_shape[1], m_shape[1])  # dynamic division
             tile_w = tf.math.floordiv(ref_shape[2], m_shape[2])
             tile_h = tf.where(m_shape[1] == ref_shape[1], 1, tile_h)
@@ -134,6 +131,8 @@ class pyvprnn_v1(pyvprnn):
     
     def __init__(self):
         super().__init__()
+        self.train_weights = None
+        self.valid_weights = None
         return
 
     def load_model(self, path):
@@ -184,7 +183,7 @@ class pyvprnn_v1(pyvprnn):
 
     def build_nn_arrays(self, times, met_dim=1):
         self.met_vars = ["t2m", "ssrd", 'RH_from_VDP',  #
-                         'swvl1_era5', 'swvl2_era5', 'stl2_era5'] # 'TS_F_MDS_1''skt_era5'
+                         'swvl1_era5', 'swvl2_era5']  # , 'stl2_era5' # 'TS_F_MDS_1'
         # self.met_vars = ["t2m", "ssrd", 'VPD_F',
         #                  'swvl1_era5', 'swvl2_era5']
         
@@ -241,9 +240,6 @@ class pyvprnn_v1(pyvprnn):
         if met_dim == 1:
             met_stack = met_stack[:,np.newaxis, np.newaxis, :]
         print(np.shape(met_stack))
-        # meteos = self.ds_cropped[self.met_vars].sel(datetime_utc=times)
-        # met_stack = np.stack([meteos[v].values for v in self.met_vars], axis=-1)
-        # met_stack[:,self.met_vars.index("ssrd")] = met_stack[:,self.met_vars.index("ssrd")]/1000
         y_target = self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=times).values.astype(np.float32)
     
         footprints = (
@@ -271,18 +267,33 @@ class pyvprnn_v1(pyvprnn):
          
     def train(self, save_path_model,
               save_path_history=None,
-              test_size=0.15,
               train_params={'batch_size': 42,
                             'epochs': 1000,
                             'patience': 10,
                             'plateau_patience': 5,
                             'learning rate': 5e-4},
+              cv_fold=0,
               random_state=41):
-        
+
+
+        train_times = self.cv_folds[cv_fold]['train_times']
+        qc_train = self.ds_cropped["NEE_VUT_REF_QC"].sel(datetime_utc=train_times)
+        wrong_nigttime_train = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=train_times)<0) &\
+                          (self.ds_cropped["ssrd"].sel(datetime_utc=train_times)==0))
+        train_times_qc0 = train_times[(qc_train == 0) & ~wrong_nigttime_train]
         Xmet_train, Xsat_train, fp_train, flux_mask_train, y_train = \
-            self.build_nn_arrays(self.train_times, met_dim=1) # 
+            self.build_nn_arrays(train_times_qc0, met_dim=1) # 
+
+        val_times = self.cv_folds[cv_fold]['val_times']
+        qc_val = self.ds_cropped["NEE_VUT_REF_QC"].sel(datetime_utc=val_times)
+        wrong_nigttime_val = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=val_times)<0) &\
+                          (self.ds_cropped["ssrd"].sel(datetime_utc=val_times)==0))
+        val_times_qc0 = val_times[(qc_val == 0)  & ~wrong_nigttime_val]
         Xmet_test, Xsat_test, fp_test, flux_mask_test, y_test =\
-            self.build_nn_arrays(self.val_times, met_dim=1) # 
+            self.build_nn_arrays(val_times_qc0, met_dim=1) # 
+
+        train_weights = self.cv_folds[cv_fold]['train_weights'][(qc_train == 0) & ~wrong_nigttime_train]
+        val_weights = self.cv_folds[cv_fold]['val_weights'][(qc_val == 0)  & ~wrong_nigttime_val]
         
         # =========================================================
         # Indices
@@ -294,7 +305,7 @@ class pyvprnn_v1(pyvprnn):
         ssrd_idx = self.met_vars.index("ssrd")
         swvl2_idx = self.met_vars.index('swvl2_era5')
         swvl1_idx = self.met_vars.index('swvl1_era5')
-        skt_idx = self.met_vars.index('stl2_era5') # "skt_era5"
+      #  skt_idx = self.met_vars.index('stl2_era5') # "skt_era5"
         t2m_idx = self.met_vars.index("t2m")        
         
         # RECO must NOT see ssrd
@@ -302,7 +313,7 @@ class pyvprnn_v1(pyvprnn):
                         if i not in [ssrd_idx, swvl2_idx]] # swvl2_idx 
         
         gpp_met_idx = [i for i in range(n_met_features)
-                        if i not in [swvl1_idx, skt_idx]] #skt_idx
+                        if i not in [swvl1_idx]] #skt_idx
         filter_size=1
         
         # =========================================================
@@ -458,15 +469,15 @@ class pyvprnn_v1(pyvprnn):
             patience=train_params['plateau_patience'],
             min_lr=1e-6,
             verbose=1)
-        
+
         history = self.model.fit(
             x=[Xsat_train, Xmet_train, fp_train, flux_mask_train], # 
             y=y_train, 
             validation_data=([Xsat_test, Xmet_test, fp_test, flux_mask_test],
-                             y_test, self.valid_weights), # 
+                             y_test, val_weights), # 
             epochs=train_params['epochs'],
             batch_size=batch_size,
-            sample_weight=self.train_weights,
+            sample_weight=train_weights,
             callbacks=[early_stop, reduce_lr])
         
         best_val_loss = min(history.history["val_loss"])

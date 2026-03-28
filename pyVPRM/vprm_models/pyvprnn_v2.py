@@ -22,8 +22,6 @@ from tensorflow.keras.models import load_model
 from pyproj import Transformer
 from pyVPRM.lib.functions import sel_nearest_valid
 
-import tensorflow as tf
-
 class BroadcastToImage(tf.keras.layers.Layer):
     def call(self, inputs):
         m, ref = inputs
@@ -132,8 +130,15 @@ class pyvprnn_v2(pyvprnn):
     Base class for all pyvprnn models
     """
     
-    def __init__(self):
-        super().__init__()
+    def __init__(self, lag_window=168*2):
+        super().__init__(lag_window=lag_window)
+        self.variable_lags = {
+            "t2m":    [1, 3, 6, 12, 24],           
+            "stl1_era5": [3, 6, 12, 24, 48],
+            "stl2_era5": [3, 6, 12, 24, 48],
+            "swvl1_era5": [6, 12, 24, 72, 168],
+            "swvl2_era5": [6, 12, 24, 72, 168],
+        }
         return
 
     def load_model(self, path):
@@ -182,8 +187,8 @@ class pyvprnn_v2(pyvprnn):
                 bbox_inches="tight")
         return
 
-    def build_nn_arrays(self, times, met_dim=1, window=48, subsample_step=2):
-        self.met_vars = ["t2m", "ssrd", "VPD_F", "swvl1_era5", "swvl2_era5", 'stl2_era5']
+    def build_nn_arrays(self, times, met_dim=1, subsample_step=4):
+        self.met_vars = ["t2m", "ssrd", 'RH_from_VDP', "swvl1_era5", "swvl2_era5", 'stl2_era5']
         self.lagged_met_vars = ["t2m", 'swvl1_era5', 'stl2_era5'] #'TS_F_MDS_1']
     
         times = np.sort(np.asarray(times))
@@ -210,15 +215,30 @@ class pyvprnn_v2(pyvprnn):
         met_stack = np.stack(met_stack_list, axis=-1).astype(np.float32)
         lag_indices = [self.met_vars.index(var) for var in self.lagged_met_vars]
     
-        target_idx = idx[window:]
-        target_times = times[window:]
+        target_idx = idx
+        target_times = times
     
         Xmet = met_stack[target_idx]
     
-        Xmet_windowed = np.stack([
-            met_stack[i - window:i, lag_indices][::subsample_step]
-            for i in target_idx
-        ]).astype(np.float32)
+        # Xmet_windowed = np.stack([
+        #     met_stack[i - self.lag_window:i, lag_indices][::subsample_step]
+        #     for i in target_idx
+        # ]).astype(np.float32)
+
+        var_to_idx = {var: i for i, var in enumerate(self.met_vars)}
+        Xmet_windowed_list = []
+        
+        for i in target_idx:
+            # each sample
+            sample = []
+            for var in self.lagged_met_vars:
+                lags = self.variable_lags[var]
+                var_lag_values = [met_stack[i - lag, var_to_idx[var]] for lag in lags]
+                sample.append(var_lag_values)
+            sample_array = np.array(sample).T
+            Xmet_windowed_list.append(sample_array)
+    
+        Xmet_windowed = np.stack(Xmet_windowed_list, axis=0).astype(np.float32)
     
         if met_dim == 1:
             Xmet = Xmet[:, None, None, :]
@@ -230,8 +250,7 @@ class pyvprnn_v2(pyvprnn):
             .sel(t=target_times)
             .fillna(0.0)
             .values
-            .astype(np.float32)
-        )
+            .astype(np.float32))
     
         sat_vars = ["lswi", "nirv", "ndre"]
         days = self.ds_cropped.sel(datetime_utc=target_times)["days_since_t0"]
@@ -253,19 +272,33 @@ class pyvprnn_v2(pyvprnn):
          
     def train(self, save_path_model,
               save_path_history=None,
-              test_size=0.15,
+              cv_fold=0,
               train_params={'batch_size': 42,
                             'epochs': 1000,
                             'patience': 10,
                             'plateau_patience': 5,
                             'learning rate': 5e-4},
               random_state=41):
-        
+
+
+        train_times = self.cv_folds[cv_fold]['train_times']
+        qc_train = self.ds_cropped["NEE_VUT_REF_QC"].sel(datetime_utc=train_times)
+        wrong_nigttime_train = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=train_times)<0) &\
+                          (self.ds_cropped["ssrd"].sel(datetime_utc=train_times)==0))
+        train_times_qc0 = train_times[(qc_train == 0) & ~wrong_nigttime_train]
         Xmet_train, Xmet_windowed_train, Xsat_train, fp_train, flux_mask_train, y_train = \
-            self.build_nn_arrays(self.train_times, met_dim=1) # 
+            self.build_nn_arrays(train_times_qc0, met_dim=1) # 
+
+        val_times = self.cv_folds[cv_fold]['val_times']
+        qc_val = self.ds_cropped["NEE_VUT_REF_QC"].sel(datetime_utc=val_times)
+        wrong_nigttime_val = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=val_times)<0) &\
+                          (self.ds_cropped["ssrd"].sel(datetime_utc=val_times)==0))
+        val_times_qc0 = val_times[(qc_val == 0)  & ~wrong_nigttime_val]
         Xmet_test, Xmet_windowed_test, Xsat_test, fp_test, flux_mask_test, y_test =\
-            self.build_nn_arrays(self.val_times, met_dim=1) # 
-        
+            self.build_nn_arrays(val_times_qc0, met_dim=1) # 
+
+        train_weights = self.cv_folds[cv_fold]['train_weights'][(qc_train == 0) & ~wrong_nigttime_train]
+        val_weights = self.cv_folds[cv_fold]['val_weights'][(qc_val == 0)  & ~wrong_nigttime_val]
         # =========================================================
         # Indices
         # =========================================================
@@ -331,7 +364,8 @@ class pyvprnn_v2(pyvprnn):
         # =========================================================
         # Shared encoder: lagged temperature + soil moisture
         # =========================================================
-        temp_swvl_idx = [self.lagged_met_vars.index("swvl1_era5"),
+        temp_swvl_idx = [self.lagged_met_vars.index("t2m"),
+                         self.lagged_met_vars.index("swvl1_era5"),
                          self.lagged_met_vars.index('stl2_era5')]
         x_met_lagged = SelectFeatures(temp_swvl_idx, name="select_temp_swvl")(self.met_input_lagged)
         
@@ -478,6 +512,7 @@ class pyvprnn_v2(pyvprnn):
                              y_test), #  self.valid_weights
             epochs=train_params['epochs'],
             batch_size=batch_size,
+            shuffle=True,
           #  sample_weight=self.train_weights,
             callbacks=[early_stop, reduce_lr])
         
