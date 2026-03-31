@@ -254,14 +254,14 @@ class pyvprnn_v1(pyvprnn):
             {'time_gap_filled': self.ds_cropped.sel(datetime_utc=times)['days_since_t0']})
     
         sat_stack = np.stack([sat_imgs[v].values for v in sat_vars], axis=-1)
-        lc = np.moveaxis(self.ds_cropped['land_cover_map'].values, 0, -1)
+        lc = np.moveaxis(self.ds_cropped['land_cover_map'].sel({'vprm_classes': [1,2,3,4,5,6]}).values, 0, -1)
         T = sat_stack.shape[0]
         lc_time = np.repeat(lc[None, ...], T, axis=0)
         nirv_max = np.repeat(self.ds_cropped['nirv_90pct'].values[None, ..., None], T, axis=0)
         nirv_min = np.repeat(self.ds_cropped['nirv_10pct'].values[None, ..., None], T, axis=0)
         sat_stack = np.concatenate([sat_stack, nirv_max, nirv_min, lc_time], axis=-1).astype(np.float32)
         print(np.shape(sat_stack))
-        flux_mask = np.repeat(self.ds_cropped["class4_ge10pct"].values[None, ...], T, axis=0).astype(np.float32)
+        flux_mask = np.repeat(self.ds_cropped["flux_mask"].values[None, ...], T, axis=0).astype(np.float32)
     
         return met_stack, sat_stack, footprints, flux_mask, y_target
          
@@ -274,7 +274,6 @@ class pyvprnn_v1(pyvprnn):
                             'learning rate': 5e-4},
               cv_fold=0,
               random_state=41):
-
 
         train_times = self.cv_folds[cv_fold]['train_times']
         qc_train = self.ds_cropped["NEE_VUT_REF_QC"].sel(datetime_utc=train_times)

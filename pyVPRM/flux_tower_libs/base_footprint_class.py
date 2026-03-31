@@ -17,6 +17,84 @@ import xesmf as xe
 import cartopy.crs as ccrs
 from pyVPRM.lib.functions import get_corners_from_pixel_centers_1D, make_xesmf_grid
 
+def get_corners_from_pixel_centers_1D(pixel_centers_1D):
+    half_pixel_width = np.unique(np.diff(pixel_centers_1D))[0]/2       #get smallest difference between two pixel centers (why not just take first?)
+    pixel_corners = pixel_centers_1D - half_pixel_width                #shift from center to top/left corners
+    pixel_corners = list(pixel_corners)                                #list for fast appending
+    pixel_corners.append(pixel_corners[-1]+2*half_pixel_width)         #add missing lower/right corners
+    pixel_corners = np.array(pixel_corners)
+    return pixel_corners  
+
+
+def make_xesmf_grid_from_satellite_image(satellite_image):
+    #get x and y coordinates of pixel centers from the satellite image
+    x_pixel_centers = satellite_image.x.values
+    y_pixel_centers = satellite_image.y.values
+    
+    #get the pixel corners from the pixel centers
+    x_pixel_corners = get_corners_from_pixel_centers_1D(x_pixel_centers)
+    y_pixel_corners = get_corners_from_pixel_centers_1D(y_pixel_centers)
+
+    #make meshgrids
+    X_center_grid, Y_center_grid = np.meshgrid(x_pixel_centers, y_pixel_centers)
+    X_corner_grid, Y_corner_grid = np.meshgrid(x_pixel_corners, y_pixel_corners)
+    
+    #define transformer to transform from the images crs to the defined crs of WGS84
+    my_transformer = Transformer.from_crs(satellite_image.rio.crs,
+                        '+proj=longlat +datum=WGS84',
+                        always_xy=True)
+    
+    #apply transformer to the grids
+    X_center_grid, Y_center_grid = my_transformer.transform(X_center_grid, Y_center_grid)
+    X_corner_grid, Y_corner_grid = my_transformer.transform(X_corner_grid, Y_corner_grid)
+    
+    #put the grids in one xarray
+    pixel_grid = xr.Dataset({"lon": (["y", "x"], X_center_grid,
+                          {"units": "degrees_east"}),
+                         "lon_b": (["y_b", "x_b"], X_corner_grid,
+                         {"units": "degrees_east"}),
+                          "lat": (["y", "x"], Y_center_grid,
+                          {"units": "degrees_north"}),
+                         "lat_b": (["y_b", "x_b"], Y_corner_grid,
+                         {"units": "degrees_north"})
+                          })
+    pixel_grid = pixel_grid.set_coords(['lon', 'lat', "lon_b", "lat_b"])
+    return pixel_grid
+
+def make_xesmf_grid_from_x_y(footprint_data, lon, lat, elev):
+    #get x and y coordinates of pixel centers from the satellite image
+    x_pixel_centers = footprint_data.x.values
+    y_pixel_centers = footprint_data.y.values
+    
+    #get the pixel corners from the pixel centers
+    x_pixel_corners = get_corners_from_pixel_centers_1D(x_pixel_centers)
+    y_pixel_corners = get_corners_from_pixel_centers_1D(y_pixel_centers)
+
+    #make meshgrids
+    X_center_grid, Y_center_grid = np.meshgrid(x_pixel_centers, y_pixel_centers, indexing='ij')
+    X_corner_grid, Y_corner_grid = np.meshgrid(x_pixel_corners, y_pixel_corners, indexing='ij')
+    
+    #define transformer to transform from the images crs to the defined crs of WGS84
+    my_transformer = Transformer.from_pipeline('+proj=pipeline +step +inv +proj=topocentric +lon_0={0} +lat_0={1} +h_0={2} +step +inv +proj=cart +ellps=WGS84'.format(lon, lat, elev))
+    
+    #apply transformer to the grids
+    X_center_grid, Y_center_grid = my_transformer.transform(X_center_grid, Y_center_grid, errcheck=True)
+    X_corner_grid, Y_corner_grid = my_transformer.transform(X_corner_grid, Y_corner_grid, errcheck=True)
+    #print('X center grid', X_center_grid)
+    
+    #put the grids in one xarray
+    pixel_grid = xr.Dataset({"lon": (["y", "x"], X_center_grid,
+                          {"units": "degrees_east"}),
+                         "lon_b": (["y_b", "x_b"], X_corner_grid,
+                         {"units": "degrees_east"}),
+                          "lat": (["y", "x"], Y_center_grid,
+                          {"units": "degrees_north"}),
+                         "lat_b": (["y_b", "x_b"], Y_corner_grid,
+                         {"units": "degrees_north"})
+                          })
+    pixel_grid = pixel_grid.set_coords(['lon', 'lat', "lon_b", "lat_b"])
+    return pixel_grid
+
 class base_footprint_manager:
     def __init__(self, time_stamps=None, flux_tower_manager=None,
                  calculation_grid_side_length = 5000, calculation_grid_pixels_per_side = 1000,
@@ -33,6 +111,7 @@ class base_footprint_manager:
         self.side_length_pixel = self.calculation_grid_side_length/self.calculation_grid_resolution
         self.footprint_on_calculation_grid = None
         self.footprint_on_satellite_grid = None  
+        self.X_calculation_grid_rotated = None
         return
 
     def set_timestamps(self, time_stamps):
@@ -95,16 +174,18 @@ class base_footprint_manager:
         return
 
 
-    def make_calculation_grid(self):
+    def make_calculation_grid(self, recalculate=True):
         #make a finer grid to calculate the footprints on
         #print('make calculation grid')
-        self.xs_for_calculation_grid = np.linspace(-0.5*(self.calculation_grid_side_length-self.side_length_pixel), 0.5*(self.calculation_grid_side_length-self.side_length_pixel), self.calculation_grid_resolution)
-        self.ys_for_calculation_grid = np.linspace(-0.5*(self.calculation_grid_side_length-self.side_length_pixel), 0.5*(self.calculation_grid_side_length-self.side_length_pixel), self.calculation_grid_resolution)
-        self.X_calculation_grid, self.Y_calculation_grid = np.meshgrid(self.xs_for_calculation_grid, self.ys_for_calculation_grid)
-        
-        #rotate grid so that the x axis vector is (anti)parallel to the mean wind vector
-        self.X_calculation_grid_rotated   =  np.expand_dims(np.cos((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.X_calculation_grid, axis=0) + np.expand_dims(np.sin((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.Y_calculation_grid, axis=0)
-        self.Y_calculation_grid_rotated   = -np.expand_dims(np.sin((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.X_calculation_grid, axis=0) + np.expand_dims(np.cos((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.Y_calculation_grid, axis=0)
+        if (self.X_calculation_grid_rotated is None) or recalculate:
+            self.xs_for_calculation_grid = np.linspace(-0.5*(self.calculation_grid_side_length-self.side_length_pixel), 0.5*(self.calculation_grid_side_length-self.side_length_pixel), self.calculation_grid_resolution)
+            self.ys_for_calculation_grid = np.linspace(-0.5*(self.calculation_grid_side_length-self.side_length_pixel), 0.5*(self.calculation_grid_side_length-self.side_length_pixel), self.calculation_grid_resolution)
+            self.X_calculation_grid, self.Y_calculation_grid = np.meshgrid(self.xs_for_calculation_grid, self.ys_for_calculation_grid)
+            
+            #rotate grid so that the x axis vector is (anti)parallel to the mean wind vector
+            self.X_calculation_grid_rotated   =  np.expand_dims(np.cos((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.X_calculation_grid, axis=0) + np.expand_dims(np.sin((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.Y_calculation_grid, axis=0)
+            self.Y_calculation_grid_rotated   = -np.expand_dims(np.sin((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.X_calculation_grid, axis=0) + np.expand_dims(np.cos((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.Y_calculation_grid, axis=0)
+        return
 
 
 
@@ -289,83 +370,5 @@ class base_footprint_manager:
         ani = animation.FuncAnimation(fig, update, frames=len(self.time_stamps), interval=1)
         ani.save(os.path.join(output_image_path,'{}_{}_footprint_percentiles.gif'.format(self.site_ID, self.footprint_model)), writer='pillow')
 
-#-------------------------
 
 
-def get_corners_from_pixel_centers_1D(pixel_centers_1D):
-    half_pixel_width = np.unique(np.diff(pixel_centers_1D))[0]/2       #get smallest difference between two pixel centers (why not just take first?)
-    pixel_corners = pixel_centers_1D - half_pixel_width                #shift from center to top/left corners
-    pixel_corners = list(pixel_corners)                                #list for fast appending
-    pixel_corners.append(pixel_corners[-1]+2*half_pixel_width)         #add missing lower/right corners
-    pixel_corners = np.array(pixel_corners)
-    return pixel_corners  
-
-
-def make_xesmf_grid_from_satellite_image(satellite_image):
-    #get x and y coordinates of pixel centers from the satellite image
-    x_pixel_centers = satellite_image.x.values
-    y_pixel_centers = satellite_image.y.values
-    
-    #get the pixel corners from the pixel centers
-    x_pixel_corners = get_corners_from_pixel_centers_1D(x_pixel_centers)
-    y_pixel_corners = get_corners_from_pixel_centers_1D(y_pixel_centers)
-
-    #make meshgrids
-    X_center_grid, Y_center_grid = np.meshgrid(x_pixel_centers, y_pixel_centers)
-    X_corner_grid, Y_corner_grid = np.meshgrid(x_pixel_corners, y_pixel_corners)
-    
-    #define transformer to transform from the images crs to the defined crs of WGS84
-    my_transformer = Transformer.from_crs(satellite_image.rio.crs,
-                        '+proj=longlat +datum=WGS84',
-                        always_xy=True)
-    
-    #apply transformer to the grids
-    X_center_grid, Y_center_grid = my_transformer.transform(X_center_grid, Y_center_grid)
-    X_corner_grid, Y_corner_grid = my_transformer.transform(X_corner_grid, Y_corner_grid)
-    
-    #put the grids in one xarray
-    pixel_grid = xr.Dataset({"lon": (["y", "x"], X_center_grid,
-                          {"units": "degrees_east"}),
-                         "lon_b": (["y_b", "x_b"], X_corner_grid,
-                         {"units": "degrees_east"}),
-                          "lat": (["y", "x"], Y_center_grid,
-                          {"units": "degrees_north"}),
-                         "lat_b": (["y_b", "x_b"], Y_corner_grid,
-                         {"units": "degrees_north"})
-                          })
-    pixel_grid = pixel_grid.set_coords(['lon', 'lat', "lon_b", "lat_b"])
-    return pixel_grid
-
-def make_xesmf_grid_from_x_y(footprint_data, lon, lat, elev):
-    #get x and y coordinates of pixel centers from the satellite image
-    x_pixel_centers = footprint_data.x.values
-    y_pixel_centers = footprint_data.y.values
-    
-    #get the pixel corners from the pixel centers
-    x_pixel_corners = get_corners_from_pixel_centers_1D(x_pixel_centers)
-    y_pixel_corners = get_corners_from_pixel_centers_1D(y_pixel_centers)
-
-    #make meshgrids
-    X_center_grid, Y_center_grid = np.meshgrid(x_pixel_centers, y_pixel_centers, indexing='ij')
-    X_corner_grid, Y_corner_grid = np.meshgrid(x_pixel_corners, y_pixel_corners, indexing='ij')
-    
-    #define transformer to transform from the images crs to the defined crs of WGS84
-    my_transformer = Transformer.from_pipeline('+proj=pipeline +step +inv +proj=topocentric +lon_0={0} +lat_0={1} +h_0={2} +step +inv +proj=cart +ellps=WGS84'.format(lon, lat, elev))
-    
-    #apply transformer to the grids
-    X_center_grid, Y_center_grid = my_transformer.transform(X_center_grid, Y_center_grid, errcheck=True)
-    X_corner_grid, Y_corner_grid = my_transformer.transform(X_corner_grid, Y_corner_grid, errcheck=True)
-    #print('X center grid', X_center_grid)
-    
-    #put the grids in one xarray
-    pixel_grid = xr.Dataset({"lon": (["y", "x"], X_center_grid,
-                          {"units": "degrees_east"}),
-                         "lon_b": (["y_b", "x_b"], X_corner_grid,
-                         {"units": "degrees_east"}),
-                          "lat": (["y", "x"], Y_center_grid,
-                          {"units": "degrees_north"}),
-                         "lat_b": (["y_b", "x_b"], Y_corner_grid,
-                         {"units": "degrees_north"})
-                          })
-    pixel_grid = pixel_grid.set_coords(['lon', 'lat', "lon_b", "lat_b"])
-    return pixel_grid

@@ -66,20 +66,22 @@ class pyvprnn:
         if "dominant_scl" not in self.ds:
             dominant = counts.idxmax(dim="class")
             self.ds['dominant_scl'] = dominant
-        if "class4_ge10pct" not in self.ds:
-            count_4 = counts.sel({"class": 4})
-            total_valid = counts.sum(dim="class")
-            frac_4 = count_4 / total_valid
-            flag_low_class4 = (frac_4 >= 0.1).astype(int)
-            self.ds["class4_ge10pct"] = flag_low_class4
+        self.ds["flux_mask"] = self.ds['land_cover_map'].sel({'vprm_classes': 7}) < 0.99
+        # if "class4_ge10pct" not in self.ds:
+        #     count_4 = counts.sel({"class": 4})
+        #     total_valid = counts.sum(dim="class")
+        #     frac_4 = count_4 / total_valid
+        #     flag_low_class4 = (frac_4 >= 0.1).astype(int)
+        #     self.ds["class4_ge10pct"] = flag_low_class4
 
         self.crop_to_mass_fraction(mass_fraction=0.99)
         spatial_sum = self.ds_cropped['ffp_footprint'].sum(dim=['x', 'y'])
         self.ds_cropped['ffp_footprint'] = self.ds_cropped['ffp_footprint'] / spatial_sum
         
-        fracs = (self.ds_cropped['land_cover_map']*self.ds_cropped['ffp_footprint']).sum(dim=['x', 'y'])
-        valid_footprint_mask = fracs.sum(dim='vprm_classes') != 0
-        
+        #fracs = (self.ds_cropped['land_cover_map']*self.ds_cropped['ffp_footprint']).sum(dim=['x', 'y'])
+        #valid_footprint_mask = fracs.sum(dim='vprm_classes') != 0
+
+        valid_footprint_mask = (self.ds_cropped['ffp_footprint'].sum(dim=['x', 'y'], skipna=True) != 0)
         vars_datetime = [
             v for v in self.ds.data_vars
             if "datetime_utc" in self.ds[v].dims]
@@ -496,19 +498,23 @@ class pyvprnn:
                 ((self.ds.datetime_utc.data - t0) / np.timedelta64(1, "D")).astype(int)))
         
         mask = (
-            (self.ds["NEE_VUT_REF_QC"] < 2) &
+         #   (self.ds["NEE_VUT_REF_QC"] < 2) &
             (self.ds["ZL"] > -1000))
         
         footprint_timestamps = (
             self.ds["datetime_utc"]
             .where(mask, drop=True))
 
-        self.ffp_handler.set_timestamps(footprint_timestamps)
-        self.ffp_handler.make_calculation_grid()
-        self.ffp_handler.calculate_footprints()
-        self.ffp_handler.regrid_calculation_grid_to_satellite_grid(self.vprm_pre.sat_imgs.sat_img, base_path)
+        footprints = [] 
+        for i, chunk_of_timestamps in enumerate(np.array_split(footprint_timestamps, 100)):
+            print(i)
+            self.ffp_handler.set_timestamps(chunk_of_timestamps)
+            self.ffp_handler.make_calculation_grid()
+            self.ffp_handler.calculate_footprints()
+            self.ffp_handler.regrid_calculation_grid_to_satellite_grid(vprm_pre.sat_imgs.sat_img, base_path)
+            footprints.append(self.ffp_handler.footprint_on_satellite_grid['footprint'].astype("float32"))
         
-        self.ds['ffp_footprint'] = self.ffp_handler.footprint_on_satellite_grid['footprint']
+        self.ds['ffp_footprint'] = xr.concat(footprints, dim='t')
         self.ds['land_cover_map'] = self.vprm_pre.land_cover_type.sat_img
         
         self.era5_inst.reduce_time(self.flux_tower.flux_data['datetime_utc'].iloc[0],

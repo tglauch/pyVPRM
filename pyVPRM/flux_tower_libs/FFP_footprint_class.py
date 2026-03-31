@@ -4,7 +4,7 @@ import pandas as pd
 import xarray as xr
 from scipy.special import gamma
 from pyVPRM.flux_tower_libs.base_footprint_class import base_footprint_manager
-
+import numexpr as ne
 
 class FFP_footprint_manager(base_footprint_manager):
     def __init__(self, time_stamps, flux_tower_manager, calculation_grid_side_length, calculation_grid_pixels_per_side, era5_instance = None):
