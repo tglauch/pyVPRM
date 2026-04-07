@@ -182,6 +182,8 @@ class pyvprnn_v1(pyvprnn):
         return
 
     def build_nn_arrays(self, times, met_dim=1):
+        import time
+        t0 = time.time()
         self.met_vars = ["t2m", "ssrd", 'RH_from_VDP',  #
                          'swvl1_era5', 'swvl2_era5']  # , 'stl2_era5' # 'TS_F_MDS_1'
         # self.met_vars = ["t2m", "ssrd", 'VPD_F',
@@ -189,6 +191,7 @@ class pyvprnn_v1(pyvprnn):
         
         # --- times as DataArray ---
         times = xr.DataArray(times, dims="datetime_utc")
+        print('time xarray', time.time()-t0)
         met_stack_list = []
 
         if met_dim == 1:
@@ -234,6 +237,7 @@ class pyvprnn_v1(pyvprnn):
                 met_stack_list.append(arr)
         else:
             print('met_dim kwarg should be 1 or 2')
+        print('Sel Mets', time.time()-t0)
         
         # --- stack along the last axis to get (time, y, x, n_vars) ---
         met_stack = np.stack(met_stack_list, axis=-1).astype(np.float32)
@@ -241,6 +245,7 @@ class pyvprnn_v1(pyvprnn):
             met_stack = met_stack[:,np.newaxis, np.newaxis, :]
         print(np.shape(met_stack))
         y_target = self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=times).values.astype(np.float32)
+        print('Met stack', time.time()-t0)
     
         footprints = (
             self.ds_cropped["ffp_footprint"]
@@ -248,21 +253,25 @@ class pyvprnn_v1(pyvprnn):
             .fillna(0.0)
             .values
         ).astype(np.float32)
-    
+
+        print('Sel footprints', time.time()-t0)
         sat_vars = ['lswi','nirv','ndre']
         sat_imgs = self.ds_cropped[sat_vars].sel(
             {'time_gap_filled': self.ds_cropped.sel(datetime_utc=times)['days_since_t0']})
     
         sat_stack = np.stack([sat_imgs[v].values for v in sat_vars], axis=-1)
+        print('Sat stack', time.time()-t0)
         lc = np.moveaxis(self.ds_cropped['land_cover_map'].sel({'vprm_classes': [1,2,3,4,5,6]}).values, 0, -1)
+        print('lc', time.time()-t0)
         T = sat_stack.shape[0]
         lc_time = np.repeat(lc[None, ...], T, axis=0)
         nirv_max = np.repeat(self.ds_cropped['nirv_90pct'].values[None, ..., None], T, axis=0)
         nirv_min = np.repeat(self.ds_cropped['nirv_10pct'].values[None, ..., None], T, axis=0)
         sat_stack = np.concatenate([sat_stack, nirv_max, nirv_min, lc_time], axis=-1).astype(np.float32)
+        print('repeat concat', time.time()-t0)
         print(np.shape(sat_stack))
         flux_mask = np.repeat(self.ds_cropped["flux_mask"].values[None, ...], T, axis=0).astype(np.float32)
-    
+        print('Time for input construction', time.time()-t0)
         return met_stack, sat_stack, footprints, flux_mask, y_target
          
     def train(self, save_path_model,

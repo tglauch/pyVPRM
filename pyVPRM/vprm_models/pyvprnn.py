@@ -612,6 +612,12 @@ class pyvprnn:
              x_dim: directional_slice(self.ds[x_dim], xmin, xmax)})
         
         return
+
+    def clear_ds(self):
+        del self.ds
+        import gc
+        gc.collect() 
+        return
     
     def make_satellite_animation(self, opath=None):
         from pyproj import Transformer
