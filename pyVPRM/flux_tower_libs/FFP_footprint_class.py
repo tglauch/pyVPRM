@@ -7,7 +7,8 @@ from pyVPRM.flux_tower_libs.base_footprint_class import base_footprint_manager
 import numexpr as ne
 
 class FFP_footprint_manager(base_footprint_manager):
-    def __init__(self, time_stamps, flux_tower_manager, calculation_grid_side_length, calculation_grid_pixels_per_side, era5_instance = None):
+    def __init__(self, time_stamps, flux_tower_manager, calculation_grid_side_length=None,
+                 calculation_grid_pixels_per_side=None, era5_instance = None):
         super().__init__(time_stamps, flux_tower_manager, calculation_grid_side_length, calculation_grid_pixels_per_side, era5_instance)
         self.footprint_model = 'FFP'
 
@@ -29,7 +30,15 @@ class FFP_footprint_manager(base_footprint_manager):
         print(self.z)
         print('t')
         print(self.time_stamps)
-    
+
+    def get_fetch_distance(self, quantile):
+        a = 1.452
+        b = -1.991
+        c = 1.462
+        d = 0.136 
+        k_karman = 0.4
+        return (-c/np.log(quantile)+d) * self.z * (1-self.z/self.h_pbl)**-1 * (self.u/self.u_star*k_karman)
+
     def calculate_footprints(self):  
         k_karman = 0.4
         #calculate secondary parameters
@@ -66,8 +75,8 @@ class FFP_footprint_manager(base_footprint_manager):
         x_peak = 0.87 * self.z * (1-self.z/self.h_pbl)**-1 * (self.u/self.u_star*k_karman)
 
         #calculate fetch estimator
-        x_70 = (-c/np.log(0.7)+d) * self.z * (1-self.z/self.h_pbl)**-1 * (self.u/self.u_star*k_karman)
-        x_90 = (-c/np.log(0.9)+d) * self.z * (1-self.z/self.h_pbl)**-1 * (self.u/self.u_star*k_karman)
+        x_70 = self.get_fetch_distance(0.7) #(-c/np.log(0.7)+d) * self.z * (1-self.z/self.h_pbl)**-1 * (self.u/self.u_star*k_karman)
+        x_90 = self.get_fetch_distance(0.9) #(-c/np.log(0.9)+d) * self.z * (1-self.z/self.h_pbl)**-1 * (self.u/self.u_star*k_karman)
         
         #store in xarray
         self.footprint_on_calculation_grid  =  xr.Dataset(

@@ -97,7 +97,7 @@ def make_xesmf_grid_from_x_y(footprint_data, lon, lat, elev):
 
 class base_footprint_manager:
     def __init__(self, time_stamps=None, flux_tower_manager=None,
-                 calculation_grid_side_length = 5000, calculation_grid_pixels_per_side = 1000,
+                 calculation_grid_side_length = None, calculation_grid_pixels_per_side = None,
                  era5_instance=None):
         #print('make footprint manager')
         self.site_ID = flux_tower_manager.site_name
@@ -108,10 +108,18 @@ class base_footprint_manager:
             self.setup()
         self.calculation_grid_side_length = calculation_grid_side_length  #in meters
         self.calculation_grid_resolution = calculation_grid_pixels_per_side
-        self.side_length_pixel = self.calculation_grid_side_length/self.calculation_grid_resolution
+        if (self.calculation_grid_side_length is not None) and (self.calculation_grid_resolution is not None):
+            self.side_length_pixel = self.calculation_grid_side_length/self.calculation_grid_resolution
         self.footprint_on_calculation_grid = None
         self.footprint_on_satellite_grid = None  
         self.X_calculation_grid_rotated = None
+        return
+
+    def set_calculation_grid_side_length_and_resolution(self, calculation_grid_side_length,
+                                                        calculation_grid_resolution):
+        self.calculation_grid_side_length = calculation_grid_side_length
+        self.calculation_grid_resolution = calculation_grid_resolution
+        self.side_length_pixel = self.calculation_grid_side_length/self.calculation_grid_resolution
         return
 
     def set_timestamps(self, time_stamps):
@@ -125,7 +133,6 @@ class base_footprint_manager:
         if (self.flux_tower_manager is not None) & (self.time_stamps is not None) :
             self.setup()
         return
-        
         
     def setup(self):
         flux_tower_data = self.flux_tower_manager.flux_data.where(self.flux_tower_manager.flux_data != -9999.) #set invalid values to nan, don't drop

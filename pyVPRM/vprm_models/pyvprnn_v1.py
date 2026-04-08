@@ -239,20 +239,19 @@ class pyvprnn_v1(pyvprnn):
             print('met_dim kwarg should be 1 or 2')
         print('Sel Mets', time.time()-t0)
         
-        # --- stack along the last axis to get (time, y, x, n_vars) ---
         met_stack = np.stack(met_stack_list, axis=-1).astype(np.float32)
         if met_dim == 1:
             met_stack = met_stack[:,np.newaxis, np.newaxis, :]
         print(np.shape(met_stack))
         y_target = self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=times).values.astype(np.float32)
+        y_unc = self.ds_cropped["NEE_VUT_REF_JOINTUNC"].sel(datetime_utc=times).values.astype(np.float32)
         print('Met stack', time.time()-t0)
     
         footprints = (
             self.ds_cropped["ffp_footprint"]
             .sel(t=times)
             .fillna(0.0)
-            .values
-        ).astype(np.float32)
+            .values).astype(np.float32)
 
         print('Sel footprints', time.time()-t0)
         sat_vars = ['lswi','nirv','ndre']
@@ -272,7 +271,7 @@ class pyvprnn_v1(pyvprnn):
         print(np.shape(sat_stack))
         flux_mask = np.repeat(self.ds_cropped["flux_mask"].values[None, ...], T, axis=0).astype(np.float32)
         print('Time for input construction', time.time()-t0)
-        return met_stack, sat_stack, footprints, flux_mask, y_target
+        return met_stack, sat_stack, footprints, flux_mask, y_target, y_unc 
          
     def train(self, save_path_model,
               save_path_history=None,
@@ -289,7 +288,7 @@ class pyvprnn_v1(pyvprnn):
         wrong_nigttime_train = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=train_times)<0) &\
                           (self.ds_cropped["ssrd"].sel(datetime_utc=train_times)==0))
         train_times_qc0 = train_times[(qc_train == 0) & ~wrong_nigttime_train]
-        Xmet_train, Xsat_train, fp_train, flux_mask_train, y_train = \
+        Xmet_train, Xsat_train, fp_train, flux_mask_train, y_train, y_unc_train = \
             self.build_nn_arrays(train_times_qc0, met_dim=1) # 
 
         val_times = self.cv_folds[cv_fold]['val_times']
@@ -297,7 +296,7 @@ class pyvprnn_v1(pyvprnn):
         wrong_nigttime_val = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=val_times)<0) &\
                           (self.ds_cropped["ssrd"].sel(datetime_utc=val_times)==0))
         val_times_qc0 = val_times[(qc_val == 0)  & ~wrong_nigttime_val]
-        Xmet_test, Xsat_test, fp_test, flux_mask_test, y_test =\
+        Xmet_test, Xsat_test, fp_test, flux_mask_test, y_test, y_unc_test =\
             self.build_nn_arrays(val_times_qc0, met_dim=1) # 
 
         train_weights = self.cv_folds[cv_fold]['train_weights'][(qc_train == 0) & ~wrong_nigttime_train]
@@ -406,9 +405,9 @@ class pyvprnn_v1(pyvprnn):
         
         gpp_sum = GlobalSumPooling(name="gpp_sum_raw")(gpp_weighted)
         
-        # =========================================================
-        # RECO branch
-        # =========================================================
+        # ========================================================= #
+        # RECO branch                                               #
+        # ========================================================= #
         
         x_reco = layers.Concatenate(name="reco_concat")([
             self.sat_input,
@@ -444,6 +443,7 @@ class pyvprnn_v1(pyvprnn):
         nee = layers.Subtract(name="nee")([
             reco_sum,
             gpp_sum])
+        nee = layers.Flatten(name='Output')(nee) 
         
         # =========================================================
         # Model
@@ -455,12 +455,20 @@ class pyvprnn_v1(pyvprnn):
             outputs=nee)
 
         from tensorflow.keras.losses import Huber
+        def nll_loss_from_stacked(y_with_sigma_true, y_pred):
+            y_true = y_with_sigma_true[..., 0][..., None] 
+            sigma = tf.maximum(y_with_sigma_true[..., 1], 0.1)[..., None] 
+            return tf.reduce_mean((y_true - y_pred)**2 / (2 * sigma**2)+ 0.5 * tf.math.log(2 * np.pi * sigma**2))
+
+        def mse_true_only(y_with_sigma_true, y_pred):
+            y_true = y_with_sigma_true[..., 0][..., None]
+            return tf.reduce_mean(tf.square(y_true - y_pred))
         
         self.model.compile(
             optimizer=tf.keras.optimizers.Adam(
                 learning_rate=train_params['learning rate']),
-            loss='mse', #Huber(delta=5.0), #'mse'
-            metrics=["mae", "mse"])
+            loss=nll_loss_from_stacked, #'mse', #Huber(delta=5.0), #'mse'
+            metrics=[mse_true_only])
         
         self.model.summary()
         
@@ -478,11 +486,15 @@ class pyvprnn_v1(pyvprnn):
             min_lr=1e-6,
             verbose=1)
 
+        print(np.min(y_unc_train), np.mean(y_unc_train), np.max(y_unc_train))
+        y_train_with_sigma = np.stack([y_train, y_unc_train], axis=1)
+        y_test_with_sigma = np.stack([y_test, y_unc_test], axis=1)
+
         history = self.model.fit(
-            x=[Xsat_train, Xmet_train, fp_train, flux_mask_train], # 
-            y=y_train, 
+            x=[Xsat_train, Xmet_train, fp_train, flux_mask_train],
+            y=y_train_with_sigma, 
             validation_data=([Xsat_test, Xmet_test, fp_test, flux_mask_test],
-                             y_test, val_weights), # 
+                              y_test_with_sigma, val_weights), # _with_sigma
             epochs=train_params['epochs'],
             batch_size=batch_size,
             sample_weight=train_weights,

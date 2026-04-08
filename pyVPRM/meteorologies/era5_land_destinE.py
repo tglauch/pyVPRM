@@ -60,20 +60,36 @@ class met_data_handler(met_data_handler_base):
     def _load_data_for_hour(self):
         if self.ds is None:
             print('No dataset loaded from destination Earth')
-            return
+            return  
         # Caution: The date as argument corresponds to the END of the ERA5 integration time.
         sel_dict = {"valid_time": '{}-{}-{} {}:00:00'.format(self.year, self.month,
                                                              self.day, self.hour)}
+
         if self.lat_slice is not None:
-            sel_dict['lat'] = slice(self.lat_slice[1], self.lat_slice[0])
+            lat_min, lat_max = self.lat_slice
+            sel_dict["lat"] = slice(lat_max, lat_min)
+    
         if self.lon_slice is not None:
-            sel_dict['lon'] = slice(self.lon_slice[0], self.lon_slice[1])
-        self.ds_out = self.ds.sel(sel_dict).compute()
-        self.instantaneous=False
+            lon_min, lon_max = self.lon_slice
+    
+            if lon_min < lon_max:
+                sel_dict["lon"] = slice(lon_min, lon_max)
+                self.ds_out = self.ds.sel(sel_dict).compute()
+            else:
+                base = self.ds.sel(sel_dict)
+                part1 = base.sel(lon=slice(lon_min, 360))
+                part2 = base.sel(lon=slice(0, lon_max))
+                self.ds_out = xr.concat([part1, part2], dim="lon").compute()
+        else:
+            self.ds_out = self.ds.sel(sel_dict).compute()
+    
+        self.instantaneous = False
         self.rearranged = False
         self.regridded = False
+    
         self.accumulated_to_inst()
         self.rearrange_lons_lats()
+        return
 
     def get_all_interpolators(self, day, hour):
         ret_dict = dict()
@@ -168,18 +184,49 @@ class met_data_handler(met_data_handler_base):
         return
 
     def reduce_time(self, t0, t1):
+        # --- build selection dictionary ---
         sel_dict = {"valid_time": slice(t0, t1)}
+    
+        # latitude slice (you already invert it intentionally)
         if self.lat_slice is not None:
-            sel_dict['lat'] = slice(self.lat_slice[1], self.lat_slice[0])
+            lat_min, lat_max = self.lat_slice
+            sel_dict["lat"] = slice(lat_max, lat_min)
+    
         if self.lon_slice is not None:
-            sel_dict['lon'] = slice(self.lon_slice[0], self.lon_slice[1])
-        self.ds_out = self.ds.sel(sel_dict).compute()
-        self.instantaneous=False
+            lon_min, lon_max = self.lon_slice
+            if lon_min < lon_max:
+                sel_dict["lon"] = slice(lon_min, lon_max)
+                self.ds_out = self.ds.sel(sel_dict).compute()
+            else:
+                base = self.ds.sel(sel_dict)
+                part1 = base.sel(lon=slice(lon_min, 360))
+                part2 = base.sel(lon=slice(0, lon_max))
+                self.ds_out = xr.concat([part1, part2], dim="lon").compute()
+        else:
+            self.ds_out = self.ds.sel(sel_dict).compute()
+    
+        self.instantaneous = False
         self.rearranged = False
         self.regridded = False
         self.accumulated_to_inst()
         self.rearrange_lons_lats()
+    
         return
+
+    
+    # def reduce_time(self, t0, t1):
+    #     sel_dict = {"valid_time": slice(t0, t1)}
+    #     if self.lat_slice is not None:
+    #         sel_dict['lat'] = slice(self.lat_slice[1], self.lat_slice[0])
+    #     if self.lon_slice is not None:
+    #         sel_dict['lon'] = slice(self.lon_slice[0], self.lon_slice[1])
+    #     self.ds_out = self.ds.sel(sel_dict).compute()
+    #     self.instantaneous=False
+    #     self.rearranged = False
+    #     self.regridded = False
+    #     self.accumulated_to_inst()
+    #     self.rearrange_lons_lats()
+    #     return
         
     def reduce_along_lonlat(self, lon, lat, interp_method='nearest'):
         if self.rearranged is False:

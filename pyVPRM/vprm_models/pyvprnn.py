@@ -128,8 +128,6 @@ class pyvprnn:
             ]
         """
     
-        import numpy as np
-    
         times = np.array(self.common_times)
     
         # --- shuffle all timestamps ---
