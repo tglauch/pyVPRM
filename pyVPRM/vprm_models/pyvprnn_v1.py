@@ -124,6 +124,137 @@ class GPPPenalty(layers.Layer):
         })
         return cfg
 
+
+class BatchGenerator(tf.keras.utils.Sequence):
+    def __init__(self, ds_cropped, sat_vars, met_vars,
+                 batch_size, shuffle=True, met_dim=1, times=None):
+        super().__init__(workers=1, use_multiprocessing=False,
+                         max_queue_size=1)
+    
+        self.ds_cropped = ds_cropped
+        self.sat_vars = sat_vars
+        self.met_vars = met_vars
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.met_dim = met_dim
+        self.init_training_cache(sat_vars, met_vars, met_dim)
+        self._static_cache_B = None
+        self._static_cache = None
+        self._mask_cache = None
+        self._mask_cache_B = None
+    
+        if times is not None:
+            time_idx = np.array([self.time_index[t] for t in times])
+            self.indexes = time_idx
+        else:
+            self.indexes = np.arange(len(self.time))
+        self.n = len(self.indexes)
+        self.on_epoch_end()
+
+    def init_training_cache(self, sat_vars, met_vars, met_dim=1):
+
+        self.time = self.ds_cropped["datetime_utc"].values
+        self.time_index = {t: i for i, t in enumerate(self.time)}
+        self.sat_time_index = self.ds_cropped["days_since_t0"].values
+        # MET DATA
+        met_list = []
+        for v in met_vars:
+            if v.endswith("_era5"):
+                da = sel_nearest_valid(
+                    self.ds_cropped[[v]].compute(),
+                    lon=self.ds_cropped.attrs["site_lon"],
+                    lat=self.ds_cropped.attrs["site_lat"]
+                )[v]
+            else:
+                da = self.ds_cropped[v]
+
+            da = da.sel(datetime_utc=self.time)
+            arr = da.values
+            if v == "ssrd":
+                arr = arr / 1000
+            elif v in ["SWC_F_MDS_1", "SWC_F_MDS_2"]:
+                arr = arr / 10
+            met_list.append(arr)
+
+        self.met_array = np.stack(met_list, axis=-1).astype(np.float32)
+        if met_dim == 1:
+            self.met_array = self.met_array[:, None, None, :]
+
+        # SAT DATA
+        self.sat_array = np.stack(
+            [self.ds_cropped[v].values for v in sat_vars],
+            axis=-1).astype(np.float32)
+
+        self.sat_array_taligned = self.sat_array[self.sat_time_index]
+
+        # STATIC
+        self.lc = np.moveaxis(
+            self.ds_cropped["land_cover_map"]
+            .sel(vprm_classes=[1, 2, 3, 4, 5, 6])
+            .values,
+            0, -1).astype(np.float32)
+
+        self.nirv_max = self.ds_cropped["nirv_90pct"].values[..., None].astype(np.float32)
+        self.nirv_min = self.ds_cropped["nirv_10pct"].values[..., None].astype(np.float32)
+
+        # TARGETS
+        self.y_array = self.ds_cropped["NEE_VUT_REF"].sel(
+            datetime_utc=self.time).values.astype(np.float32)
+
+        self.y_unc_array = self.ds_cropped["NEE_VUT_REF_JOINTUNC"].sel(
+            datetime_utc=self.time).values.astype(np.float32)
+
+        self.fp_array = self.ds_cropped["ffp_footprint"].sel(
+            t=self.time).values.astype(np.float32)
+        
+        self.mask_static = self.ds_cropped["flux_mask"].values.astype(np.float32)
+
+        # assume final spatial shape is known from sat_array
+        spatial_shape = self.sat_array.shape[:-1]  # (T, H, W) or (H, W) depending on your case
+
+        self.static_stack = np.concatenate(
+            [self.nirv_max,
+             self.nirv_min,
+             self.lc],
+            axis=-1)
+
+        self.y_pack = np.stack(
+            [self.y_array, self.y_unc_array],
+            axis=-1).astype(np.float32)
+
+    def times_to_idx(self, times):
+        return np.array([self.time_index[t] for t in times])
+
+    def __len__(self):
+        return int(np.ceil(self.n / self.batch_size))
+
+    def on_epoch_end(self):
+        if self.shuffle:
+            np.random.shuffle(self.indexes)
+
+    def __getitem__(self, batch_index):
+        t0 = time.time()
+        batch_idxs = self.indexes[
+            batch_index * self.batch_size : (batch_index + 1) * self.batch_size]
+        Xmet  = self.met_array[batch_idxs]
+        fp    = self.fp_array[batch_idxs]
+        ypack = self.y_pack[batch_idxs]
+        sat = self.sat_array_taligned[batch_idxs]
+        B = sat.shape[0]
+
+        if self._static_cache_B != B:
+            self._static_cache = np.broadcast_to(self.static_stack,
+                                                 (B,) + self.static_stack.shape)
+            self._static_cache_B = B
+
+        if self._mask_cache_B != B:
+            self._mask_cache = np.broadcast_to(self.mask_static,
+                                               (B,) + self.mask_static.shape)
+            self._mask_cache_B = B
+        mask = self._mask_cache      
+        return (sat, self._static_cache, Xmet, fp, mask), ypack
+
+
 class pyvprnn_v1(pyvprnn):
     """
     Base class for all pyvprnn models
@@ -133,6 +264,9 @@ class pyvprnn_v1(pyvprnn):
         super().__init__()
         self.train_weights = None
         self.valid_weights = None
+        self.sat_vars=["lswi", "nirv", "ndre"]
+        self.met_vars=["t2m", "ssrd", 'RH_from_VDP', 
+                       'swvl1_era5', 'swvl2_era5']
         return
 
     def load_model(self, path):
@@ -184,12 +318,7 @@ class pyvprnn_v1(pyvprnn):
     def build_nn_arrays(self, times, met_dim=1):
         import time
         t0 = time.time()
-        self.met_vars = ["t2m", "ssrd", 'RH_from_VDP',  #
-                         'swvl1_era5', 'swvl2_era5']  # , 'stl2_era5' # 'TS_F_MDS_1'
-        # self.met_vars = ["t2m", "ssrd", 'VPD_F',
-        #                  'swvl1_era5', 'swvl2_era5']
-        
-        # --- times as DataArray ---
+
         times = xr.DataArray(times, dims="datetime_utc")
         print('time xarray', time.time()-t0)
         met_stack_list = []
@@ -237,7 +366,7 @@ class pyvprnn_v1(pyvprnn):
                 met_stack_list.append(arr)
         else:
             print('met_dim kwarg should be 1 or 2')
-        print('Sel Mets', time.time()-t0)
+        # print('Sel Mets', time.time()-t0)
         
         met_stack = np.stack(met_stack_list, axis=-1).astype(np.float32)
         if met_dim == 1:
@@ -245,7 +374,7 @@ class pyvprnn_v1(pyvprnn):
         print(np.shape(met_stack))
         y_target = self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=times).values.astype(np.float32)
         y_unc = self.ds_cropped["NEE_VUT_REF_JOINTUNC"].sel(datetime_utc=times).values.astype(np.float32)
-        print('Met stack', time.time()-t0)
+        # print('Met stack', time.time()-t0)
     
         footprints = (
             self.ds_cropped["ffp_footprint"]
@@ -253,26 +382,26 @@ class pyvprnn_v1(pyvprnn):
             .fillna(0.0)
             .values).astype(np.float32)
 
-        print('Sel footprints', time.time()-t0)
+        # print('Sel footprints', time.time()-t0)
         sat_vars = ['lswi','nirv','ndre']
         sat_imgs = self.ds_cropped[sat_vars].sel(
             {'time_gap_filled': self.ds_cropped.sel(datetime_utc=times)['days_since_t0']})
     
         sat_stack = np.stack([sat_imgs[v].values for v in sat_vars], axis=-1)
-        print('Sat stack', time.time()-t0)
+        # print('Sat stack', time.time()-t0)
         lc = np.moveaxis(self.ds_cropped['land_cover_map'].sel({'vprm_classes': [1,2,3,4,5,6]}).values, 0, -1)
-        print('lc', time.time()-t0)
+        # print('lc', time.time()-t0)
         T = sat_stack.shape[0]
         lc_time = np.repeat(lc[None, ...], T, axis=0)
         nirv_max = np.repeat(self.ds_cropped['nirv_90pct'].values[None, ..., None], T, axis=0)
         nirv_min = np.repeat(self.ds_cropped['nirv_10pct'].values[None, ..., None], T, axis=0)
         sat_stack = np.concatenate([sat_stack, nirv_max, nirv_min, lc_time], axis=-1).astype(np.float32)
-        print('repeat concat', time.time()-t0)
-        print(np.shape(sat_stack))
+        # print('repeat concat', time.time()-t0)
+        # print(np.shape(sat_stack))
         flux_mask = np.repeat(self.ds_cropped["flux_mask"].values[None, ...], T, axis=0).astype(np.float32)
         print('Time for input construction', time.time()-t0)
         return met_stack, sat_stack, footprints, flux_mask, y_target, y_unc 
-         
+    
     def train(self, save_path_model,
               save_path_history=None,
               train_params={'batch_size': 42,
@@ -288,26 +417,37 @@ class pyvprnn_v1(pyvprnn):
         wrong_nigttime_train = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=train_times)<0) &\
                           (self.ds_cropped["ssrd"].sel(datetime_utc=train_times)==0))
         train_times_qc0 = train_times[(qc_train == 0) & ~wrong_nigttime_train]
-        Xmet_train, Xsat_train, fp_train, flux_mask_train, y_train, y_unc_train = \
-            self.build_nn_arrays(train_times_qc0, met_dim=1) # 
+        # Xmet_train, Xsat_train, fp_train, flux_mask_train, y_train, y_unc_train = \
+        #      self.build_nn_arrays(train_times_qc0, met_dim=1) # 
 
         val_times = self.cv_folds[cv_fold]['val_times']
         qc_val = self.ds_cropped["NEE_VUT_REF_QC"].sel(datetime_utc=val_times)
         wrong_nigttime_val = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=val_times)<0) &\
                           (self.ds_cropped["ssrd"].sel(datetime_utc=val_times)==0))
         val_times_qc0 = val_times[(qc_val == 0)  & ~wrong_nigttime_val]
-        Xmet_test, Xsat_test, fp_test, flux_mask_test, y_test, y_unc_test =\
-            self.build_nn_arrays(val_times_qc0, met_dim=1) # 
+        # Xmet_test, Xsat_test, fp_test, flux_mask_test, y_test, y_unc_test =\
+        #      self.build_nn_arrays(val_times_qc0, met_dim=1) # 
 
         train_weights = self.cv_folds[cv_fold]['train_weights'][(qc_train == 0) & ~wrong_nigttime_train]
         val_weights = self.cv_folds[cv_fold]['val_weights'][(qc_val == 0)  & ~wrong_nigttime_val]
+
+        train_gen = BatchGenerator(self.ds_cropped, self.sat_vars, self.met_vars,
+                           batch_size= train_params['batch_size'],
+                           times=train_times_qc0)
+
+        val_gen = BatchGenerator(self.ds_cropped, self.sat_vars, self.met_vars,
+                                 batch_size=train_params['batch_size'],
+                                 times=val_times_qc0,
+                                 shuffle=False)
         
-        # =========================================================
-        # Indices
-        # =========================================================
+        (Xsat_batch, Xstatic_batch, Xmet_batch, _, _), _ = train_gen[0]
         
-        n_sat_features = Xsat_train.shape[-1]
-        n_met_features = Xmet_train.shape[-1]
+        n_sat_features = Xsat_batch.shape[-1]
+        n_static_features = Xstatic_batch.shape[-1]
+        n_met_features = Xmet_batch.shape[-1]
+
+        # n_sat_features = Xsat_train.shape[-1]
+        # n_met_features = Xmet_train.shape[-1]
         
         ssrd_idx = self.met_vars.index("ssrd")
         swvl2_idx = self.met_vars.index('swvl2_era5')
@@ -330,6 +470,11 @@ class pyvprnn_v1(pyvprnn):
         self.sat_input = layers.Input(
             shape=(None, None, n_sat_features),
             name="sat")
+
+        self.static_input = layers.Input(
+            shape=(None, None, n_static_features),
+            name="static"
+        )
         
         self.met_input = layers.Input(
             shape=(None, None, n_met_features),
@@ -350,16 +495,21 @@ class pyvprnn_v1(pyvprnn):
         # =========================================================
         # Meteorology branches
         # =========================================================
+
+        sat_static = layers.Concatenate(name="sat_static_concat")([
+            self.sat_input,
+            self.static_input
+        ])
         
         met_gpp = SelectFeatures(
             gpp_met_idx,
             name="met_gpp")(self.met_input)
-        met_bc_gpp = BroadcastToImage(name="met_bc_gpp")([met_gpp, self.sat_input])
+        met_bc_gpp = BroadcastToImage(name="met_bc_gpp")([met_gpp, sat_static])
         
         met_reco = SelectFeatures(
             reco_met_idx,
             name="met_reco")(self.met_input)
-        met_bc_reco = BroadcastToImage(name="met_bc_reco")([met_reco, self.sat_input])
+        met_bc_reco = BroadcastToImage(name="met_bc_reco")([met_reco, sat_static])
         
         # =========================================================
         # GPP branch
@@ -450,7 +600,7 @@ class pyvprnn_v1(pyvprnn):
         # =========================================================
         
         self.model = Model(
-            inputs=[self.sat_input, self.met_input,
+            inputs=[self.sat_input, self.static_input, self.met_input,
                     self.fp_input, self.flux_mask_input], #  
             outputs=nee)
 
@@ -467,7 +617,7 @@ class pyvprnn_v1(pyvprnn):
         self.model.compile(
             optimizer=tf.keras.optimizers.Adam(
                 learning_rate=train_params['learning rate']),
-            loss=nll_loss_from_stacked, #'mse', #Huber(delta=5.0), #'mse'
+            loss=nll_loss_from_stacked, #nll_loss_from_stacked, #'mse', #Huber(delta=5.0), #'mse'
             metrics=[mse_true_only])
         
         self.model.summary()
@@ -477,8 +627,6 @@ class pyvprnn_v1(pyvprnn):
             patience=train_params['patience'],
             restore_best_weights=True)
         
-        batch_size = train_params['batch_size']
-        
         reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss",
             factor=0.5,
@@ -486,19 +634,28 @@ class pyvprnn_v1(pyvprnn):
             min_lr=1e-6,
             verbose=1)
 
-        print(np.min(y_unc_train), np.mean(y_unc_train), np.max(y_unc_train))
-        y_train_with_sigma = np.stack([y_train, y_unc_train], axis=1)
-        y_test_with_sigma = np.stack([y_test, y_unc_test], axis=1)
-
         history = self.model.fit(
-            x=[Xsat_train, Xmet_train, fp_train, flux_mask_train],
-            y=y_train_with_sigma, 
-            validation_data=([Xsat_test, Xmet_test, fp_test, flux_mask_test],
-                              y_test_with_sigma, val_weights), # _with_sigma
+            train_gen,
+            validation_data=val_gen,
             epochs=train_params['epochs'],
-            batch_size=batch_size,
-            sample_weight=train_weights,
-            callbacks=[early_stop, reduce_lr])
+            callbacks=[early_stop, reduce_lr],
+        )
+        
+
+       # print(np.min(y_unc_train), np.mean(y_unc_train), np.max(y_unc_train))
+        # y_train_with_sigma = np.stack([y_train, y_unc_train], axis=1)
+        # y_test_with_sigma = np.stack([y_test, y_unc_test], axis=1)
+        
+
+        # history = self.model.fit(
+        #     x=[Xsat_train, Xmet_train, fp_train, flux_mask_train],
+        #     y=y_train_with_sigma, 
+        #     validation_data=([Xsat_test, Xmet_test, fp_test, flux_mask_test],
+        #                       y_test_with_sigma, val_weights), # _with_sigma
+        #     epochs=train_params['epochs'],
+        #     batch_size=train_params['batch_size'],
+        #     sample_weight=train_weights,
+        #     callbacks=[early_stop, reduce_lr])
         
         best_val_loss = min(history.history["val_loss"])
         print("Best val_loss:", best_val_loss)
@@ -514,7 +671,7 @@ class pyvprnn_v1(pyvprnn):
                 save_path_history,
                 index=False)
         self.pixel_model = Model(
-            inputs=[self.sat_input, self.met_input, self.flux_mask_input],
+            inputs=[self.sat_input, self.static_input, self.met_input, self.flux_mask_input],
             outputs=[
                 self.model.get_layer("gpp_map").output,
                 self.model.get_layer("reco_map").output],

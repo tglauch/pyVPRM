@@ -49,8 +49,119 @@ class pyvprnn:
 
     def set_ds(self, ds):
         self.ds = ds
+    
+    def prepare_base_dataset(self, nee_qc_flags=[0], opath=None,
+                             mass_fraction_threshold=0.925):
+    
+        import xarray as xr
+        import numpy as np
+        import pandas as pd
+        import psutil, os
+        
+        def log_mem(msg):
+            process = psutil.Process(os.getpid())
+            mem = process.memory_info().rss / 1e9
+            print(f"{msg}: {mem:.2f} GB")
 
-    def prepare_base_dataset(self, nee_qc_flags=[0], opath=None):
+
+        log_mem('Beginning')
+        if not self.ds.chunks:
+            self.ds = self.ds.chunk({"t": 256})
+        ds = self.ds  # work on local reference
+    
+        # --- cheap derived variables (lazy) ---
+        ds["RH_from_VDP"] = vpd_hpa_to_rh(ds["VPD_F"], ds["t2m"]) / 100
+    
+        # --- quantiles (lazy with dask) ---
+        ds["nirv_90pct"] = ds["nirv"].quantile(0.9, dim="time_gap_filled")
+        ds["nirv_10pct"] = ds["nirv"].quantile(0.1, dim="time_gap_filled")
+    
+        # --- dominant SCL ---
+        scl = ds["scl"]
+        valid_classes = [4, 5, 6]
+    
+        scl_valid = scl.where(scl.isin(valid_classes))
+    
+        counts = xr.concat(
+            [(scl_valid == c).sum(dim="time") for c in valid_classes],
+            dim="class"
+        ).assign_coords({"class": valid_classes})
+    
+        if "dominant_scl" not in ds:
+            ds["dominant_scl"] = counts.idxmax(dim="class")
+    
+        # --- mask ---
+        ds["flux_mask"] = ds["land_cover_map"].sel(vprm_classes=7) < 0.99
+        log_mem('flux_mask')
+    
+        # --- crop early (IMPORTANT) ---
+        self.ds_cropped = ds
+        self.crop_to_mass_fraction(mass_fraction=mass_fraction_threshold)
+        log_mem('cropped')
+    
+        ds_cropped = self.ds_cropped
+    
+        # --- normalize footprint lazily ---
+        spatial_sum = ds_cropped["ffp_footprint"].sum(dim=["x", "y"])
+        ds_cropped["ffp_footprint"] = ds_cropped["ffp_footprint"] / spatial_sum
+    
+        valid_footprint_mask = (
+            ds_cropped["ffp_footprint"].sum(dim=["x", "y"], skipna=True) != 0
+        )
+
+        qc_mask = ds_cropped["NEE_VUT_REF_QC"].isin(nee_qc_flags)
+        
+        qc_mask = qc_mask.compute()   # <-- only small boolean vector
+        valid_times = ds_cropped["datetime_utc"].where(qc_mask, drop=True)
+        # # --- QC filter ---
+        # valid_mask = ds_cropped["NEE_VUT_REF_QC"].isin(nee_qc_flags)
+        # valid_times = ds_cropped.datetime_utc.where(valid_mask, drop=True)
+    
+        ds_cropped = ds_cropped.sel(datetime_utc=valid_times)
+
+        log_mem('valid times selected')
+
+        valid_fp = ds_cropped["ffp_footprint"]
+        
+        # compute mask (small 2D/3D → OK because it's already cropped)
+        mask = valid_footprint_mask.compute()
+        fp_times = ds_cropped["t"].values[mask.values]        
+        # # --- match footprint times ---
+        # fp_times = ds_cropped["ffp_footprint"].where(
+        #     valid_footprint_mask, drop=True
+        # )["t"]
+    
+        common_times = valid_times.sel(
+            datetime_utc=valid_times.isin(fp_times)
+        )
+    
+        footprint_sum = (
+            ds_cropped["ffp_footprint"]
+            .sel(t=common_times)
+            .sum(dim=["x", "y"])
+        ).compute()
+        
+    
+        common_times = common_times.where(footprint_sum > 1e-5, drop=True)
+    
+        self.common_times = np.sort(pd.to_datetime(common_times.values))
+    
+        if self.lag_window > 0:
+            self.common_times = self.common_times[self.lag_window:]
+    
+        # --- final selection (still lazy) ---
+        self.ds_cropped = ds_cropped.sel(datetime_utc=self.common_times)
+        self.ds_cropped = self.ds_cropped.sel(t=self.common_times)
+    
+        counts = pd.Series(self.common_times).dt.year.value_counts().sort_index()
+        print("Valid times per year:", counts)
+        log_mem('End')
+    
+        return
+
+    
+    def prepare_base_dataset_old(self, nee_qc_flags=[0], opath=None,
+                             mass_fraction_threshold=0.925):
         self.ds['nirv_90pct'] = self.ds['nirv'].quantile(0.9, dim='time_gap_filled')
         self.ds['nirv_10pct'] = self.ds['nirv'].quantile(0.1, dim='time_gap_filled')
         self.ds['RH_from_VDP']= vpd_hpa_to_rh(self.ds['VPD_F'], self.ds['t2m'])/100
@@ -67,19 +178,10 @@ class pyvprnn:
             dominant = counts.idxmax(dim="class")
             self.ds['dominant_scl'] = dominant
         self.ds["flux_mask"] = self.ds['land_cover_map'].sel({'vprm_classes': 7}) < 0.99
-        # if "class4_ge10pct" not in self.ds:
-        #     count_4 = counts.sel({"class": 4})
-        #     total_valid = counts.sum(dim="class")
-        #     frac_4 = count_4 / total_valid
-        #     flag_low_class4 = (frac_4 >= 0.1).astype(int)
-        #     self.ds["class4_ge10pct"] = flag_low_class4
 
-        self.crop_to_mass_fraction(mass_fraction=0.99)
+        self.crop_to_mass_fraction(mass_fraction=mass_fraction_threshold)
         spatial_sum = self.ds_cropped['ffp_footprint'].sum(dim=['x', 'y'])
         self.ds_cropped['ffp_footprint'] = self.ds_cropped['ffp_footprint'] / spatial_sum
-        
-        #fracs = (self.ds_cropped['land_cover_map']*self.ds_cropped['ffp_footprint']).sum(dim=['x', 'y'])
-        #valid_footprint_mask = fracs.sum(dim='vprm_classes') != 0
 
         valid_footprint_mask = (self.ds_cropped['ffp_footprint'].sum(dim=['x', 'y'], skipna=True) != 0)
         vars_datetime = [
@@ -110,7 +212,8 @@ class pyvprnn:
         print('Valid times per year:', counts)
         return
 
-    def split_train_val_test(self, k=5, val_frac=0.15, random_state=42):
+    def split_train_val_test(self, k=5, val_frac=0.15, 
+                             test_frac=None, random_state=42):
         """
         K-fold random (non-daywise) cross-validation:
             - Randomly shuffles timestamps
@@ -127,13 +230,41 @@ class pyvprnn:
                 ...
             ]
         """
+
+        times = np.array(self.common_times)
+        rng = np.random.default_rng(random_state)
     
+        # --- special case: no CV, just one split ---
+        if k == 1:
+            times_shuffled = rng.permutation(times)
+            n = len(times_shuffled)
+    
+            # default: same size as one CV fold
+            if test_frac is None:
+                test_frac = 1 / 5  # mimic k=5 default
+    
+            n_test = int(n * test_frac)
+            n_val = int((n - n_test) * val_frac)
+    
+            test_times = np.sort(times_shuffled[:n_test])
+            val_times = np.sort(times_shuffled[n_test:n_test + n_val])
+            train_times = np.sort(times_shuffled[n_test + n_val:])
+    
+            self.cv_folds = [
+                dict(
+                    train_times=train_times,
+                    val_times=val_times,
+                    test_times=test_times,
+                    train_weights=np.ones(len(train_times)),
+                    val_weights=np.ones(len(val_times)),
+                )
+            ]
+    
+            return
         times = np.array(self.common_times)
     
-        # --- shuffle all timestamps ---
-        rng = np.random.default_rng(random_state)
+       # --- original k-fold logic ---
         times_shuffled = rng.permutation(times)
-    
         n = len(times_shuffled)
     
         # --- partition indices into k folds (balanced) ---
@@ -180,6 +311,7 @@ class pyvprnn:
             self,
             k=5,
             val_frac=0.15,
+            test_frac=None,
             block_days=1,
             shuffle=True,
             random_state=42
@@ -201,9 +333,60 @@ class pyvprnn:
                 ...
             ]
         """
-    
-        import numpy as np
-        import pandas as pd
+
+        def blocks_to_times(blocks):
+            out = []
+            for block in blocks:
+                for d in block:
+                    out.extend(day_to_times[d])
+            return np.array(out, dtype="datetime64[ns]")
+
+        if k == 1:
+            rng = np.random.default_rng(random_state)
+        
+            times = pd.to_datetime(self.common_times)
+            times = times.sort_values()
+        
+            dates = np.array([t.date() for t in times])
+            unique_days = np.unique(dates)
+        
+            # --- blocks ---
+            day_blocks = [
+                unique_days[i:i + block_days]
+                for i in range(0, len(unique_days), block_days)
+            ]
+            day_blocks = np.array(day_blocks, dtype=object)
+        
+            if shuffle:
+                day_blocks = rng.permutation(day_blocks)
+        
+            # --- split into train/val/test ---
+            n_blocks = len(day_blocks)
+            if test_frac is None:     
+                test_frac = 1 / 5
+            n_test = max(1, int(test_frac * n_blocks))
+            n_val  = max(1, int(val_frac * (n_blocks - n_test)))
+        
+            test_blocks = day_blocks[:n_test]
+            val_blocks  = day_blocks[n_test:n_test + n_val]
+            train_blocks = day_blocks[n_test + n_val:]
+        
+            # build mapping (same as your code)
+            day_to_times = {}
+            for t in times:
+                d = t.date()
+                day_to_times.setdefault(d, []).append(t)
+        
+            self.cv_folds = [
+                dict(
+                    train_times=np.sort(blocks_to_times(train_blocks)),
+                    val_times=np.sort(blocks_to_times(val_blocks)),
+                    test_times=np.sort(blocks_to_times(test_blocks)),
+                    train_weights=np.ones(len(blocks_to_times(train_blocks))),
+                    val_weights=np.ones(len(blocks_to_times(val_blocks))),
+                )
+            ]
+            return
     
         # --- ensure datetime ---
         times = pd.to_datetime(self.common_times)
@@ -244,12 +427,6 @@ class pyvprnn:
             d = t.date()
             day_to_times.setdefault(d, []).append(t)
     
-        def blocks_to_times(blocks):
-            out = []
-            for block in blocks:
-                for d in block:
-                    out.extend(day_to_times[d])
-            return np.array(out, dtype="datetime64[ns]")
     
         # --- build all folds ---
         self.cv_folds = []
@@ -464,7 +641,7 @@ class pyvprnn:
         self.ds.attrs["crs"] = self.ds.attrs["crs"].to_wkt()
         self.ds.to_netcdf(os.path.join(base_path, 'out.nc'))
         return
-    
+
     def get_training_data(self, vprm_pre=None, met=None, footprint=None,
                  flux_tower=None, base_path=None, meteo_vars=None):
         self.era5_inst = met
@@ -545,8 +722,80 @@ class pyvprnn:
         self.ds.to_netcdf(os.path.join(base_path, 'out.nc'))
         return
 
-
     def crop_to_mass_fraction(
+        self,
+        var="ffp_footprint",
+        time_dim="t",
+        x_dim="x",
+        y_dim="y",
+        mass_fraction=0.99,
+    ):
+        """
+        Memory-safe cropping to approximate mass_fraction bounding box.
+        Avoids global sorting and large materialization.
+        """
+    
+        import numpy as np
+        import xarray as xr
+        import numpy as np
+        import pandas as pd
+        import psutil, os
+        
+        def log_mem(msg):
+            process = psutil.Process(os.getpid())
+            mem = process.memory_info().rss / 1e9
+            print(f"{msg}: {mem:.2f} GB")
+        print(self.ds[var].data)
+        print(self.ds[var].chunks)
+        # --- 1) Sum over time (lazy) ---
+        log_mem('before foot')
+        foot = self.ds[var].sum(dim=time_dim)
+    
+        # --- 2) total mass (scalar only → safe to compute) ---
+        log_mem('Before Compute')
+        total_mass = foot.sum().compute()
+        log_mem('After Compute')
+        threshold = mass_fraction * total_mass
+    
+        # --- 3) normalize (still lazy) ---
+        foot_norm = foot / total_mass
+    
+        # --- 4) threshold small values (no sorting!) ---
+        # heuristic threshold (tune if needed)
+        mask = foot_norm > 1e-6
+    
+        # --- 5) reduce to 1D masks (still lazy) ---
+        y_mask = mask.any(dim=x_dim)
+        x_mask = mask.any(dim=y_dim)
+    
+        # --- 6) compute ONLY 1D boolean arrays ---
+        log_mem('before y mask np')
+        y_mask_np = y_mask.compute().values
+        x_mask_np = x_mask.compute().values
+        log_mem('after y mask np')
+    
+        # --- 7) get index ranges ---
+        y_idx = np.where(y_mask_np)[0]
+        x_idx = np.where(x_mask_np)[0]
+    
+        if len(y_idx) == 0 or len(x_idx) == 0:
+            raise ValueError("Cropping failed: no valid footprint region found")
+    
+        ymin_i, ymax_i = y_idx.min(), y_idx.max()
+        xmin_i, xmax_i = x_idx.min(), x_idx.max()
+    
+        # --- 8) use isel (cheap slicing, no copying) ---
+        self.ds_cropped = self.ds.isel(
+            {
+                y_dim: slice(ymin_i, ymax_i + 1),
+                x_dim: slice(xmin_i, xmax_i + 1),
+            }
+        )
+    
+        return
+    
+
+    def crop_to_mass_fraction_old(
         self,
         var="ffp_footprint",
         time_dim="t",
@@ -608,7 +857,7 @@ class pyvprnn:
         self.ds_cropped = self.ds.sel(
             {y_dim: directional_slice(self.ds[y_dim], ymin, ymax),
              x_dim: directional_slice(self.ds[x_dim], xmin, xmax)})
-        
+
         return
 
     def clear_ds(self):
@@ -677,6 +926,7 @@ class pyvprnn:
     def partial_dependence_preprocessed_ice(
         self,
         X_sat,
+        X_sat_static,
         X_met,
         X_mask,
         X_met_lagged,
@@ -699,12 +949,14 @@ class pyvprnn:
         if condition_mask is not None:
             X_met_c = X_met[condition_mask]
             X_sat_c = X_sat[condition_mask]
+            X_sat_static_c = X_sat_static[condition_mask]
             X_mask_c = X_mask[condition_mask]
             if X_met_lagged is not None:
                 X_met_lagged_c = X_met_lagged[condition_mask]
         else:
             X_met_c = X_met
             X_sat_c = X_sat
+            X_sat_static_c = X_sat_static
             X_mask_c = X_mask
             if X_met_lagged is not None:
                 X_met_lagged_c = X_met_lagged
@@ -738,7 +990,9 @@ class pyvprnn:
                 y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp[:,np.newaxis, np.newaxis,:],
                                                    X_met_lagged_c, X_mask_c], verbose=0)[output_var_idx].squeeze() # 
             else:
-                y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp[:,np.newaxis, np.newaxis,:], X_mask_c], verbose=0)[output_var_idx].squeeze() # 
+                y_pred = self.pixel_model.predict([X_sat_c, X_sat_static_c,
+                                                   X_met_tmp[:,np.newaxis, np.newaxis,:], X_mask_c],
+                                                  verbose=0)[output_var_idx].squeeze() # 
             ice[:, j] = y_pred
     
         # Normalize ICE curves (optional)
