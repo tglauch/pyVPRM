@@ -21,8 +21,24 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.models import load_model
 from pyproj import Transformer
 from pyVPRM.lib.functions import sel_nearest_valid
-
 import tensorflow as tf
+import time
+
+class TimeLimitCallback(tf.keras.callbacks.Callback):
+    def __init__(self, max_seconds):
+        super().__init__()
+        self.max_seconds = max_seconds
+
+    def on_train_begin(self, logs=None):
+        self.start_time = time.time()
+
+    def on_epoch_end(self, epoch, logs=None):
+        elapsed = time.time() - self.start_time
+        print(f"Elapsed time: {elapsed:.1f}s")
+
+        if elapsed > self.max_seconds:
+            print(f"\nStopping training after {elapsed:.1f} seconds")
+            self.model.stop_training = True
 
 class BroadcastToImage(tf.keras.layers.Layer):
     def call(self, inputs):
@@ -127,9 +143,12 @@ class GPPPenalty(layers.Layer):
 
 class BatchGenerator(tf.keras.utils.Sequence):
     def __init__(self, ds_cropped, sat_vars, met_vars,
-                 batch_size, shuffle=True, met_dim=1, times=None):
-        super().__init__(workers=1, use_multiprocessing=False,
-                         max_queue_size=1)
+                 batch_size, shuffle=True, met_dim=1, times=None,
+                 workers=1, use_multiprocessing=False,
+                 max_queue_size=1):
+        super().__init__(workers=workers,
+                         use_multiprocessing=use_multiprocessing,
+                         max_queue_size=max_queue_size)
     
         self.ds_cropped = ds_cropped
         self.sat_vars = sat_vars
@@ -231,7 +250,13 @@ class BatchGenerator(tf.keras.utils.Sequence):
     def on_epoch_end(self):
         if self.shuffle:
             np.random.shuffle(self.indexes)
-
+            
+    def get_batch_times(self, batch_index):
+        batch_idxs = self.indexes[
+            batch_index * self.batch_size : (batch_index + 1) * self.batch_size
+        ]
+        return self.time[batch_idxs]
+        
     def __getitem__(self, batch_index):
         t0 = time.time()
         batch_idxs = self.indexes[
@@ -405,10 +430,14 @@ class pyvprnn_v1(pyvprnn):
     def train(self, save_path_model,
               save_path_history=None,
               train_params={'batch_size': 42,
+                            'max_runtime_in_seconds': None,
                             'epochs': 1000,
                             'patience': 10,
                             'plateau_patience': 5,
-                            'learning rate': 5e-4},
+                            'learning rate': 5e-4,
+                            'workers': 1,
+                            'multiprocessing': False,
+                            'max_queue_size': 1},
               cv_fold=0,
               random_state=41):
 
@@ -432,8 +461,11 @@ class pyvprnn_v1(pyvprnn):
         val_weights = self.cv_folds[cv_fold]['val_weights'][(qc_val == 0)  & ~wrong_nigttime_val]
 
         train_gen = BatchGenerator(self.ds_cropped, self.sat_vars, self.met_vars,
-                           batch_size= train_params['batch_size'],
-                           times=train_times_qc0)
+                                   batch_size= train_params['batch_size'],
+                                   times=train_times_qc0,
+                                   workers=train_params['workers'],
+                                   use_multiprocessing=train_params['multiprocessing'],
+                                   max_queue_size=train_params['max_queue_size'])
 
         val_gen = BatchGenerator(self.ds_cropped, self.sat_vars, self.met_vars,
                                  batch_size=train_params['batch_size'],
@@ -634,14 +666,18 @@ class pyvprnn_v1(pyvprnn):
             min_lr=1e-6,
             verbose=1)
 
+        callbacks = [early_stop, reduce_lr]
+        if train_params['max_runtime_in_seconds'] is not None:
+            tlc = TimeLimitCallback(train_params['max_runtime_in_seconds'])
+            callbacks.append(tlc)
+                
         history = self.model.fit(
             train_gen,
             validation_data=val_gen,
             epochs=train_params['epochs'],
-            callbacks=[early_stop, reduce_lr],
+            callbacks=callbacks,
         )
         
-
        # print(np.min(y_unc_train), np.mean(y_unc_train), np.max(y_unc_train))
         # y_train_with_sigma = np.stack([y_train, y_unc_train], axis=1)
         # y_test_with_sigma = np.stack([y_test, y_unc_test], axis=1)

@@ -13,6 +13,12 @@ import itertools
 from loguru import logger
 from pyVPRM.lib.functions import sel_nearest_valid, central_nxn_mean, vpd_hpa_to_rh
 from pyVPRM.lib.fancy_plot import *
+import psutil
+        
+def log_mem(msg):
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / 1e9
+    print(f"{msg}: {mem:.2f} GB")
 
 def all_files_exist(item):
     for key in item.assets.keys():
@@ -51,32 +57,20 @@ class pyvprnn:
         self.ds = ds
     
     def prepare_base_dataset(self, nee_qc_flags=[0], opath=None,
-                             mass_fraction_threshold=0.925):
+                             mass_fraction_threshold=0.925,
+                            chunks_t=256):
     
-        import xarray as xr
-        import numpy as np
-        import pandas as pd
-        import psutil, os
-        
-        def log_mem(msg):
-            process = psutil.Process(os.getpid())
-            mem = process.memory_info().rss / 1e9
-            print(f"{msg}: {mem:.2f} GB")
-
 
         log_mem('Beginning')
-        if not self.ds.chunks:
-            self.ds = self.ds.chunk({"t": 256})
+        if (not self.ds.chunks) and (not chunks_t == False):
+            self.ds = self.ds.chunk({"t": chunks_t})
         ds = self.ds  # work on local reference
     
-        # --- cheap derived variables (lazy) ---
+
         ds["RH_from_VDP"] = vpd_hpa_to_rh(ds["VPD_F"], ds["t2m"]) / 100
-    
-        # --- quantiles (lazy with dask) ---
         ds["nirv_90pct"] = ds["nirv"].quantile(0.9, dim="time_gap_filled")
         ds["nirv_10pct"] = ds["nirv"].quantile(0.1, dim="time_gap_filled")
-    
-        # --- dominant SCL ---
+
         scl = ds["scl"]
         valid_classes = [4, 5, 6]
     
@@ -90,18 +84,16 @@ class pyvprnn:
         if "dominant_scl" not in ds:
             ds["dominant_scl"] = counts.idxmax(dim="class")
     
-        # --- mask ---
         ds["flux_mask"] = ds["land_cover_map"].sel(vprm_classes=7) < 0.99
         log_mem('flux_mask')
     
-        # --- crop early (IMPORTANT) ---
         self.ds_cropped = ds
-        self.crop_to_mass_fraction(mass_fraction=mass_fraction_threshold)
+        if mass_fraction_threshold is not None:        
+            self.crop_to_mass_fraction(mass_fraction=mass_fraction_threshold)
         log_mem('cropped')
     
         ds_cropped = self.ds_cropped
     
-        # --- normalize footprint lazily ---
         spatial_sum = ds_cropped["ffp_footprint"].sum(dim=["x", "y"])
         ds_cropped["ffp_footprint"] = ds_cropped["ffp_footprint"] / spatial_sum
     
@@ -113,23 +105,14 @@ class pyvprnn:
         
         qc_mask = qc_mask.compute()   # <-- only small boolean vector
         valid_times = ds_cropped["datetime_utc"].where(qc_mask, drop=True)
-        # # --- QC filter ---
-        # valid_mask = ds_cropped["NEE_VUT_REF_QC"].isin(nee_qc_flags)
-        # valid_times = ds_cropped.datetime_utc.where(valid_mask, drop=True)
-    
         ds_cropped = ds_cropped.sel(datetime_utc=valid_times)
 
         log_mem('valid times selected')
 
         valid_fp = ds_cropped["ffp_footprint"]
         
-        # compute mask (small 2D/3D → OK because it's already cropped)
         mask = valid_footprint_mask.compute()
         fp_times = ds_cropped["t"].values[mask.values]        
-        # # --- match footprint times ---
-        # fp_times = ds_cropped["ffp_footprint"].where(
-        #     valid_footprint_mask, drop=True
-        # )["t"]
     
         common_times = valid_times.sel(
             datetime_utc=valid_times.isin(fp_times)
@@ -141,15 +124,12 @@ class pyvprnn:
             .sum(dim=["x", "y"])
         ).compute()
         
-    
+
         common_times = common_times.where(footprint_sum > 1e-5, drop=True)
-    
         self.common_times = np.sort(pd.to_datetime(common_times.values))
-    
         if self.lag_window > 0:
             self.common_times = self.common_times[self.lag_window:]
     
-        # --- final selection (still lazy) ---
         self.ds_cropped = ds_cropped.sel(datetime_utc=self.common_times)
         self.ds_cropped = self.ds_cropped.sel(t=self.common_times)
     
@@ -179,7 +159,8 @@ class pyvprnn:
             self.ds['dominant_scl'] = dominant
         self.ds["flux_mask"] = self.ds['land_cover_map'].sel({'vprm_classes': 7}) < 0.99
 
-        self.crop_to_mass_fraction(mass_fraction=mass_fraction_threshold)
+        if mass_fraction_threshold is not None:
+            self.crop_to_mass_fraction(mass_fraction=mass_fraction_threshold)
         spatial_sum = self.ds_cropped['ffp_footprint'].sum(dim=['x', 'y'])
         self.ds_cropped['ffp_footprint'] = self.ds_cropped['ffp_footprint'] / spatial_sum
 
@@ -937,7 +918,8 @@ class pyvprnn:
         subsample=None,
         random_state=42,
         output_var_idx=0,
-        add_to_temp_range=0,
+        add_to_temp_range_min=0,
+        add_to_temp_range_max=0,
     ):
         """
         Compute ICE curves and PDP for one meteorological feature,
@@ -946,6 +928,7 @@ class pyvprnn:
         Returns:
             f_values, ice, pdp, subsample_idx
         """
+        t0 = time.time()
         if condition_mask is not None:
             X_met_c = X_met[condition_mask]
             X_sat_c = X_sat[condition_mask]
@@ -962,7 +945,6 @@ class pyvprnn:
                 X_met_lagged_c = X_met_lagged
     
         n_samples = X_met_c.shape[0]
-    
         # -------------------------
         # Subsampling
         # -------------------------
@@ -972,17 +954,18 @@ class pyvprnn:
             X_met_c = X_met_c[subsample_idx]
             X_sat_c = X_sat_c[subsample_idx]
             X_mask_c = X_mask_c[subsample_idx]
+            X_sat_static_c = X_sat_static_c[subsample_idx]
             if X_met_lagged is not None:
-                X_met_lagged_c = X_met_lagged_c[condition_mask]
+                X_met_lagged_c = X_met_lagged_c[subsample_idx]
         else:
             subsample_idx = np.arange(n_samples)
     
-        f_min = X_met_c[:, feature_idx].min() - add_to_temp_range
-        f_max = X_met_c[:, feature_idx].max() + add_to_temp_range
+        f_min = X_met_c[:, feature_idx].min() - add_to_temp_range_min
+        f_max = X_met_c[:, feature_idx].max() + add_to_temp_range_max
         f_values = np.linspace(f_min, f_max, n_points)
     
         ice = np.zeros((X_met_c.shape[0], n_points))
-    
+
         for j, val in enumerate(f_values):
             X_met_tmp = X_met_c.copy()
             X_met_tmp[:, feature_idx] = val
@@ -1018,7 +1001,9 @@ class pyvprnn:
         color_var=None,  # now expects an array with same length as ice.shape[0]
         cmap="viridis",
         ice_alpha=0.6,
-        out_path=''
+        out_path='',
+        ax=None,
+        fig=None,
     ):
         """
         Plot ICE curves and PDP, optionally coloring ICE curves by a variable.
@@ -1034,7 +1019,8 @@ class pyvprnn:
         color_var : np.ndarray, optional
             Array of same length as n_samples to color each ICE line
         """
-        fig, ax = plt.subplots(figsize=(6, 4))
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(6, 4))
     
         # -------------------------
         # Determine colors
@@ -1084,7 +1070,7 @@ class pyvprnn:
             f_values,
             pdp,
             color="black",
-            linewidth=3,
+            linewidth=1,
             label="Median PDP",
             zorder=10)
     
@@ -1092,19 +1078,33 @@ class pyvprnn:
         # Colorbar
         # -------------------------
         if color_var is not None:
+            from mpl_toolkits.axes_grid1.inset_locator import inset_axes
             sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
             sm.set_array([])
-            cbar = fig.colorbar(sm, ax=ax)
-            cbar.set_label("EVI")
+            cax = inset_axes(
+                ax,
+                width="70%",
+                height="30%",
+                loc="upper center",
+                bbox_to_anchor=(0.0, 1.01, 1.0, 0.1), 
+                bbox_transform=ax.transAxes,
+                borderpad=0
+            )
+            
+            cbar = fig.colorbar(sm, cax=cax, orientation="horizontal")
+            cax.xaxis.set_ticks_position("top")
+            cax.xaxis.set_label_position("top")
+            cbar.set_label("EVI", labelpad=5)
     
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         #ax.set_title(title)
         ax.grid(True)
-        ax.legend()
-        if out_path != '':  
+        # ax.legend()
+        if (out_path != '') & (fig != None):  
             fig.savefig(out_path, dpi=300,
                 bbox_inches="tight")
+        return ax
         
     
       
