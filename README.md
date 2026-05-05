@@ -8,7 +8,7 @@
 
 
 <figure>
-<img height=220pt alt="github_logo 001" src="https://github.com/user-attachments/assets/e1162013-a7f8-49a3-9e5a-9be83e6e72e3" />
+<img width="100%" alt="github_logo 001" src="https://github.com/user-attachments/assets/e1162013-a7f8-49a3-9e5a-9be83e6e72e3" />
 </figure> 
   
 pyVRPM is a data-driven model to estimate the carbon flux between the atmosphere and the terrestrial biosphere using multi-spectral satellite observations. A description of the model is published in Geoscientific Model Development (GMD) https://gmd.copernicus.org/articles/18/4713/2025/. If you use this package for you scientific work please cite as follows
@@ -41,7 +41,7 @@ To get startet with pyVPRM check out the example repository: https://github.com/
 With the new version - pyVPRM 5.3 - it is possible to replace the lowess filtering with a more stable Kalman filter. An example of the difference for EVI is shown below for the cropland site DE-RuS using Sentinel-2 data for 2022. The new function can be used by calling ```vprm_inst.kalman(...)``` instead of ```vprm_inst.lowess(...)``` for instances of the VPRM preprocessor class. 
 
 <figure>
-<img src="https://github.com/user-attachments/assets/8acdfa3f-26e8-4c40-9cd6-8c91002c22a8", height=300pt>
+<img src="https://github.com/user-attachments/assets/8acdfa3f-26e8-4c40-9cd6-8c91002c22a8", width="100%">
 </figure> 
 
 # About
