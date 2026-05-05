@@ -6,8 +6,9 @@
 ![Python Version](https://img.shields.io/pypi/pyversions/pyVPRM)
 
 
+
 <figure>
-<img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d", height=150pt>
+<img height=200pt alt="github_logo 001" src="https://github.com/user-attachments/assets/e1162013-a7f8-49a3-9e5a-9be83e6e72e3" />
 </figure> 
   
 pyVRPM is a data-driven model to estimate the carbon flux between the atmosphere and the terrestrial biosphere using multi-spectral satellite observations. A description of the model is published in Geoscientific Model Development (GMD) https://gmd.copernicus.org/articles/18/4713/2025/. If you use this package for you scientific work please cite as follows
