@@ -1,3 +1,4 @@
+
 [![DOI](https://zenodo.org/badge/626435494.svg)](https://doi.org/10.5281/zenodo.14216613)
 [![PyPI version](https://img.shields.io/pypi/v/pyVPRM.svg)](https://pypi.org/project/pyVPRM/)
 [![License](https://img.shields.io/pypi/l/pyVPRM.svg)](https://pypi.org/project/pyVPRM/)
@@ -5,12 +6,11 @@
 ![GitHub stars](https://img.shields.io/github/stars/tglauch/pyVPRM?style=social)
 ![Python Version](https://img.shields.io/pypi/pyversions/pyVPRM)
 
-
 <figure>
-<img src="https://github.com/tglauch/pyVPRM/assets/29706254/ba2565e6-1434-4a95-8086-936462f8d05d", height=150pt>
+<img width="100%" alt="github_logo 001" src="https://github.com/user-attachments/assets/1628353c-802d-4644-8dbc-0a327a72ab24" />
 </figure> 
   
-pyVRPM is a data-driven model to estimate the carbon flux between the atmosphere and the terrestrial biosphere using multi-spectral satellite observations. A description of the model is published in Geoscientific Model Development (GMD) https://gmd.copernicus.org/articles/18/4713/2025/. If you use this package for you scientific work please cite as follows
+pyVRPM — and it's extension pyVPRNN — are data-driven model to estimate the carbon flux between the atmosphere and the terrestrial biosphere using multi-spectral satellite observations. A description of the VPRM model is published in Geoscientific Model Development (GMD) https://gmd.copernicus.org/articles/18/4713/2025/. A description of pyVPRNN is following soon. If you use this package for you scientific work please cite as follows
 
 ```
 Glauch, T., Marshall, J., Gerbig, C., Botía, S., Gałkowski, M., Vardag, S. N., & Butz, A. (2025). pyVPRM: A next-generation vegetation photosynthesis and respiration model for the post-MODIS era. Geoscientific Model Development, 18(14), 4713–4742. https://doi.org/10.5194/gmd-18-4713-2025
@@ -40,7 +40,7 @@ To get startet with pyVPRM check out the example repository: https://github.com/
 With the new version - pyVPRM 5.3 - it is possible to replace the lowess filtering with a more stable Kalman filter. An example of the difference for EVI is shown below for the cropland site DE-RuS using Sentinel-2 data for 2022. The new function can be used by calling ```vprm_inst.kalman(...)``` instead of ```vprm_inst.lowess(...)``` for instances of the VPRM preprocessor class. 
 
 <figure>
-<img src="https://github.com/user-attachments/assets/8acdfa3f-26e8-4c40-9cd6-8c91002c22a8", height=300pt>
+<img src="https://github.com/user-attachments/assets/8acdfa3f-26e8-4c40-9cd6-8c91002c22a8", width="100%">
 </figure> 
 
 # About
