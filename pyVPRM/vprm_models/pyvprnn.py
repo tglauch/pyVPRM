@@ -624,7 +624,7 @@ class pyvprnn:
         return
 
     def get_training_data(self, vprm_pre=None, met=None, footprint=None,
-                 flux_tower=None, base_path=None, meteo_vars=None):
+                 flux_tower=None, base_path=None, meteo_vars=None, save=False):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
         self.flux_tower = flux_tower
@@ -700,7 +700,8 @@ class pyvprnn:
         self.ds.attrs["site"] = flux_tower.site_name
         self.ds.attrs["site_lat"] = flux_tower.lat    
         self.ds.attrs["site_lon"] = flux_tower.lon  
-        self.ds.to_netcdf(os.path.join(base_path, 'out.nc'))
+        if save:
+            self.ds.to_netcdf(os.path.join(base_path, 'out.nc'))
         return
 
     def crop_to_mass_fraction(
@@ -960,8 +961,8 @@ class pyvprnn:
         else:
             subsample_idx = np.arange(n_samples)
     
-        f_min = X_met_c[:, feature_idx].min() - add_to_temp_range_min
-        f_max = X_met_c[:, feature_idx].max() + add_to_temp_range_max
+        f_min = np.percentile(X_met_c[:, feature_idx], 3) - add_to_temp_range_min
+        f_max = np.percentile(X_met_c[:, feature_idx].max(), 97) + add_to_temp_range_max
         f_values = np.linspace(f_min, f_max, n_points)
     
         ice = np.zeros((X_met_c.shape[0], n_points))
@@ -998,12 +999,18 @@ class pyvprnn:
         title,
         show_ices=True,
         show_band=False,
+        show_band_color='gray',
         color_var=None,  # now expects an array with same length as ice.shape[0]
         cmap="viridis",
         ice_alpha=0.6,
         out_path='',
         ax=None,
         fig=None,
+        vmin=None,
+        vmax=None,
+        plot_pdp=True,
+        plot_colorbar=True,
+        cbar_label = "EVI",
     ):
         """
         Plot ICE curves and PDP, optionally coloring ICE curves by a variable.
@@ -1030,8 +1037,10 @@ class pyvprnn:
                 raise ValueError(
                     f"color_var must have length {ice.shape[0]}, got {len(color_var)}"
                 )
-            vmin = np.nanpercentile(color_var, 5)
-            vmax = np.nanpercentile(color_var, 95)
+            if vmin is None:
+                vmin = np.nanpercentile(color_var, 5)
+            if vmax is None:
+                vmax = np.nanpercentile(color_var, 95)
             norm = plt.Normalize(vmin=vmin, vmax=vmax)
             colors = plt.cm.get_cmap(cmap)(norm(color_var))
         else:
@@ -1047,8 +1056,8 @@ class pyvprnn:
                     f_values,
                     ice[i],
                     color=colors[i],
-                    linewidth=0.4,
-                    alpha=ice_alpha)
+                    alpha=0.6,
+                    linewidth=0.4)
                 
         if show_band:
                 p5  = np.nanpercentile(ice, 5, axis=0)
@@ -1059,25 +1068,26 @@ class pyvprnn:
                     f_values,
                     p5,
                     p95,
-                    color="gray",
-                    alpha=0.3,
-                    label="5–95% ICE range")
+                    color=show_band_color,
+                    alpha=0.35,
+                    label="ICE range")
     
         # -------------------------
         # PDP
         # -------------------------
-        ax.plot(
-            f_values,
-            pdp,
-            color="black",
-            linewidth=1,
-            label="Median PDP",
-            zorder=10)
-    
+        if plot_pdp:
+            ax.plot(
+                f_values,
+                pdp,
+                color="black",
+                linewidth=1.5,
+                label="Median PDP",
+                zorder=10)
+        
         # -------------------------
         # Colorbar
         # -------------------------
-        if color_var is not None:
+        if (color_var is not None) and plot_colorbar:
             from mpl_toolkits.axes_grid1.inset_locator import inset_axes
             sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
             sm.set_array([])
@@ -1094,7 +1104,7 @@ class pyvprnn:
             cbar = fig.colorbar(sm, cax=cax, orientation="horizontal")
             cax.xaxis.set_ticks_position("top")
             cax.xaxis.set_label_position("top")
-            cbar.set_label("EVI", labelpad=5)
+            cbar.set_label(cbar_label, labelpad=5)
     
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)

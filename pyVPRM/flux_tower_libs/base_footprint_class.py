@@ -155,7 +155,8 @@ class base_footprint_manager:
         if 'PBLH' in flux_tower_data.columns:
             self.h_pbl = flux_tower_data['PBLH'].values
         elif self.era5_instance is not None:
-            self.era5_instance.get_data_series(self.flux_tower_manager.get_lonlat(), 'blh', self.time_stamps)
+            self.era5_instance.get_data_series(self.flux_tower_manager.get_lonlat(),
+                                               'blh', self.time_stamps)
         else:
             self.h_pbl = np.ones(len(self.time_stamps))*1000
         if 'FETCH_70' in flux_tower_data.columns:
@@ -177,7 +178,11 @@ class base_footprint_manager:
         self.u = flux_tower_data['WS'].values
         self.u_dir = flux_tower_data['WD'].values
         self.u_star = flux_tower_data['USTAR'].values
-        self.sigma_v = flux_tower_data['V_SIGMA'].values
+        if 'V_SIGMA' in flux_tower_data.columns:
+            self.sigma_v = flux_tower_data['V_SIGMA'].values
+        else:
+            print('Approximate sigma_v as 2*ustar')
+            self.sigma_v = 2 * flux_tower_data['USTAR'].values
         return
 
 

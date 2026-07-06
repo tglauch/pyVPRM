@@ -12,7 +12,7 @@ Deciduous Forest:
     class_numbers:
         - 2
     tmin: 1
-    topt: 21
+    topt: 17
     tmax: 37
     tlow: 0 
 

@@ -145,7 +145,8 @@ class BatchGenerator(tf.keras.utils.Sequence):
     def __init__(self, ds_cropped, sat_vars, met_vars,
                  batch_size, shuffle=True, met_dim=1, times=None,
                  workers=1, use_multiprocessing=False,
-                 max_queue_size=1):
+                 max_queue_size=1, target="NEE_VUT_REF",
+                 unc="NEE_VUT_REF_JOINTUNC"):
         super().__init__(workers=workers,
                          use_multiprocessing=use_multiprocessing,
                          max_queue_size=max_queue_size)
@@ -156,6 +157,8 @@ class BatchGenerator(tf.keras.utils.Sequence):
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.met_dim = met_dim
+        self._target = target
+        self._unc = unc
         self.init_training_cache(sat_vars, met_vars, met_dim)
         self._static_cache_B = None
         self._static_cache = None
@@ -217,10 +220,10 @@ class BatchGenerator(tf.keras.utils.Sequence):
         self.nirv_min = self.ds_cropped["nirv_10pct"].values[..., None].astype(np.float32)
 
         # TARGETS
-        self.y_array = self.ds_cropped["NEE_VUT_REF"].sel(
+        self.y_array = self.ds_cropped[self._target].sel(
             datetime_utc=self.time).values.astype(np.float32)
 
-        self.y_unc_array = self.ds_cropped["NEE_VUT_REF_JOINTUNC"].sel(
+        self.y_unc_array = self.ds_cropped[self._unc].sel(
             datetime_utc=self.time).values.astype(np.float32)
 
         self.fp_array = self.ds_cropped["ffp_footprint"].sel(
@@ -437,7 +440,10 @@ class pyvprnn_v1(pyvprnn):
                             'learning rate': 5e-4,
                             'workers': 1,
                             'multiprocessing': False,
-                            'max_queue_size': 1},
+                            'max_queue_size': 1,
+                            'loss': 'nll_loss_from_stacked'},
+              target="NEE_VUT_REF",
+              target_unc="NEE_VUT_REF_JOINTUNC",
               cv_fold=0,
               random_state=41):
 
@@ -446,16 +452,12 @@ class pyvprnn_v1(pyvprnn):
         wrong_nigttime_train = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=train_times)<0) &\
                           (self.ds_cropped["ssrd"].sel(datetime_utc=train_times)==0))
         train_times_qc0 = train_times[(qc_train == 0) & ~wrong_nigttime_train]
-        # Xmet_train, Xsat_train, fp_train, flux_mask_train, y_train, y_unc_train = \
-        #      self.build_nn_arrays(train_times_qc0, met_dim=1) # 
 
         val_times = self.cv_folds[cv_fold]['val_times']
         qc_val = self.ds_cropped["NEE_VUT_REF_QC"].sel(datetime_utc=val_times)
         wrong_nigttime_val = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=val_times)<0) &\
                           (self.ds_cropped["ssrd"].sel(datetime_utc=val_times)==0))
         val_times_qc0 = val_times[(qc_val == 0)  & ~wrong_nigttime_val]
-        # Xmet_test, Xsat_test, fp_test, flux_mask_test, y_test, y_unc_test =\
-        #      self.build_nn_arrays(val_times_qc0, met_dim=1) # 
 
         train_weights = self.cv_folds[cv_fold]['train_weights'][(qc_train == 0) & ~wrong_nigttime_train]
         val_weights = self.cv_folds[cv_fold]['val_weights'][(qc_val == 0)  & ~wrong_nigttime_val]
@@ -465,12 +467,16 @@ class pyvprnn_v1(pyvprnn):
                                    times=train_times_qc0,
                                    workers=train_params['workers'],
                                    use_multiprocessing=train_params['multiprocessing'],
-                                   max_queue_size=train_params['max_queue_size'])
+                                   max_queue_size=train_params['max_queue_size'],
+                                   target=target,
+                                   unc=target_unc)
 
         val_gen = BatchGenerator(self.ds_cropped, self.sat_vars, self.met_vars,
                                  batch_size=train_params['batch_size'],
                                  times=val_times_qc0,
-                                 shuffle=False)
+                                 shuffle=False,
+                                 target=target,
+                                 unc=target_unc)
         
         (Xsat_batch, Xstatic_batch, Xmet_batch, _, _), _ = train_gen[0]
         
@@ -645,11 +651,19 @@ class pyvprnn_v1(pyvprnn):
         def mse_true_only(y_with_sigma_true, y_pred):
             y_true = y_with_sigma_true[..., 0][..., None]
             return tf.reduce_mean(tf.square(y_true - y_pred))
-        
+
+        if train_params['loss'] == 'nll_loss_from_stacked':
+            loss = nll_loss_from_stacked
+        elif train_params['loss']=='mse':
+            loss = mse_true_only
+        else:
+            loss=None
+            print('Not Implemented')
+            
         self.model.compile(
             optimizer=tf.keras.optimizers.Adam(
                 learning_rate=train_params['learning rate']),
-            loss=nll_loss_from_stacked, #nll_loss_from_stacked, #'mse', #Huber(delta=5.0), #'mse'
+            loss=loss, #nll_loss_from_stacked, #'mse', #Huber(delta=5.0), #'mse'
             metrics=[mse_true_only])
         
         self.model.summary()

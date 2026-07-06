@@ -6,11 +6,13 @@ import xarray as xr
 
 class esa_world_cover(satellite_data_manager):
 
-    def __init__(self, sat_image_path):
+    def __init__(self, sat_image_path, sat_img=None):
         super().__init__()
         self.load_kwargs = {}
         self.sat_image_path = sat_image_path
         self.resolution = 10.0
+        if sat_img is not None:
+            self.sat_img = sat_img
 
     def get_resolution(self):
         return self.resolution

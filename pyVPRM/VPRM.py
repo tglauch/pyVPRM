@@ -791,7 +791,10 @@ class vprm_preprocessor:
             Returns:
                     None
         """
-        self.sat_imgs.sat_img.load()
+        
+        from dask.diagnostics import ProgressBar
+        with ProgressBar():
+            self.sat_imgs.sat_img = self.sat_imgs.sat_img.compute()
 
         if n_cpus is None:
             n_cpus = self.n_cpus
@@ -954,7 +957,10 @@ class vprm_preprocessor:
             Returns:
                     None
         """
-        self.sat_imgs.sat_img.load()
+
+        from dask.diagnostics import ProgressBar
+        with ProgressBar():
+            self.sat_imgs.sat_img = self.sat_imgs.sat_img.compute()
 
         if n_cpus is None:
             n_cpus = self.n_cpus
@@ -986,7 +992,7 @@ class vprm_preprocessor:
                 return
         else:
             xvals = self.sat_imgs.sat_img["time"]
-        logger.info("Lowess timestamps {}".format(xvals))
+        logger.info("Kalman timestamps {}".format(xvals))
 
         if (self.flux_tower_instances is not None) and (smooth_all is False):  # Is flux tower sites are given
             if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
