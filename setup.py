@@ -51,6 +51,8 @@ setup(
         "loguru",
         "fiona",
         "pykalman",
+        "numexpr",
+        "cartopy"
     ],
     include_package_data=True,
     zip_safe=False,
