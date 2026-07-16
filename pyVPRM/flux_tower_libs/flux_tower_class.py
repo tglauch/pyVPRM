@@ -9,7 +9,7 @@ from timezonefinder import TimezoneFinder
 from datetime import datetime, timedelta
 import pathlib
 import glob
-
+from pyVPRM.lib.functions import get_eth_canopy_height
 
 class flux_tower_data:
     # Class to store flux tower data in unique format
@@ -582,3 +582,178 @@ class icos(flux_tower_data):
         for i, row in dataframe.iterrows():
             utc_datetime.append(parser.parse(str(int(row['TIMESTAMP_END'])))  -  timezone.utcoffset(dt))
         return np.array(utc_datetime)
+
+class fluxnet_shuttle(flux_tower_data):
+    def __init__(
+        self,
+        data_path,
+        ssrd_key=None,
+        t2m_key=None,
+        use_vars=None,
+        t_start=None,
+        t_stop=None,
+        need_footprint_variables=False,
+        temp_folder='./',
+    ):
+        self.data_path = data_path
+        site_name = data_path.split('/')[-1].split('_')[1]
+        self.need_footprint_variables = need_footprint_variables
+
+        super().__init__(t_start, t_stop, ssrd_key, t2m_key, site_name)
+
+        if use_vars in (None, "all"):
+            self.vars = "all"
+        else:
+            self.vars = use_vars
+
+        self.temp_folder = temp_folder
+        self.site_info = pd.read_csv(
+            self.data_path.replace('FLUXMET_HH', 'BIF'),
+            on_bad_lines="skip",
+        )
+
+        self.land_cover_type = self.site_info.loc[
+            self.site_info["VARIABLE"] == "IGBP", "DATAVALUE"
+        ].values[0]
+        self.lat = float(
+            self.site_info.loc[self.site_info["VARIABLE"] == "LOCATION_LAT", "DATAVALUE"].values[0]
+        )
+        self.lon = float(
+            self.site_info.loc[self.site_info["VARIABLE"] == "LOCATION_LONG", "DATAVALUE"].values[0]
+        )
+        try:
+            self.elev = float(
+                self.site_info.loc[self.site_info['VARIABLE'] == 'LOCATION_ELEV', 'DATAVALUE'].values[0]
+            )
+        except (IndexError, KeyError, ValueError):
+            print('failed to load elevation. continue.')
+
+        # Resolve the site's timezone once and cache it.
+        tf = TimezoneFinder()
+        self.timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
+        self.standard_utc_offset = self._get_standard_utc_offset(self.timezone_str)
+
+        return
+
+    @staticmethod
+    def _get_standard_utc_offset(timezone_str):
+        """
+        Return the fixed UTC offset (timedelta) for LOCAL STANDARD TIME
+        (i.e. non-DST) in the given IANA timezone.
+
+        FLUXNET/AmeriFlux data is documented to be reported in local
+        standard time year-round -- DST is never applied, regardless of
+        hemisphere or time of year. So this must NOT depend on picking a
+        date that happens to fall in standard time (that breaks for
+        Southern Hemisphere sites, where e.g. January is DST). Forcing
+        is_dst=False makes pytz return the standard-time offset
+        unconditionally.
+        """
+        tz = pytz.timezone(timezone_str)
+        reference_naive = datetime(2000, 1, 1, 12, 0, 0)
+        localized = tz.localize(reference_naive, is_dst=False)
+        return localized.utcoffset()
+
+    def local_to_utc(self, timestamp_end):
+        """
+        Vectorized conversion of FLUXNET TIMESTAMP_END values (local
+        STANDARD time, formatted YYYYMMDDHHMM) to naive UTC datetimes.
+
+        A single fixed offset is correct here (and is *not* a
+        simplification) because the source data has no DST component by
+        definition -- see FLUXNET timestamp/timezone convention docs.
+        """
+        local_naive = pd.to_datetime(
+            timestamp_end.astype(int).astype(str), format="%Y%m%d%H%M"
+        )
+        return (local_naive - self.standard_utc_offset).values
+
+    def get_utc_times(self, dataframe):
+        return self.local_to_utc(dataframe["TIMESTAMP_END"])
+
+    def add_tower_data(self, met_inst=None, missing_displacement_heights_dict=None):
+        self.met_inst = met_inst
+
+        if self.vars == "all":
+            idata = pd.read_csv(self.data_path, on_bad_lines="skip")
+        else:
+            idata = pd.read_csv(
+                self.data_path, usecols=lambda x: x in self.vars, on_bad_lines="skip"
+            )
+
+        if self.need_footprint_variables:
+            variable_info = pd.read_csv(
+                self.data_path.replace('FLUXMET', 'BIFVARINFO'), on_bad_lines='skip'
+            )
+
+            group_ids_nee_entries = variable_info.loc[
+                variable_info['DATAVALUE'] == 'NEE_VUT_REF', 'GROUP_ID'
+            ].values
+            indices_group_id = variable_info.index[variable_info['GROUP_ID'].isin(group_ids_nee_entries)]
+            indices_height_parameter = variable_info.index[variable_info['VARIABLE'] == 'VAR_INFO_HEIGHT']
+            indices_heights = indices_group_id.intersection(indices_height_parameter)
+            heights = variable_info['DATAVALUE'][indices_heights].values
+
+            indices_parameter_date = variable_info.index[variable_info['VARIABLE'] == 'VAR_INFO_DATE']
+            indices_dates = indices_group_id.intersection(indices_parameter_date)
+            dates_height_measurement = variable_info['DATAVALUE'][indices_dates].values
+            if not (dates_height_measurement == np.sort(dates_height_measurement)).all():
+                sorting_indices = np.argsort(dates_height_measurement)
+                dates_height_measurement = dates_height_measurement[sorting_indices]
+                heights = heights[sorting_indices]
+
+            idata['z_measurement'] = float(heights[0])
+            for idx_height, height in enumerate(heights):
+                mask = idata['TIMESTAMP_END'] >= float(dates_height_measurement[idx_height])
+                idata.loc[mask, 'z_measurement'] = float(heights[idx_height])
+            self.mean_z_measurement = idata['z_measurement'].mean()
+
+        idata.rename({self.ssrd_key: "ssrd", self.t2m_key: "t2m"}, inplace=True, axis=1)
+
+        # single vectorized local-standard-time -> UTC conversion, no per-row loop
+        idata["datetime_utc"] = self.local_to_utc(idata["TIMESTAMP_END"])
+
+        if self.need_footprint_variables:
+            canopy_height = get_eth_canopy_height(self.lat, self.lon)
+            print('Land Cover Type', self.land_cover_type)
+            if self.land_cover_type in ['ENF', 'EBF', 'DBF', 'DNF', 'MF']:
+                idata['z_footprint'] = 0.68 * canopy_height
+            else:
+                idata['z_footprint'] = 0
+            idata['z_displacement'] = idata['z_measurement'] - idata['z_footprint']
+            self.mean_z_footprint = idata['z_footprint'].mean()
+            self.mean_z_displacement = idata['z_displacement'].mean()
+            print('sensor height above ground:', self.mean_z_measurement)
+            print('displacement height above ground:', self.mean_z_displacement)
+
+            rho = idata['PA_F'] * 1000 / (287.05 * (idata['TA_F_MDS'] + 273.15))
+            MO_LENGTH = -(rho * 1004 * (idata['TA_F_MDS'] + 273.15) * idata['USTAR'] ** 3) / (
+                0.4 * 9.81 * idata['H_F_MDS']
+            )
+            MO_LENGTH = MO_LENGTH.where((MO_LENGTH > -1000) & (MO_LENGTH < 1000))
+            idata['MO_LENGTH'] = MO_LENGTH
+            idata['ZL'] = idata['z_displacement'] / idata['MO_LENGTH']
+
+        if (self.tstart is not None) and (self.tstop is not None):
+            mask = (idata['datetime_utc'] >= self.tstart) & (idata['datetime_utc'] <= self.tstop)
+            flux_data = idata[mask]
+        else:
+            flux_data = idata
+
+        if self.met_inst is not None:
+            add_mets = self.met_inst.get_data(lonlat=(self.lon, self.lat),
+                                   times=flux_data['datetime_utc'].values)
+            flux_data = flux_data.reset_index(drop=True)
+            for var in add_mets.data_vars:
+                flux_data[var] = add_mets[var].values
+
+        if len(flux_data) < 2:
+            print("No data for {} in given time range".format(self.site_name))
+            years = pd.DatetimeIndex(idata['datetime_utc']).year.unique()
+            print("Data only available for the following years {}".format(years.tolist()))
+            return False
+
+        flux_data.rename(columns={'blh': 'PBLH'}, inplace=True)
+        self.flux_data = flux_data
+        return True
+

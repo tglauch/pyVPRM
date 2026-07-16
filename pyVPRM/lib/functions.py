@@ -10,6 +10,9 @@ from datetime import datetime
 import rioxarray
 import warnings
 from pykalman import KalmanFilter
+import requests
+from pathlib import Path
+import rioxarray as rxr
 
 def vpd_hpa_to_rh(vpd_hpa, T):
     """
@@ -793,5 +796,94 @@ def replace_inf_runs_ignore_nans(
     out = np.moveaxis(out, 0, time_axis)
 
     return xr.DataArray(out, coords=da.coords, dims=da.dims, name=da.name, attrs=da.attrs)
+    
+    
+def get_eth_canopy_height(lat, lon, radius_m=50, basepath="."):
+    """
+    Get ETH Global Canopy Height around a point.
+
+    Parameters
+    ----------
+    lat, lon : float
+        Latitude and longitude (EPSG:4326)
+    radius_m : float
+        Radius around point in meters
+    basepath : str or Path
+        Directory for cached tiles
+
+    Returns
+    -------
+    xarray.DataArray
+        Canopy height subset
+    """
+
+    BASE_URL = (
+        "https://libdrive.ethz.ch/index.php/s/cO8or7iOe5dT2Rt/"
+        "download?path=%2F3deg_cogs&files="
+    )
+    
+    
+    def format_lat(lat):
+        lat0 = int(lat // 3 * 3)
+        return f"N{lat0:02d}" if lat0 >= 0 else f"S{abs(lat0):02d}"
+    
+    
+    def format_lon(lon):
+        lon0 = int(lon // 3 * 3)
+        return f"E{lon0:03d}" if lon0 >= 0 else f"W{abs(lon0):03d}"
+
+    
+    basepath = Path(basepath)
+    basepath.mkdir(exist_ok=True, parents=True)
+
+    # Determine tile
+    filename = (
+        f"ETH_GlobalCanopyHeight_10m_2020_"
+        f"{format_lat(lat)}{format_lon(lon)}_Map.tif"
+    )
+
+    filepath = basepath / filename
+
+    # Download if missing
+    if not filepath.exists():
+        print(f"Downloading {filename}")
+
+        url = BASE_URL + filename
+
+        r = requests.get(url, stream=True)
+        r.raise_for_status()
+
+        with open(filepath, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
+    # else:
+    #     print(f"Using cached {filename}")
+
+    # Open raster
+    chm = rxr.open_rasterio(
+        filepath,
+        masked=True
+    ).squeeze()
+
+    # Approximate degree conversion
+    # 1 deg latitude ≈ 111 km
+    dlat = radius_m / 111_000
+
+    # longitude distance depends on latitude
+    dlon = radius_m / (111_000 * abs(__import__("math").cos(
+        __import__("math").radians(lat)
+    )))
+
+    # Read only bbox
+    chm_box = chm.rio.clip_box(
+        minx=lon - dlon,
+        maxx=lon + dlon,
+        miny=lat - dlat,
+        maxy=lat + dlat
+    )
+
+    return float(chm_box.mean())
 
 

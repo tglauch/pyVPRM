@@ -17,6 +17,10 @@ map_function = lambda lon: (lon - 360) if (lon > 180) else lon
 
 map_function_inv = lambda lon: (lon + 360) if (lon < 0) else lon
 
+data_product_path = dict()
+data_product_path['era5_land'] = 'data.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr'
+data_product_path['era5_single_level'] = 'api.earthdatahub.destine.eu/era5/reanalysis-era5-single-levels-v0.zarr'
+
 class met_data_handler(met_data_handler_base):
     """
     Class for using ERA5 data available on Levante's DKRZ cluster.
@@ -24,7 +28,7 @@ class met_data_handler(met_data_handler_base):
 
     def __init__(self, PAT=None, year=None, month=None, day=None, hour=None,
                  keys=[], lat_slice=None, lon_slice=None,
-                 mpi=False):
+                 mpi=False, data_product='era5_land'):
         if PAT is None:
             print('Need to set the access token via the PAT argument. Check https://platform.destine.eu/.')
             return
@@ -36,6 +40,7 @@ class met_data_handler(met_data_handler_base):
         self.lat_slice = lat_slice
         self.lon_slice = lon_slice
         self.mpi = mpi
+        self.data_product = data_product
         self.instantaneous=False
         if self.lon_slice is not None:
             self.lon_slice[0] = map_function_inv(self.lon_slice[0])
@@ -45,7 +50,7 @@ class met_data_handler(met_data_handler_base):
 
     def load_ds(self):
         self.ds = xr.open_dataset(
-            "https://edh:{}@data.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr".format(self.PAT),
+            "https://edh:{}@{}".format(self.PAT, data_product_path[self.data_product]) ,
             chunks={},
             engine="zarr",
         ).astype("float32").rename({'longitude':'lon',
@@ -212,7 +217,6 @@ class met_data_handler(met_data_handler_base):
         self.rearrange_lons_lats()
     
         return
-
     
     # def reduce_time(self, t0, t1):
     #     sel_dict = {"valid_time": slice(t0, t1)}
@@ -249,31 +253,47 @@ class met_data_handler(met_data_handler_base):
     #     self.ds = self.ds.compute()
     #     return
 
-    def get_data(self, lonlat=None, key=None,
-                 interp_method='nearest'):
-        if self.instantaneous is False:
+    def get_data(
+        self,
+        lonlat=None,
+        key=None,
+        times=None,
+        interp_method="nearest",
+    ):
+        if not self.instantaneous:
             self.accumulated_to_inst()
-        if lonlat is None:
+    
+        if lonlat is None and not self.rearranged:
             self.rearrange_lons_lats()
-        if key is not None:
-            tmp = self.ds_out[key]
-        else:
-            tmp = self.ds_out
-        if lonlat is None:
-            return tmp
-        else:
+    
+        tmp = self.ds_out if key is None else self.ds_out[key]
+    
+        if lonlat is not None:
             lon = lonlat[0]
-            if isinstance(lon, list) | isinstance(lon, np.ndarray):
-                if self.rearranged is False:
-                    lon = [map_function_inv(i) for i in lon]
-                return tmp.interp(lon=("lon", lon), lat=("lat", lonlat[1]),
-                                  method=interp_method)
+    
+            if isinstance(lon, (list, tuple, np.ndarray)):
+                if not self.rearranged:
+                    lon = [map_function_inv(x) for x in lon]
+    
+                tmp = tmp.interp(
+                    lon=("lon", lon),
+                    lat=("lat", lonlat[1]),
+                    method=interp_method,
+                )
             else:
-                lon = lonlat[0]
-                if self.rearranged is False:
+                if not self.rearranged:
                     lon = map_function_inv(lon)
-                return tmp.interp(lon=lon, lat=lonlat[1],
-                                 method=interp_method)
+    
+                tmp = tmp.interp(
+                    lon=lon,
+                    lat=lonlat[1],
+                    method=interp_method,
+                )
+    
+        if times is not None:
+            tmp = tmp.interp(valid_time=times)
+    
+        return tmp
 
 
 

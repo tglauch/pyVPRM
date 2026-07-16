@@ -85,12 +85,11 @@ class pyvprnn:
             ds["dominant_scl"] = counts.idxmax(dim="class")
     
         ds["flux_mask"] = ds["land_cover_map"].sel(vprm_classes=7) < 0.99
-        log_mem('flux_mask')
     
         self.ds_cropped = ds
         if mass_fraction_threshold is not None:        
             self.crop_to_mass_fraction(mass_fraction=mass_fraction_threshold)
-        log_mem('cropped')
+        log_mem('Cropped')
     
         ds_cropped = self.ds_cropped
     
@@ -103,11 +102,9 @@ class pyvprnn:
 
         qc_mask = ds_cropped["NEE_VUT_REF_QC"].isin(nee_qc_flags)
         
-        qc_mask = qc_mask.compute()   # <-- only small boolean vector
+        qc_mask = qc_mask.compute()  
         valid_times = ds_cropped["datetime_utc"].where(qc_mask, drop=True)
         ds_cropped = ds_cropped.sel(datetime_utc=valid_times)
-
-        log_mem('valid times selected')
 
         valid_fp = ds_cropped["ffp_footprint"]
         
@@ -124,7 +121,6 @@ class pyvprnn:
             .sum(dim=["x", "y"])
         ).compute()
         
-
         common_times = common_times.where(footprint_sum > 1e-5, drop=True)
         self.common_times = np.sort(pd.to_datetime(common_times.values))
         if self.lag_window > 0:
@@ -136,61 +132,7 @@ class pyvprnn:
         counts = pd.Series(self.common_times).dt.year.value_counts().sort_index()
         print("Valid times per year:", counts)
         log_mem('End')
-    
-        return
 
-    
-    def prepare_base_dataset_old(self, nee_qc_flags=[0], opath=None,
-                             mass_fraction_threshold=0.925):
-        self.ds['nirv_90pct'] = self.ds['nirv'].quantile(0.9, dim='time_gap_filled')
-        self.ds['nirv_10pct'] = self.ds['nirv'].quantile(0.1, dim='time_gap_filled')
-        self.ds['RH_from_VDP']= vpd_hpa_to_rh(self.ds['VPD_F'], self.ds['t2m'])/100
-        scl = self.ds["scl"]
-        valid_classes = [4, 5, 6]
-        # mask invalid classes
-        scl_valid = scl.where(scl.isin(valid_classes))
-        counts = xr.concat(
-            [(scl_valid == c).sum(dim="time") for c in valid_classes],
-            dim="class"
-        )
-        counts = counts.assign_coords({"class": valid_classes})
-        if "dominant_scl" not in self.ds:
-            dominant = counts.idxmax(dim="class")
-            self.ds['dominant_scl'] = dominant
-        self.ds["flux_mask"] = self.ds['land_cover_map'].sel({'vprm_classes': 7}) < 0.99
-
-        if mass_fraction_threshold is not None:
-            self.crop_to_mass_fraction(mass_fraction=mass_fraction_threshold)
-        spatial_sum = self.ds_cropped['ffp_footprint'].sum(dim=['x', 'y'])
-        self.ds_cropped['ffp_footprint'] = self.ds_cropped['ffp_footprint'] / spatial_sum
-
-        valid_footprint_mask = (self.ds_cropped['ffp_footprint'].sum(dim=['x', 'y'], skipna=True) != 0)
-        vars_datetime = [
-            v for v in self.ds.data_vars
-            if "datetime_utc" in self.ds[v].dims]
-        
-        valid_mask = (self.ds_cropped["NEE_VUT_REF_QC"].isin(nee_qc_flags))
-        valid_times = self.ds_cropped.datetime_utc.where(valid_mask, drop=True)
-        self.ds_cropped = self.ds_cropped.sel(datetime_utc=valid_times)
-        
-        common_times = valid_times.sel(
-            datetime_utc=valid_times.isin(self.ds_cropped['ffp_footprint'].where(valid_footprint_mask, drop=True)['t']))
-        
-        footprint_sum = (
-            self.ds_cropped['ffp_footprint']
-            .sel(t=common_times)
-            .sum(dim=['x', 'y']))
-        
-        common_times = common_times.where(footprint_sum > 1e-5, drop=True)
-        self.common_times = pd.to_datetime(common_times.values)
-        self.common_times = np.sort(self.common_times)
-        if self.lag_window > 0:
-            self.common_times = self.common_times[self.lag_window:]
-        
-        counts = pd.Series(self.common_times).dt.year.value_counts().sort_index()
-        self.ds_cropped = self.ds_cropped.sel(datetime_utc=self.common_times)
-        self.ds_cropped = self.ds_cropped.sel(t=self.common_times)
-        print('Valid times per year:', counts)
         return
 
     def split_train_val_test(self, k=5, val_frac=0.15, 
@@ -624,7 +566,8 @@ class pyvprnn:
         return
 
     def get_training_data(self, vprm_pre=None, met=None, footprint=None,
-                 flux_tower=None, base_path=None, meteo_vars=None, save=False):
+                          flux_tower=None, base_path=None, meteo_vars=None, save=False,
+                          n_chunks=100 ):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
         self.flux_tower = flux_tower
@@ -653,21 +596,25 @@ class pyvprnn:
                 "datetime_utc",
                 ((self.ds.datetime_utc.data - t0) / np.timedelta64(1, "D")).astype(int)))
         
-        mask = (
-         #   (self.ds["NEE_VUT_REF_QC"] < 2) &
-            (self.ds["ZL"] > -1000))
+        mask = ((self.ds["ZL"] > -1000) & (self.ds["ZL"] < -1000))
         
         footprint_timestamps = (
             self.ds["datetime_utc"]
             .where(mask, drop=True))
 
-        footprints = [] 
-        for i, chunk_of_timestamps in enumerate(np.array_split(footprint_timestamps, 100)):
+        self.ffp_handler.set_timestamps(footprint_timestamps[:1])
+        self.ffp_handler.make_calculation_grid()
+        self.ffp_handler.calculate_footprints()
+        
+        self.ffp_handler.build_regridder(vprm_pre.sat_imgs.sat_img, base_path)
+        
+        footprints = []
+        for i, chunk_of_timestamps in enumerate(np.array_split(footprint_timestamps, n_chunks)):
             print(i)
             self.ffp_handler.set_timestamps(chunk_of_timestamps)
             self.ffp_handler.make_calculation_grid()
             self.ffp_handler.calculate_footprints()
-            self.ffp_handler.regrid_calculation_grid_to_satellite_grid(vprm_pre.sat_imgs.sat_img, base_path)
+            self.ffp_handler.apply_regridder()
             footprints.append(self.ffp_handler.footprint_on_satellite_grid['footprint'].astype("float32"))
         
         self.ds['ffp_footprint'] = xr.concat(footprints, dim='t')
@@ -676,8 +623,6 @@ class pyvprnn:
         self.era5_inst.reduce_time(self.flux_tower.flux_data['datetime_utc'].iloc[0],
                          self.flux_tower.flux_data['datetime_utc'].iloc[-1])
         
-        # self.era5_inst.ds_out = sel_nearest_valid(self.era5_inst.ds_out,
-        #                                           flux_tower.lon, flux_tower.lat) 
         for k in list(meteo_vars.keys()):
             if meteo_vars[k] is not None:
                 self.era5_inst.ds_out[k] = meteo_vars[k](self.era5_inst.ds_out[k])
@@ -712,31 +657,11 @@ class pyvprnn:
         y_dim="y",
         mass_fraction=0.99,
     ):
-        """
-        Memory-safe cropping to approximate mass_fraction bounding box.
-        Avoids global sorting and large materialization.
-        """
-    
-        import numpy as np
-        import xarray as xr
-        import numpy as np
-        import pandas as pd
-        import psutil, os
-        
-        def log_mem(msg):
-            process = psutil.Process(os.getpid())
-            mem = process.memory_info().rss / 1e9
-            print(f"{msg}: {mem:.2f} GB")
-        print(self.ds[var].data)
-        print(self.ds[var].chunks)
         # --- 1) Sum over time (lazy) ---
-        log_mem('before foot')
         foot = self.ds[var].sum(dim=time_dim)
     
         # --- 2) total mass (scalar only → safe to compute) ---
-        log_mem('Before Compute')
         total_mass = foot.sum().compute()
-        log_mem('After Compute')
         threshold = mass_fraction * total_mass
     
         # --- 3) normalize (still lazy) ---
@@ -751,10 +676,8 @@ class pyvprnn:
         x_mask = mask.any(dim=y_dim)
     
         # --- 6) compute ONLY 1D boolean arrays ---
-        log_mem('before y mask np')
         y_mask_np = y_mask.compute().values
         x_mask_np = x_mask.compute().values
-        log_mem('after y mask np')
     
         # --- 7) get index ranges ---
         y_idx = np.where(y_mask_np)[0]
@@ -774,72 +697,6 @@ class pyvprnn:
             }
         )
     
-        return
-    
-
-    def crop_to_mass_fraction_old(
-        self,
-        var="ffp_footprint",
-        time_dim="t",
-        x_dim="x",
-        y_dim="y",
-        mass_fraction=0.99,
-    ):
-        """
-        Crop dataset to smallest rectangular region containing
-        given fraction of total mass of `var` summed over time.
-    
-        Returns
-        -------
-        ds_cropped : xr.Dataset
-        bbox : dict
-        """
-    
-        # 1) Sum over time
-        foot = self.ds[var].sum(dim=time_dim)
-    
-        # 2) Compute threshold
-        total_mass = foot.sum()
-        threshold = mass_fraction * total_mass
-    
-        # 3) Flatten and sort by contribution (descending)
-        flat = foot.stack(z=(y_dim, x_dim))
-        flat_sorted = flat.sortby(flat, ascending=False)
-    
-        # 4) Cumulative mass
-        cumsum = flat_sorted.cumsum()
-    
-        # 5) Select cells contributing to mass_fraction
-        mask_flat = cumsum <= threshold
-    
-        # Ensure we include the first cell exceeding threshold
-        first_over = cumsum.where(cumsum > threshold, drop=True)
-        if first_over.size > 0:
-            mask_flat = mask_flat | (cumsum == first_over.min())
-        mask = mask_flat.unstack("z")
-        # 6) Find bounding indices (dimension-safe way)
-        y_mask = mask.any(dim=x_dim)
-        x_mask = mask.any(dim=y_dim)
-        y_vals = foot[y_dim].where(y_mask, drop=True)
-        x_vals = foot[x_dim].where(x_mask, drop=True)
-    
-        ymin = y_vals.min().item()
-        ymax = y_vals.max().item()
-        xmin = x_vals.min().item()
-        xmax = x_vals.max().item()
-        bbox = dict(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
-    
-        # 7) Direction-aware slicing
-        def directional_slice(coord, vmin, vmax):
-            if coord[0] < coord[-1]:
-                return slice(vmin, vmax)
-            else:
-                return slice(vmax, vmin)
-    
-        self.ds_cropped = self.ds.sel(
-            {y_dim: directional_slice(self.ds[y_dim], ymin, ymax),
-             x_dim: directional_slice(self.ds[x_dim], xmin, xmax)})
-
         return
 
     def clear_ds(self):

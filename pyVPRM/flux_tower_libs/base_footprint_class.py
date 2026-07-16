@@ -199,17 +199,15 @@ class base_footprint_manager:
             self.Y_calculation_grid_rotated   = -np.expand_dims(np.sin((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.X_calculation_grid, axis=0) + np.expand_dims(np.cos((-self.u_dir+90)* np.pi/180), axis=(1,2))*np.expand_dims(self.Y_calculation_grid, axis=0)
         return
 
-
-
-    #def filter_footprints_based_on_integral(self, acceptance_percentage, is_printing_sum = False):
-    #    self.footprint_on_calculation_grid = self.footprint_on_calculation_grid.where(self.footprint_on_calculation_grid.integrated > acceptance_percentage, self.footprint_on_calculation_grid, 0)
-    #    if is_printing_sum:
-    #        print(self.footprint_on_calculation_grid.integrated.values)
-            
-
-    
-    def regrid_calculation_grid_to_satellite_grid(self, satellite_grid, regridder_file_path): 
-        #print('regridd to satellite grid')
+    def build_regridder(self, satellite_grid, regridder_file_path):
+        #Builds (or loads a cached) regridder. Call this ONCE, before the chunked
+        #time-stamp loop. The regridder only depends on the (fixed) calculation grid
+        #shape/geometry and the (fixed) satellite grid - not on per-chunk footprint
+        #values.
+        #Note: this must be called *after* make_calculation_grid()/calculate_footprints()
+        #have run at least once, since it reads self.footprint_on_calculation_grid to
+        #build the source grid geometry.
+        self.satellite_grid = satellite_grid
         footprint_to_satellite_file_path = os.path.join(regridder_file_path, '{0}_footprint_{1}_px_per_{2}_m_to_sentinel2_{3}_x_{4}_px.nc'.format(self.site_ID, self.calculation_grid_resolution, self.calculation_grid_side_length, len(satellite_grid.x.values), len(satellite_grid.y.values) ))
         my_transformer = Transformer.from_pipeline('+proj=pipeline +step +inv +proj=topocentric +lon_0={0} +lat_0={1} +h_0={2} +step +inv +proj=cart +ellps=WGS84'.format(self.lon, self.lat, self.elev+self.z_displacement))
         xesmf_grid_footprint =  make_xesmf_grid(self.footprint_on_calculation_grid, transformer = my_transformer)
@@ -222,7 +220,15 @@ class base_footprint_manager:
             print('Calculating new regridder for footprint')
             self.regridder = xe.Regridder(xesmf_grid_footprint, xesmf_grid_satellite, method="conservative_normed")
             print('Store new regridder')
-            self.regridder.to_netcdf(footprint_to_satellite_file_path) 
+            self.regridder.to_netcdf(footprint_to_satellite_file_path)
+        return
+
+    
+    def apply_regridder(self):
+        #Applies the already-built self.regridder to the current footprint_on_calculation_grid.
+        if self.regridder is None:
+            raise RuntimeError('No regridder found - call build_regridder() once before apply_regridder().')
+        satellite_grid = self.satellite_grid
         self.footprint_on_satellite_grid = self.regridder(self.footprint_on_calculation_grid)
         self.footprint_on_satellite_grid = self.footprint_on_satellite_grid.assign_coords(
                     {
@@ -238,7 +244,16 @@ class base_footprint_manager:
         if self.footprint_model == 'FFP':
             self.footprint_on_satellite_grid['x_70'] = self.footprint_on_calculation_grid.x_70            
             self.footprint_on_satellite_grid['x_90'] = self.footprint_on_calculation_grid.x_90
-    
+        return
+        
+    def regrid_calculation_grid_to_satellite_grid(self, satellite_grid, regridder_file_path):
+        #Kept for backwards compatibility - builds the regridder every call, then applies it.
+        #Prefer calling build_regridder() once outside your chunk loop, then apply_regridder()
+        #inside it, since this combined method rebuilds the regridder every time it's called.
+        self.build_regridder(satellite_grid, regridder_file_path)
+        self.apply_regridder()
+        return
+   
     def get_radius_of_percentile(self, percentile = 0.9):
         dr = self.xs_for_calculation_grid[1] -self.xs_for_calculation_grid[0]
         print(dr)
