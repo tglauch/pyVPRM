@@ -10,7 +10,7 @@ setup(
     name="pyVPRM",
     version="5.3",
     description="Vegetation Photosynthesis and Respiration Model",
-    long_description="A tool to calculate the CO2 exchange flux between atmosphere and terrestrial biosphere using the Vegetation Photosynthesis and Respiration Model",
+    long_description="pyVPRM is a framework for data-driven modelling and interpreting atmosphere-biosphere CO2 fluxes — from eddy-covariance towers to the global scale.",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Environment :: Console",
@@ -19,7 +19,7 @@ setup(
         "Topic :: Scientific/Engineering :: Atmospheric Science",
         "Programming Language :: Python :: 3.14"
     ],
-    keywords="CO2 Biosphere Atmosphere Physics VPRM",
+    keywords="CO2 Biosphere Atmosphere Physics VPRM Partitioning Neural-Networks GPP NEE Respiration",
     url="https://github.com/tglauch/pyVPRM/",
     author="Theo Glauch",
     author_email="theo.glauch@drl.de",
