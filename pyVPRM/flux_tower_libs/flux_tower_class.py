@@ -9,7 +9,7 @@ from timezonefinder import TimezoneFinder
 from datetime import datetime, timedelta
 import pathlib
 import glob
-from pyVPRM.lib.functions import get_eth_canopy_height
+from pyVPRM.lib.functions import get_eth_canopy_height, get_elevation_copernicus_dem
 
 class flux_tower_data:
     # Class to store flux tower data in unique format
@@ -524,9 +524,12 @@ class icos(flux_tower_data):
         if self.need_footprint_variables:
             #get utc datetime from local time for FLUXES data
             fluxes_file_data['datetime_utc'] = self.get_utc_times(fluxes_file_data)
-            if (self.tstart is not None) & (self.tstop is not None):
-                mask = (fluxes_file_data['datetime_utc'] >= self.tstart) & (fluxes_file_data['datetime_utc'] < self.tstop)
-                fluxes_file_data = fluxes_file_data[mask]
+            mask = np.ones(len(fluxes_file_data), dtype=bool)
+            if self.tstart is not None:
+                mask &= (fluxes_file_data['datetime_utc'] >= self.tstart).values
+            if self.tstop is not None:
+                mask &= (fluxes_file_data['datetime_utc'] < self.tstop).values
+            fluxes_file_data = fluxes_file_data[mask]
             #merge FLUXNET and FLUXES data  
             flux_data = flux_data.merge(fluxes_file_data, how='inner', on=['datetime_utc', 'TIMESTAMP_END'])
 
@@ -626,13 +629,12 @@ class fluxnet_shuttle(flux_tower_data):
                 self.site_info.loc[self.site_info['VARIABLE'] == 'LOCATION_ELEV', 'DATAVALUE'].values[0]
             )
         except (IndexError, KeyError, ValueError):
-            print('failed to load elevation. continue.')
+            self.elev = get_elevation_copernicus_dem(self.lon, self.lat)
 
         # Resolve the site's timezone once and cache it.
         tf = TimezoneFinder()
         self.timezone_str = tf.timezone_at(lng=self.lon, lat=self.lat)
         self.standard_utc_offset = self._get_standard_utc_offset(self.timezone_str)
-
         return
 
     @staticmethod
@@ -671,7 +673,9 @@ class fluxnet_shuttle(flux_tower_data):
     def get_utc_times(self, dataframe):
         return self.local_to_utc(dataframe["TIMESTAMP_END"])
 
-    def add_tower_data(self, met_inst=None, missing_displacement_heights_dict=None):
+    def add_tower_data(self, met_inst=None,
+                       canopy_height_path='.',
+                       measurement_height=None):
         self.met_inst = met_inst
 
         if self.vars == "all":
@@ -686,26 +690,29 @@ class fluxnet_shuttle(flux_tower_data):
                 self.data_path.replace('FLUXMET', 'BIFVARINFO'), on_bad_lines='skip'
             )
 
-            group_ids_nee_entries = variable_info.loc[
-                variable_info['DATAVALUE'] == 'NEE_VUT_REF', 'GROUP_ID'
-            ].values
-            indices_group_id = variable_info.index[variable_info['GROUP_ID'].isin(group_ids_nee_entries)]
-            indices_height_parameter = variable_info.index[variable_info['VARIABLE'] == 'VAR_INFO_HEIGHT']
-            indices_heights = indices_group_id.intersection(indices_height_parameter)
-            heights = variable_info['DATAVALUE'][indices_heights].values
-
-            indices_parameter_date = variable_info.index[variable_info['VARIABLE'] == 'VAR_INFO_DATE']
-            indices_dates = indices_group_id.intersection(indices_parameter_date)
-            dates_height_measurement = variable_info['DATAVALUE'][indices_dates].values
-            if not (dates_height_measurement == np.sort(dates_height_measurement)).all():
-                sorting_indices = np.argsort(dates_height_measurement)
-                dates_height_measurement = dates_height_measurement[sorting_indices]
-                heights = heights[sorting_indices]
-
-            idata['z_measurement'] = float(heights[0])
-            for idx_height, height in enumerate(heights):
-                mask = idata['TIMESTAMP_END'] >= float(dates_height_measurement[idx_height])
-                idata.loc[mask, 'z_measurement'] = float(heights[idx_height])
+            if measurement_height is None:
+                group_ids_nee_entries = variable_info.loc[
+                    variable_info['DATAVALUE'] == 'NEE_VUT_REF', 'GROUP_ID'
+                ].values
+                indices_group_id = variable_info.index[variable_info['GROUP_ID'].isin(group_ids_nee_entries)]
+                indices_height_parameter = variable_info.index[variable_info['VARIABLE'] == 'VAR_INFO_HEIGHT']
+                indices_heights = indices_group_id.intersection(indices_height_parameter)
+                heights = variable_info['DATAVALUE'][indices_heights].values
+    
+                indices_parameter_date = variable_info.index[variable_info['VARIABLE'] == 'VAR_INFO_DATE']
+                indices_dates = indices_group_id.intersection(indices_parameter_date)
+                dates_height_measurement = variable_info['DATAVALUE'][indices_dates].values
+                if not (dates_height_measurement == np.sort(dates_height_measurement)).all():
+                    sorting_indices = np.argsort(dates_height_measurement)
+                    dates_height_measurement = dates_height_measurement[sorting_indices]
+                    heights = heights[sorting_indices]
+    
+                idata['z_measurement'] = float(heights[0])
+                for idx_height, height in enumerate(heights):
+                    mask = idata['TIMESTAMP_END'] >= float(dates_height_measurement[idx_height])
+                    idata.loc[mask, 'z_measurement'] = float(heights[idx_height])
+            else:
+                idata['z_measurement'] = float(measurement_height)
             self.mean_z_measurement = idata['z_measurement'].mean()
 
         idata.rename({self.ssrd_key: "ssrd", self.t2m_key: "t2m"}, inplace=True, axis=1)
@@ -714,12 +721,12 @@ class fluxnet_shuttle(flux_tower_data):
         idata["datetime_utc"] = self.local_to_utc(idata["TIMESTAMP_END"])
 
         if self.need_footprint_variables:
-            canopy_height = get_eth_canopy_height(self.lat, self.lon)
+            canopy_height = get_eth_canopy_height(self.lat, self.lon, basepath=canopy_height_path)
             print('Land Cover Type', self.land_cover_type)
             if self.land_cover_type in ['ENF', 'EBF', 'DBF', 'DNF', 'MF']:
                 idata['z_footprint'] = 0.68 * canopy_height
             else:
-                idata['z_footprint'] = 0
+                idata['z_footprint'] = idata['z_measurement']
             idata['z_displacement'] = idata['z_measurement'] - idata['z_footprint']
             self.mean_z_footprint = idata['z_footprint'].mean()
             self.mean_z_displacement = idata['z_displacement'].mean()
@@ -732,19 +739,30 @@ class fluxnet_shuttle(flux_tower_data):
             )
             MO_LENGTH = MO_LENGTH.where((MO_LENGTH > -1000) & (MO_LENGTH < 1000))
             idata['MO_LENGTH'] = MO_LENGTH
-            idata['ZL'] = idata['z_displacement'] / idata['MO_LENGTH']
+            idata['ZL'] = idata['z_displacement'] / idata['MO_LENGTH']  
 
-        if (self.tstart is not None) and (self.tstop is not None):
-            mask = (idata['datetime_utc'] >= self.tstart) & (idata['datetime_utc'] <= self.tstop)
-            flux_data = idata[mask]
-        else:
-            flux_data = idata
+        mask = np.ones(len(idata), dtype=bool)
+        if self.tstart is not None:
+            mask &= (idata['datetime_utc'] >= self.tstart).values
+        if self.tstop is not None:
+            mask &= (idata['datetime_utc'] < self.tstop).values
+        flux_data= idata[mask]
+
+        print(flux_data['datetime_utc'])
+        
+        # if (self.tstart is not None) and (self.tstop is not None):
+        #     mask = (idata['datetime_utc'] >= self.tstart) & (idata['datetime_utc'] <= self.tstop)
+        #     flux_data = idata[mask]
+        # else:
+        #     flux_data = idata
 
         if self.met_inst is not None:
+            print(self.lat, self.lon)
             add_mets = self.met_inst.get_data(lonlat=(self.lon, self.lat),
                                    times=flux_data['datetime_utc'].values)
             flux_data = flux_data.reset_index(drop=True)
             for var in add_mets.data_vars:
+                print(add_mets[var].values)
                 flux_data[var] = add_mets[var].values
 
         if len(flux_data) < 2:
@@ -755,5 +773,6 @@ class fluxnet_shuttle(flux_tower_data):
 
         flux_data.rename(columns={'blh': 'PBLH'}, inplace=True)
         self.flux_data = flux_data
+        print('PBLS', np.nanmax(flux_data['PBLH']))    
         return True
 

@@ -21,7 +21,7 @@ def map_function_inv(lon):
 
 
 DATA_PRODUCT_PATH = {
-    "era5_land": "data.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr",
+    "era5_land": "api.earthdatahub.destine.eu/era5/reanalysis-era5-land-no-antartica-v0.zarr",
     "era5_single_level": "api.earthdatahub.destine.eu/era5/reanalysis-era5-single-levels-v0.zarr",
 }
 

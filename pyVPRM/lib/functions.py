@@ -13,6 +13,26 @@ from pykalman import KalmanFilter
 import requests
 from pathlib import Path
 import rioxarray as rxr
+import planetary_computer as pc
+from pystac_client import Client
+
+def get_elevation_copernicus_dem(lon, lat):
+    """Query the Copernicus DEM GLO-30 (30m) via Planetary Computer's STAC catalog."""
+    catalog = Client.open("https://planetarycomputer.microsoft.com/api/stac/v1")
+
+    search = catalog.search(
+        collections=["cop-dem-glo-30"],
+        intersects={"type": "Point", "coordinates": [lon, lat]},
+    )
+    items = list(search.items())
+    if not items:
+        raise RuntimeError(f"No Copernicus DEM tile found for lon={lon}, lat={lat}")
+
+    item = pc.sign(items[0])
+    dem = rxr.open_rasterio(item.assets["data"].href)
+
+    elevation = dem.sel(x=lon, y=lat, method="nearest").values.item()
+    return elevation
 
 def vpd_hpa_to_rh(vpd_hpa, T):
     """
@@ -842,6 +862,8 @@ def get_eth_canopy_height(lat, lon, radius_m=50, basepath="."):
         f"{format_lat(lat)}{format_lon(lon)}_Map.tif"
     )
 
+    if not os.path.exists(basepath):
+        os.makedirs(basepath)
     filepath = basepath / filename
 
     # Download if missing

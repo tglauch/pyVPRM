@@ -567,7 +567,7 @@ class pyvprnn:
 
     def get_training_data(self, vprm_pre=None, met=None, footprint=None,
                           flux_tower=None, base_path=None, meteo_vars=None, save=False,
-                          n_chunks=100 ):
+                          n_chunks=100, max_attempts=5, base_delay=5 ):
         self.era5_inst = met
         self.vprm_pre = vprm_pre
         self.flux_tower = flux_tower
@@ -596,11 +596,14 @@ class pyvprnn:
                 "datetime_utc",
                 ((self.ds.datetime_utc.data - t0) / np.timedelta64(1, "D")).astype(int)))
         
-        mask = ((self.ds["ZL"] > -1000) & (self.ds["ZL"] < -1000))
+        mask = ((self.ds["ZL"] > -1000) & (self.ds["ZL"] < 1000))
         
         footprint_timestamps = (
             self.ds["datetime_utc"]
             .where(mask, drop=True))
+
+        print('Calculates footprints for {}/{} timestamps'.format(len(footprint_timestamps),
+                                                                  len(self.ds.datetime_utc.data)))
 
         self.ffp_handler.set_timestamps(footprint_timestamps[:1])
         self.ffp_handler.make_calculation_grid()
@@ -620,12 +623,20 @@ class pyvprnn:
         self.ds['ffp_footprint'] = xr.concat(footprints, dim='t')
         self.ds['land_cover_map'] = self.vprm_pre.land_cover_type.sat_img
         
-        self.era5_inst.reduce_time(self.flux_tower.flux_data['datetime_utc'].iloc[0],
-                         self.flux_tower.flux_data['datetime_utc'].iloc[-1])
+        for attempt in range(max_attempts):
+            try:
+                self.era5_inst.reduce_time(self.flux_tower.flux_data['datetime_utc'].iloc[0],
+                                 self.flux_tower.flux_data['datetime_utc'].iloc[-1])
         
-        for k in list(meteo_vars.keys()):
-            if meteo_vars[k] is not None:
-                self.era5_inst.ds_out[k] = meteo_vars[k](self.era5_inst.ds_out[k])
+                for k in list(meteo_vars.keys()):
+                    if meteo_vars[k] is not None:
+                        self.era5_inst.ds_out[k] = meteo_vars[k](self.era5_inst.ds_out[k])
+            except Exception as e:
+                if attempt == max_attempts - 1:
+                    raise
+                wait = base_delay * (2 ** attempt)
+                print(f"Attempt {attempt+1} failed ({e}); retrying in {wait}s...")
+                time.sleep(wait)
         
         es = calculate_saturation_vapor_pressure(self.era5_inst.ds_out['t2m'])
         ea = calculate_actual_vapor_pressure(self.era5_inst.ds_out['d2m'])
@@ -898,6 +909,7 @@ class pyvprnn:
                 vmin = np.nanpercentile(color_var, 5)
             if vmax is None:
                 vmax = np.nanpercentile(color_var, 95)
+            print(vmin, vmax)
             norm = plt.Normalize(vmin=vmin, vmax=vmax)
             colors = plt.cm.get_cmap(cmap)(norm(color_var))
         else:
