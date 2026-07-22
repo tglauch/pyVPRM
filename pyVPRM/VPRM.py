@@ -1,3 +1,5 @@
+"""Preprocess satellite, land-cover, and static ancillary inputs for VPRM."""
+
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -39,8 +41,20 @@ regridder_options["conservative"] = "conserve"
 
 
 class vprm_preprocessor:
-    """
-    Main class for the  Vegetation Photosynthesis and Respiration Model
+    """Prepare satellite and static spatial inputs for VPRM calculations.
+
+    Parameters
+    ----------
+    vprm_config_path : str or pathlib.Path
+        VPRM vegetation-class configuration file.
+    land_cover_map : satellite_data_manager, optional
+        Pre-calculated VPRM land-cover fractions.
+    verbose : bool, default=False
+        Enable verbose processing output.
+    n_cpus : int, default=1
+        Number of CPUs available to regridding operations.
+    flux_tower_instances : list, optional
+        Flux-tower data objects used for fitting workflows.
     """
 
     def __init__(
@@ -79,6 +93,7 @@ class vprm_preprocessor:
         self.empty_xr_lat_lon_grid = None
 
         self.land_cover_type = land_cover_map
+        self.impervious_surface_area = None
         # land_cover_type: tmin, topt, tmax
 
         with open(vprm_config_path, "r") as stream:
@@ -724,6 +739,123 @@ class vprm_preprocessor:
                 self.land_cover_type.save(save_path)
         return
 
+    def add_impervious_surface_area(
+        self,
+        impervious_surface_area,
+        var_name="impervious_surface_percentage",
+        regridder_save_path=None,
+        n_cpus=None,
+        mpi=True,
+        logs=False,
+    ):
+        """Conservatively regrid an impervious-surface field to the satellite grid.
+
+        Parameters
+        ----------
+        impervious_surface_area : satellite_data_manager
+            Loaded and spatially cropped continuous impervious-surface data.
+            ``var_name`` must hold percentages from 0 to 100.
+        var_name : str, default="impervious_surface_percentage"
+            Name of the impervious-surface percentage variable.
+        regridder_save_path : str or pathlib.Path
+            Grid-specific path for conservative ESMF regridding weights.
+        n_cpus : int, optional
+            Number of MPI processes used while generating weights. Defaults to
+            :attr:`n_cpus`.
+        mpi : bool, default=True
+            Use ``mpirun`` when generating new ESMF weights.
+        logs : bool, default=False
+            Preserve ESMF log files when generating weights.
+
+        Returns
+        -------
+        None
+            The regridded percentage field is stored in
+            :attr:`impervious_surface_area` on the VPRM satellite grid.
+
+        Raises
+        ------
+        TypeError
+            If the supplied data are not managed by
+            :class:`satellite_data_manager`.
+        ValueError
+            If the requested variable or weight-cache path is missing.
+        RuntimeError
+            If ESMF weight generation fails.
+        """
+        if not isinstance(impervious_surface_area, satellite_data_manager):
+            raise TypeError(
+                "impervious_surface_area must be a satellite_data_manager instance."
+            )
+        if var_name not in impervious_surface_area.sat_img:
+            raise ValueError(
+                "Impervious-surface data do not contain {!r}.".format(var_name)
+            )
+        if regridder_save_path is None:
+            raise ValueError("regridder_save_path is required for ISA regridding.")
+
+        if n_cpus is None:
+            n_cpus = self.n_cpus
+        regridder_save_path = os.fspath(regridder_save_path)
+        regridder_directory = os.path.dirname(regridder_save_path)
+        if regridder_directory:
+            os.makedirs(regridder_directory, exist_ok=True)
+
+        if not os.path.exists(regridder_save_path):
+            src_grid = to_esmf_grid(impervious_surface_area.sat_img)
+            dest_grid = to_esmf_grid(self.sat_imgs.sat_img)
+            src_temp_path = os.path.join(
+                regridder_directory, "{}.nc".format(str(uuid.uuid4()))
+            )
+            dest_temp_path = os.path.join(
+                regridder_directory, "{}.nc".format(str(uuid.uuid4()))
+            )
+            try:
+                src_grid.to_netcdf(src_temp_path)
+                dest_grid.to_netcdf(dest_temp_path)
+                command = (
+                    "ESMF_RegridWeightGen --source {} --destination {} --weight {} "
+                    "-m conserve -r --netcdf4 --src_regional --dest_regional "
+                    "--ignore_unmapped"
+                ).format(src_temp_path, dest_temp_path, regridder_save_path)
+                if mpi:
+                    command = "mpirun -np {} ".format(n_cpus) + command
+                if not logs:
+                    command += " --no_log"
+                logger.info("Run: {}".format(command))
+                if os.system(command) != 0:
+                    raise RuntimeError("ESMF failed to generate ISA regridding weights.")
+            finally:
+                for temporary_path in [src_temp_path, dest_temp_path]:
+                    if os.path.exists(temporary_path):
+                        os.remove(temporary_path)
+
+        import xesmf as xe
+
+        regridder = xe.Regridder(
+            make_xesmf_grid(impervious_surface_area.sat_img),
+            make_xesmf_grid(self.sat_imgs.sat_img),
+            "conservative",
+            weights=regridder_save_path,
+            reuse_weights=True,
+        )
+        regridded = regridder(impervious_surface_area.sat_img[[var_name]])
+        regridded = regridded.assign_coords(
+            {
+                "x": self.sat_imgs.sat_img.coords["x"].values,
+                "y": self.sat_imgs.sat_img.coords["y"].values,
+            }
+        )
+        regridded[var_name].attrs.update(
+            {
+                "long_name": "area-weighted percent impervious surface",
+                "units": "percent",
+                "source_product": "GMIS",
+            }
+        )
+        self.impervious_surface_area = satellite_data_manager(sat_img=regridded)
+        return
+
     def calc_min_max_evi_lswi(self):
         """
         Calculate the minimim and maximum EVI and LSWI
@@ -1178,15 +1310,21 @@ class vprm_preprocessor:
         return dj
 
     def add_vprm_insts(self, vprm_insts, allow_reproject=True):
-        """
-        Merge one or more other vprm_preprocessor instances' satellite/land-cover
-        tiles into this one (e.g. combining adjacent spatial tiles into a
-        single larger domain).
-    
-        Parameters:
-                vprm_insts (list): other vprm_preprocessor instances to merge in
-                allow_reproject (bool): reproject incoming tiles onto this
-                                        instance's grid/CRS if they don't already match
+        """Merge compatible VPRM preprocessors, including static ISA fields.
+
+        Parameters
+        ----------
+        vprm_insts : list[vprm_preprocessor]
+            Preprocessors whose spatial products will be tiled onto this
+            instance.
+        allow_reproject : bool, default=True
+            Reproject satellite data before merging when necessary.
+
+        Returns
+        -------
+        None
+            Satellite, land-cover, and impervious-surface products are merged
+            in place when present.
         """
         if isinstance(self.sat_imgs, satellite_data_manager):
             self.sat_imgs.add_tile(
@@ -1200,4 +1338,13 @@ class vprm_preprocessor:
         if self.land_cover_type is not None:
             self.land_cover_type.add_tile(
                 [v.land_cover_type for v in vprm_insts], reproject=False
+            )
+        if self.impervious_surface_area is not None:
+            self.impervious_surface_area.add_tile(
+                [
+                    v.impervious_surface_area
+                    for v in vprm_insts
+                    if v.impervious_surface_area is not None
+                ],
+                reproject=False,
             )
