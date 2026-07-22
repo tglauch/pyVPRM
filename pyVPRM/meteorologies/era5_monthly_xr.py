@@ -89,7 +89,7 @@ class met_data_handler(met_data_handler_base):
                 )
                 self.ds_in_t.to_netcdf(src_temp_path)
                 t_ds_out.to_netcdf(dest_temp_path)
-                cmd = "ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear --64bit_offset  --extrap_method nearestd  --no_log".format(
+                cmd = "ESMF_RegridWeightGen --source {} --destination {} --weight {} -m bilinear -r --64bit_offset  --extrap_method nearestd  --no_log".format(
                     src_temp_path, dest_temp_path, weights
                 )
                 if self.mpi:
