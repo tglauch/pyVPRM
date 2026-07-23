@@ -17,6 +17,7 @@ from pyVPRM.lib.functions import (
     to_esmf_grid,
     replace_inf_runs_ignore_nans
 )
+from pyVPRM.lib.regridding import conservative_regrid
 from scipy.ndimage import uniform_filter
 from pyproj import Transformer
 import copy
@@ -747,6 +748,7 @@ class vprm_preprocessor:
         n_cpus=None,
         mpi=True,
         logs=False,
+        max_source_cells=None,
     ):
         """Conservatively regrid an impervious-surface field to the satellite grid.
 
@@ -766,6 +768,10 @@ class vprm_preprocessor:
             Use ``mpirun`` when generating new ESMF weights.
         logs : bool, default=False
             Preserve ESMF log files when generating weights.
+        max_source_cells : int, optional
+            Maximum source cells in one ESMF invocation. Larger regular source
+            grids are split into disjoint y-axis partitions and their
+            conservative destination contributions are summed.
 
         Returns
         -------
@@ -796,61 +802,20 @@ class vprm_preprocessor:
 
         if n_cpus is None:
             n_cpus = self.n_cpus
-        regridder_save_path = os.fspath(regridder_save_path)
-        regridder_directory = os.path.dirname(regridder_save_path)
-        if regridder_directory:
-            os.makedirs(regridder_directory, exist_ok=True)
-
-        if not os.path.exists(regridder_save_path):
-            src_grid = to_esmf_grid(impervious_surface_area.sat_img)
-            dest_grid = to_esmf_grid(self.sat_imgs.sat_img)
-            src_temp_path = os.path.join(
-                regridder_directory, "{}.nc".format(str(uuid.uuid4()))
-            )
-            dest_temp_path = os.path.join(
-                regridder_directory, "{}.nc".format(str(uuid.uuid4()))
-            )
-            try:
-                src_grid.to_netcdf(src_temp_path)
-                dest_grid.to_netcdf(dest_temp_path)
-                command = (
-                    "ESMF_RegridWeightGen --source {} --destination {} --weight {} "
-                    "-m conserve -r --netcdf4 --src_regional --dest_regional "
-                    "--ignore_unmapped"
-                ).format(src_temp_path, dest_temp_path, regridder_save_path)
-                if mpi:
-                    command = "mpirun -np {} ".format(n_cpus) + command
-                if not logs:
-                    command += " --no_log"
-                logger.info("Run: {}".format(command))
-                if os.system(command) != 0:
-                    raise RuntimeError("ESMF failed to generate ISA regridding weights.")
-            finally:
-                for temporary_path in [src_temp_path, dest_temp_path]:
-                    if os.path.exists(temporary_path):
-                        os.remove(temporary_path)
-
-        import xesmf as xe
-
-        regridder = xe.Regridder(
-            make_xesmf_grid(impervious_surface_area.sat_img),
-            make_xesmf_grid(self.sat_imgs.sat_img),
-            "conservative",
-            weights=regridder_save_path,
-            reuse_weights=True,
-        )
-        regridded = regridder(impervious_surface_area.sat_img[[var_name]])
-        regridded = regridded.assign_coords(
-            {
-                "x": self.sat_imgs.sat_img.coords["x"].values,
-                "y": self.sat_imgs.sat_img.coords["y"].values,
-            }
+        regridded = conservative_regrid(
+            impervious_surface_area.sat_img[[var_name]],
+            self.sat_imgs.sat_img,
+            weight_path=regridder_save_path,
+            max_source_cells=max_source_cells,
+            n_cpus=n_cpus,
+            mpi=mpi,
+            logs=logs,
         )
         regridded[var_name].attrs.update(
             {
                 "long_name": "area-weighted percent impervious surface",
                 "units": "percent",
-                "source_product": "GMIS",
+                "source_product": type(impervious_surface_area).__name__,
             }
         )
         self.impervious_surface_area = satellite_data_manager(sat_img=regridded)
