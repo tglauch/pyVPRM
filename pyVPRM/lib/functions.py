@@ -247,7 +247,31 @@ def make_xesmf_grid(satellite_image, transformer = None):
     return pixel_grid
 
 
-def to_esmf_grid(sat_img):
+def to_esmf_grid(sat_img, grid_imask=None):
+    """Convert a regular grid to the SCRIP dataset consumed by ESMF.
+
+    Parameters
+    ----------
+    sat_img : xarray.Dataset or dict
+        Regular source or destination grid. Xarray inputs require
+        one-dimensional ``x`` and ``y`` coordinates and a rio CRS. Dictionary
+        inputs require ``lons`` and ``lats`` arrays.
+    grid_imask : xarray.DataArray or numpy.ndarray, optional
+        Integer or boolean ``y, x`` mask. Values of zero exclude cells from
+        ESMF weight generation; non-zero values retain them. If omitted, all
+        cells participate.
+
+    Returns
+    -------
+    xarray.Dataset
+        SCRIP-format grid description with centre coordinates, cell corners,
+        and ``grid_imask``.
+
+    Raises
+    ------
+    ValueError
+        If a supplied mask does not match the grid dimensions.
+    """
 
     if isinstance(sat_img, dict):
         x = sat_img["lons"]
@@ -292,7 +316,18 @@ def to_esmf_grid(sat_img):
         )
         x_center, y_center = t.transform(x_center, y_center)
         x_corner, y_corner = t.transform(x_corner, y_corner)
-    grid_imask = np.ones((ny, nx), dtype=np.int32)
+    if grid_imask is None:
+        grid_imask = np.ones((ny, nx), dtype=np.int32)
+    else:
+        if hasattr(grid_imask, "values"):
+            grid_imask = grid_imask.values
+        grid_imask = np.asarray(grid_imask, dtype=np.int32)
+        if grid_imask.shape != (ny, nx):
+            raise ValueError(
+                "grid_imask shape {} does not match y, x dimensions ({}, {}).".format(
+                    grid_imask.shape, ny, nx
+                )
+            )
 
     # generate output dataset
     dso = xr.Dataset()
@@ -876,5 +911,4 @@ def get_eth_canopy_height(lat, lon, radius_m=50, basepath="."):
     )
 
     return float(chm_box.mean())
-
 

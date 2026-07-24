@@ -94,6 +94,7 @@ def _generate_conservative_weights(
     destination,
     *,
     weight_path,
+    source_mask,
     n_cpus,
     mpi,
     logs,
@@ -108,6 +109,8 @@ def _generate_conservative_weights(
         Complete destination dataset.
     weight_path : str or os.PathLike
         Weight-cache file to create.
+    source_mask : xarray.DataArray, optional
+        Zero/non-zero mask for source cells in this partition.
     n_cpus : int
         MPI process count when ``mpi`` is true.
     mpi : bool
@@ -139,7 +142,7 @@ def _generate_conservative_weights(
     destination_temp_path = os.path.join(
         weight_directory, "{}.nc".format(uuid.uuid4())
     )
-    to_esmf_grid(source).to_netcdf(source_temp_path)
+    to_esmf_grid(source, grid_imask=source_mask).to_netcdf(source_temp_path)
     to_esmf_grid(destination).to_netcdf(destination_temp_path)
 
     command = [
@@ -178,6 +181,7 @@ def conservative_regrid(
     destination,
     *,
     weight_path,
+    source_mask=None,
     max_source_cells=None,
     n_cpus=1,
     mpi=True,
@@ -201,6 +205,10 @@ def conservative_regrid(
     weight_path : str or os.PathLike
         Cache path for an unsplit weight file. Partitioned grids receive
         ``_src_###`` before the file extension.
+    source_mask : xarray.DataArray, optional
+        Zero/non-zero source-cell mask with ``y, x`` dimensions. Masked cells
+        do not participate in ESMF weight generation. Use this only when
+        excluding a cell is equivalent to a zero destination contribution.
     max_source_cells : int, optional
         Maximum source cells in one ESMF invocation. Larger source grids are
         split into disjoint contiguous y-axis partitions.
@@ -225,6 +233,11 @@ def conservative_regrid(
     """
     if not isinstance(source, xr.Dataset) or not isinstance(destination, xr.Dataset):
         raise ValueError("source and destination must both be xarray.Dataset instances.")
+    if source_mask is not None and tuple(source_mask.shape) != (
+        source.sizes["y"],
+        source.sizes["x"],
+    ):
+        raise ValueError("source_mask must have the same y, x shape as source.")
     source_slices = _source_y_slices(source, max_source_cells)
     _source_y_slices(destination, None)
 
@@ -233,6 +246,9 @@ def conservative_regrid(
     result = None
     for chunk_number, source_slice in enumerate(source_slices):
         source_chunk = source.isel(y=source_slice)
+        source_mask_chunk = (
+            None if source_mask is None else source_mask.isel(y=source_slice)
+        )
         chunk_weight_path = _weight_path(
             weight_path, chunk_number, len(source_slices)
         )
@@ -240,6 +256,7 @@ def conservative_regrid(
             source_chunk,
             destination,
             weight_path=chunk_weight_path,
+            source_mask=source_mask_chunk,
             n_cpus=n_cpus,
             mpi=mpi,
             logs=logs,

@@ -806,6 +806,7 @@ class vprm_preprocessor:
             impervious_surface_area.sat_img[[var_name]],
             self.sat_imgs.sat_img,
             weight_path=regridder_save_path,
+            source_mask=impervious_surface_area.sat_img[var_name] > 0,
             max_source_cells=max_source_cells,
             n_cpus=n_cpus,
             mpi=mpi,
