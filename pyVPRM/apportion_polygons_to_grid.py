@@ -12,6 +12,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rioxarray  # noqa: F401
+from rasterio.features import rasterize
 import xarray as xr
 from shapely.geometry import box
 
@@ -55,7 +56,7 @@ def _coordinate_edges(coordinates, name):
     )
 
 
-def _target_cell_chunk(x_edges, y_edges, row_start, row_stop, crs):
+def _target_cell_chunk(x_edges, y_edges, row_start, row_stop, crs, coverage_mask):
     """Build one row-wise chunk of target-grid cell polygons.
 
     Parameters
@@ -66,24 +67,21 @@ def _target_cell_chunk(x_edges, y_edges, row_start, row_stop, crs):
         Half-open range of target-grid rows included in the chunk.
     crs : pyproj.CRS or str
         CRS of the target grid.
+    coverage_mask : numpy.ndarray
+        Boolean ``y, x`` mask selecting cells that could overlap an input
+        polygon.
 
     Returns
     -------
     geopandas.GeoDataFrame
         Cell polygons with ``_row`` and ``_column`` index columns.
     """
-    row_indices = np.repeat(np.arange(row_start, row_stop), len(x_edges) - 1)
-    column_indices = np.tile(np.arange(len(x_edges) - 1), row_stop - row_start)
-    lower_x = np.tile(x_edges[:-1], row_stop - row_start)
-    upper_x = np.tile(x_edges[1:], row_stop - row_start)
-    lower_y = np.repeat(
-        np.minimum(y_edges[row_start:row_stop], y_edges[row_start + 1 : row_stop + 1]),
-        len(x_edges) - 1,
-    )
-    upper_y = np.repeat(
-        np.maximum(y_edges[row_start:row_stop], y_edges[row_start + 1 : row_stop + 1]),
-        len(x_edges) - 1,
-    )
+    local_rows, column_indices = np.nonzero(coverage_mask[row_start:row_stop])
+    row_indices = row_start + local_rows
+    lower_x = x_edges[column_indices]
+    upper_x = x_edges[column_indices + 1]
+    lower_y = np.minimum(y_edges[row_indices], y_edges[row_indices + 1])
+    upper_y = np.maximum(y_edges[row_indices], y_edges[row_indices + 1])
 
     return gpd.GeoDataFrame(
         {"_row": row_indices, "_column": column_indices},
@@ -93,6 +91,44 @@ def _target_cell_chunk(x_edges, y_edges, row_start, row_stop, crs):
         ],
         crs=crs,
     )
+
+
+def _polygon_coverage_mask(polygons, target_grid):
+    """Rasterize a conservative mask of target cells touched by polygons.
+
+    Parameters
+    ----------
+    polygons : geopandas.GeoDataFrame
+        Input polygon features with a defined CRS.
+    target_grid : xarray.Dataset or xarray.DataArray
+        Regular target grid with rio CRS metadata and an affine transform.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean ``y, x`` mask. A true cell is touched by at least one input
+        polygon and therefore needs an exact vector-area calculation.
+
+    Notes
+    -----
+    ``all_touched=True`` deliberately over-selects boundary cells, ensuring
+    that a partial overlap is never lost during this inexpensive prefilter.
+    """
+    polygons_on_target_grid = polygons.to_crs(target_grid.rio.crs)
+    shapes = (
+        (geometry, 1)
+        for geometry in polygons_on_target_grid.geometry
+        if geometry is not None and not geometry.is_empty
+    )
+    return rasterize(
+        shapes,
+        out_shape=(target_grid.sizes["y"], target_grid.sizes["x"]),
+        transform=target_grid.rio.transform(recalc=False),
+        all_touched=True,
+        fill=0,
+        default_value=1,
+        dtype="uint8",
+    ).astype(bool)
 
 
 def apportion(
@@ -179,11 +215,17 @@ def apportion(
     y_edges = _coordinate_edges(y_values, "y")
     fractions = np.zeros((len(class_values), len(y_values), len(x_values)), dtype=dtype)
     source_index = source.sindex
+    coverage_mask = _polygon_coverage_mask(source, target_grid)
 
     for row_start in range(0, len(y_values), chunk_rows):
         row_stop = min(row_start + chunk_rows, len(y_values))
         cells = _target_cell_chunk(
-            x_edges, y_edges, row_start, row_stop, target_grid.rio.crs
+            x_edges,
+            y_edges,
+            row_start,
+            row_stop,
+            target_grid.rio.crs,
+            coverage_mask,
         )
         if cells.empty:
             continue
