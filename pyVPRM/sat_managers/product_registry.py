@@ -22,6 +22,17 @@ PRODUCT_REGISTRY = {
         "file_ext": ".hdf",
         "notes":    "MAIAC Aerosol Optical Depth",
     },
+    "MCD43A4": {
+        "cadence":  "daily",        #  cambiar de 16day a daily
+        "file_ext": ".hdf",
+        "notes":    "MODIS BRDF-Adjusted Reflectance Daily 500m (nadir + SZA=45°) Collection 061",
+    },
+    "MCD43C4": {
+        "cadence":  "daily",
+        "file_ext": ".hdf",
+        "notes":    "MODIS BRDF-Adjusted Reflectance Daily 0.05deg CMG global (nadir + SZA=45°)",
+        "global":   True,   # ← sin tiles
+    },
 
     # ── Surface Reflectance daily ─────────────────────────────────────
     "MOD09GA": {
