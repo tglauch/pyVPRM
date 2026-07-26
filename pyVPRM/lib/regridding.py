@@ -277,6 +277,8 @@ def conservative_regrid(
             "y": destination.coords["y"].values,
         }
     )
+    result = result.rio.write_crs(destination.rio.crs)
+    result = result.rio.write_transform(destination.rio.transform(recalc=False))
     for variable_name in source.data_vars:
         result[variable_name].attrs.update(source[variable_name].attrs)
     return result
