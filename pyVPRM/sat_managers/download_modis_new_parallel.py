@@ -1,8 +1,19 @@
 """
-download_modis_new_parallel.py
-==============================
-Downloads MODIS products from NASA LAADS DAAC for a specific tile and year.
-Designed to run as a SLURM array job.
+# MCD19A1 MAIAC Downloader
+
+Download MODIS products from NASA LAADS DAAC using SLURM.
+
+## Files
+- lads_downloader.py: main downloader class
+- product_registry.py: product catalog  
+- gen_tasks.py: generates task list
+- download_modis_new_parallel.py: parallel download script
+
+## Supported products
+- MCD19A1.061: MAIAC daily 500m
+- MCD43A4.061: BRDF-corrected daily 500m
+- MOD09A1.061: Terra 8-day 500m
+- MOD13A1.061: Terra 16-day 500m
 
 Usage (standalone):
     python download_modis_new_parallel.py \\
