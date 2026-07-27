@@ -1,14 +1,5 @@
 # product_registry.py
-# Description: Registry of supported MODIS/VIIRS products for the LAADS downloader.
-#              Add new products here without touching the downloader logic.
-#
-# cadence options:
-#   "daily"  → one file per day      (e.g. MCD19A1, MOD09GA)
-#   "8day"   → 8-day composites      (e.g. MOD09A1, MYD09A1)
-#   "16day"  → 16-day composites     (e.g. MOD13A1)
-#
-# file_ext: extension to look for in directory listing
-# notes:    human-readable description (optional, for documentation)
+# Registry of supported MODIS/VIIRS products for the LAADS downloader.
 
 PRODUCT_REGISTRY = {
     # ── MAIAC (daily) ────────────────────────────────────────────────
@@ -22,18 +13,6 @@ PRODUCT_REGISTRY = {
         "file_ext": ".hdf",
         "notes":    "MAIAC Aerosol Optical Depth",
     },
-    "MCD43A4": {
-        "cadence":  "daily",        #  cambiar de 16day a daily
-        "file_ext": ".hdf",
-        "notes":    "MODIS BRDF-Adjusted Reflectance Daily 500m (nadir + SZA=45°) Collection 061",
-    },
-    "MCD43C4": {
-        "cadence":  "daily",
-        "file_ext": ".hdf",
-        "notes":    "MODIS BRDF-Adjusted Reflectance Daily 0.05deg CMG global (nadir + SZA=45°)",
-        "global":   True,   # ← sin tiles
-    },
-
     # ── Surface Reflectance daily ─────────────────────────────────────
     "MOD09GA": {
         "cadence":  "daily",
@@ -45,7 +24,6 @@ PRODUCT_REGISTRY = {
         "file_ext": ".hdf",
         "notes":    "Aqua Surface Reflectance Daily L2G",
     },
-
     # ── Aerosol daily ─────────────────────────────────────────────────
     "MOD04_L2": {
         "cadence":  "daily",
@@ -57,7 +35,17 @@ PRODUCT_REGISTRY = {
         "file_ext": ".hdf",
         "notes":    "Aqua Aerosol 5-Min L2 Swath",
     },
-
+    # ── BRDF-Adjusted Reflectance daily ──────────────────────────────
+    "MCD43A4": {
+        "cadence":  "daily",
+        "file_ext": ".hdf",
+        "notes":    "MODIS BRDF-Adjusted Reflectance Daily 500m (nadir + SZA=45°)",
+    },
+    "MCD43C4": {
+        "cadence":  "daily",
+        "file_ext": ".hdf",
+        "notes":    "MODIS BRDF-Adjusted Reflectance Daily 0.05deg CMG (nadir + SZA=45°)",
+    },
     # ── Surface Reflectance 8-day ─────────────────────────────────────
     "MOD09A1": {
         "cadence":  "8day",
@@ -69,7 +57,6 @@ PRODUCT_REGISTRY = {
         "file_ext": ".hdf",
         "notes":    "Aqua Surface Reflectance 8-Day L3 500m",
     },
-
     # ── Vegetation Index 16-day ───────────────────────────────────────
     "MOD13A1": {
         "cadence":  "16day",
@@ -86,7 +73,6 @@ PRODUCT_REGISTRY = {
         "file_ext": ".hdf",
         "notes":    "Terra Vegetation Indices 16-Day L3 1km",
     },
-
     # ── Land Cover yearly ─────────────────────────────────────────────
     "MCD12Q1": {
         "cadence":  "yearly",
@@ -112,7 +98,6 @@ def get_product_info(product_name: str) -> dict:
     if product_name in PRODUCT_REGISTRY:
         return PRODUCT_REGISTRY[product_name]
 
-    # Unknown product → warn and assume 8-day (conservative default)
     import warnings
     warnings.warn(
         f"Product '{product_name}' not found in PRODUCT_REGISTRY. "
