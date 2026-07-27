@@ -185,8 +185,11 @@ def apportion(
         cells = _target_cell_chunk(
             x_edges, y_edges, row_start, row_stop, target_grid.rio.crs
         )
+        if cells.empty:
+            continue
+        cells_in_source_crs = cells.to_crs(source.crs)
         candidate_indices = source_index.query(
-            box(*cells.total_bounds), predicate="intersects"
+            box(*cells_in_source_crs.total_bounds), predicate="intersects"
         )
         if len(candidate_indices) == 0:
             continue
