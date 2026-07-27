@@ -393,6 +393,73 @@ class vprm_base_model:
                     ret_dict[i] = self.era5_inst.get_data(key=i).values.flatten()
         return ret_dict
 
+    def _calculate_gpp(self, land_cover_fraction, land_cover_type, inputs):
+        """Calculate base-VPRM gross primary production for one class.
+
+        Parameters
+        ----------
+        land_cover_fraction : float, pandas.Series, or xarray.DataArray
+            Fractional coverage of ``land_cover_type`` on the prediction grid.
+        land_cover_type : int
+            VPRM class identifier whose fitted parameters are used.
+        inputs : dict
+            VPRM driver fields containing ``Ps``, ``Ws``, ``Ts``, ``evi``, and
+            ``par``.
+
+        Returns
+        -------
+        float, pandas.Series, or xarray.DataArray
+            Gross primary production for the requested VPRM class.
+
+        Notes
+        -----
+        Subclasses may override this hook while retaining the shared class loop
+        and output assembly in :meth:`make_vprm_predictions`.
+        """
+        parameters = self.fit_params_dict[land_cover_type]
+        return (
+            land_cover_fraction
+            * (
+                parameters["lamb"]
+                * inputs["Ps"]
+                * inputs["Ws"]
+                * inputs["Ts"]
+                * inputs["evi"]
+                * inputs["par"]
+                / (1 + inputs["par"] / parameters["par0"])
+            )
+        )
+
+    def _calculate_respiration(self, land_cover_fraction, land_cover_type, inputs):
+        """Calculate base-VPRM ecosystem respiration for one class.
+
+        Parameters
+        ----------
+        land_cover_fraction : float, pandas.Series, or xarray.DataArray
+            Fractional coverage of ``land_cover_type`` on the prediction grid.
+        land_cover_type : int
+            VPRM class identifier whose fitted parameters are used.
+        inputs : dict
+            VPRM driver fields containing ``tcorr``, the air temperature in
+            degrees Celsius.
+
+        Returns
+        -------
+        float, pandas.Series, or xarray.DataArray
+            Non-negative ecosystem respiration for the requested VPRM class.
+
+        Notes
+        -----
+        UrbanVPRM overrides this hook to apply its ISA and reference-EVI
+        respiration adjustment.
+        """
+        parameters = self.fit_params_dict[land_cover_type]
+        return np.maximum(
+            land_cover_fraction
+            * (parameters["alpha"] * inputs["tcorr"] + parameters["beta"]),
+            0,
+        )
+
     def make_vprm_predictions(
         self,
         date=None,
@@ -445,28 +512,8 @@ class vprm_base_model:
                     return None
             else:
                 lcf = 1
-            gpps.append(
-                lcf
-                * (
-                    self.fit_params_dict[i]["lamb"]
-                    * inputs["Ps"]
-                    * inputs["Ws"]
-                    * inputs["Ts"]
-                    * inputs["evi"]
-                    * inputs["par"]
-                    / (1 + inputs["par"] / self.fit_params_dict[i]["par0"])
-                )
-            )
-            respirations.append(
-                np.maximum(
-                    lcf
-                    * (
-                        self.fit_params_dict[i]["alpha"] * inputs["tcorr"]
-                        + self.fit_params_dict[i]["beta"]
-                    ),
-                    0,
-                )
-            )
+            gpps.append(self._calculate_gpp(lcf, i, inputs))
+            respirations.append(self._calculate_respiration(lcf, i, inputs))
         if concatenate_fluxes:
             if isinstance(gpps[0], pd.core.series.Series):
                 ret_res["gpp"] = gpps[0]
