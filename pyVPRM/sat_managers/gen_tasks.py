@@ -4,8 +4,7 @@ import json, yaml
 import sys
 import os
 from datetime import datetime
-sys.path.append("/work/mj0143/b301108/pyVPRM/pyVPRM")
-from sat_managers.lads_downloader import EarthdataLAADS
+from pyVPRM.sat_managers.lads_downloader import EarthdataLAADS
 
 def generate_tile_year_tasks(config):
     start = datetime.fromisoformat(config["start_date"])
