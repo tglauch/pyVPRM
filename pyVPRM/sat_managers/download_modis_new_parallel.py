@@ -2,9 +2,8 @@ import argparse, os, time
 import os, time, sys
 import yaml
 from datetime import datetime, timedelta, date
-sys.path.append("/work/mj0143/b301108/pyVPRM/pyVPRM")
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from sat_managers.lads_downloader import EarthdataLAADS
+from pyVPRM.sat_managers.lads_downloader import EarthdataLAADS
 
 p = argparse.ArgumentParser()
 p.add_argument("--tile", required=True)
