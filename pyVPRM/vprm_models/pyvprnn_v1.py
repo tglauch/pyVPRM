@@ -100,6 +100,51 @@ class DayMask(layers.Layer):
         cfg.update({"ssrd_idx": self.ssrd_idx})
         return cfg
 
+class TimeIntegratedRatioPenalty(layers.Layer):
+    """
+    Per-pixel, batch-time-integrated Reco-vs-GPP consistency check,
+    restricted to daytime timesteps only.
+
+    Daytime-only matters for two reasons: (1) GPP is already forced to
+    exactly 0 at night by the upstream day_mask multiply, so including
+    night would accumulate Reco against a mechanically-zero GPP - not a
+    meaningful test, just the trivial "no photosynthesis at night" fact;
+    (2) nighttime timesteps are far more sparsely and variably sampled
+    (QC/u* filtering), making any night-inclusive statistic noisier.
+
+    Sums raw per-pixel maps over the batch's daytime timesteps first, so
+    a rarely-weighted pixel is NOT diluted the way footprint-weighting
+    dilutes it in the main NEE loss. Pixels outside the valid flux_mask
+    domain are already 0 upstream, so no extra domain masking is needed.
+    """
+    def __init__(self, max_ratio=3.0, weight=1e-4, gpp_floor=1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.max_ratio = max_ratio
+        self.weight = weight
+        self.gpp_floor = gpp_floor
+
+    def call(self, inputs):
+        gpp_map, reco_map, day_mask = inputs  # gpp_map/reco_map/day_mask: (B, H, W, 1)
+
+        gpp_day = gpp_map[..., 0] * day_mask[..., 0]
+        reco_day = reco_map[..., 0] * day_mask[..., 0]
+
+        integrated_gpp = tf.reduce_sum(gpp_day, axis=0)    # (H, W)
+        integrated_reco = tf.reduce_sum(reco_day, axis=0)  # (H, W)
+
+        safe_gpp = tf.maximum(integrated_gpp, self.gpp_floor)
+        excess = tf.nn.relu(integrated_reco / safe_gpp - self.max_ratio)
+
+        n_violating = tf.reduce_sum(tf.cast(excess > 0, tf.float32))
+        penalty = self.weight * tf.reduce_sum(excess) / tf.maximum(n_violating, 1.0)
+
+        self.add_loss(penalty)
+        return reco_map
+
+    def get_config(self):
+        cfg = super().get_config()
+        cfg.update({"max_ratio": self.max_ratio, "weight": self.weight, "gpp_floor": self.gpp_floor})
+        return cfg
 
 class SelectFeatures(tf.keras.layers.Layer):
     def __init__(self, indices, **kwargs):
@@ -176,7 +221,8 @@ def compute_precip_rolling_sum(precip_values, window_steps):
     """
     s = pd.Series(precip_values)
     return s.rolling(window=window_steps, min_periods=1).sum().values.astype(np.float32)
-    
+
+
 class BatchGenerator(tf.keras.utils.Sequence):
     """
     NOTE on batch tuple shape: __getitem__ returns
@@ -525,6 +571,14 @@ class pyvprnn_v1(pyvprnn):
         )(x_reco)
 
         reco_map = layers.Multiply(name="reco_map")([x_reco_map, flux_mask_exp])
+
+        reco_map = TimeIntegratedRatioPenalty(
+            max_ratio=1.0,  # derive some reference ratio spread
+            weight=1e-2,
+            gpp_floor=1.0,
+            name="time_integrated_ratio_penalty",
+        )([gpp_map, reco_map, day_mask])
+        
         reco_weighted = layers.Multiply(name="reco_weighted")([reco_map, fp_exp])
         reco_sum = GlobalSumPooling(name="reco_sum")(reco_weighted)
 

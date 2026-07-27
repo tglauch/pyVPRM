@@ -779,6 +779,7 @@ class pyvprnn:
         X_sat_static,
         X_met,
         X_mask,
+        X_sw_in_pot,
         X_met_lagged,
         feature_idx,
         condition_mask=None,
@@ -803,6 +804,7 @@ class pyvprnn:
             X_sat_c = X_sat[condition_mask]
             X_sat_static_c = X_sat_static[condition_mask]
             X_mask_c = X_mask[condition_mask]
+            X_sw_in_pot_c = X_sw_in_pot[condition_mask]
             if X_met_lagged is not None:
                 X_met_lagged_c = X_met_lagged[condition_mask]
         else:
@@ -810,6 +812,7 @@ class pyvprnn:
             X_sat_c = X_sat
             X_sat_static_c = X_sat_static
             X_mask_c = X_mask
+            X_sw_in_pot_c = X_sw_in_pot
             if X_met_lagged is not None:
                 X_met_lagged_c = X_met_lagged
     
@@ -824,6 +827,7 @@ class pyvprnn:
             X_sat_c = X_sat_c[subsample_idx]
             X_mask_c = X_mask_c[subsample_idx]
             X_sat_static_c = X_sat_static_c[subsample_idx]
+            X_sw_in_pot_c = X_sw_in_pot_c[subsample_idx]
             if X_met_lagged is not None:
                 X_met_lagged_c = X_met_lagged_c[subsample_idx]
         else:
@@ -834,20 +838,23 @@ class pyvprnn:
         f_values = np.linspace(f_min, f_max, n_points)
     
         ice = np.zeros((X_met_c.shape[0], n_points))
-
         for j, val in enumerate(f_values):
             X_met_tmp = X_met_c.copy()
             X_met_tmp[:, feature_idx] = val
+            # Input order here must match pixel_model.inputs exactly - see
+            # pyvprnn_v1/v2 train(): [sat, static, met, sw_in_pot, (met_lagged), flux_mask]
             if X_met_lagged is not None:
-                y_pred = self.pixel_model.predict([X_sat_c, X_met_tmp[:,np.newaxis, np.newaxis,:],
-                                                   X_met_lagged_c, X_mask_c], verbose=0)[output_var_idx].squeeze() # 
+                y_pred = self.pixel_model.predict(
+                    [X_sat_c, X_sat_static_c, X_met_tmp[:, np.newaxis, np.newaxis, :],
+                     X_sw_in_pot_c, X_met_lagged_c, X_mask_c],
+                    verbose=0)[output_var_idx].squeeze()
             else:
-                y_pred = self.pixel_model.predict([X_sat_c, X_sat_static_c,
-                                                   X_met_tmp[:,np.newaxis, np.newaxis,:], X_mask_c],
-                                                  verbose=0)[output_var_idx].squeeze() # 
+                y_pred = self.pixel_model.predict(
+                    [X_sat_c, X_sat_static_c, X_met_tmp[:, np.newaxis, np.newaxis, :],
+                     X_sw_in_pot_c, X_mask_c],
+                    verbose=0)[output_var_idx].squeeze()
             ice[:, j] = y_pred
     
-        # Normalize ICE curves (optional)
         if normalize_ice_curves:
             for i in range(ice.shape[0]):
                 ice[i, :] = ice[i, :] / np.max(ice[i, :])
