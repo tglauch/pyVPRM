@@ -921,18 +921,14 @@ class vprm_preprocessor:
                     None
         """
         def smoother(array, timestamps, xvals):
-            # do_kalman_smoothing has no xvals parameter of its own - it
-            # always returns the full native [0, tot_num_days] daily grid
-            # for whatever `timestamps` it's given. `xvals` is accepted
-            # here only so this closure matches lowess's smoother
-            # signature; _smooth() handles subsetting the result down to
-            # xvals afterward (see needs_full_grid=True below).
             return do_kalman_smoothing(array, timestamps=timestamps,
                                         transition_covariance=transition_covariance,
-                                        observation_covariance=observation_covariance)
+                                        observation_covariance=observation_covariance,
+                                        day_range=(0, self.tot_num_days))
  
         return self._smooth(keys, smoother, times=times, lonlats=lonlats, n_cpus=n_cpus,
                              smooth_all=smooth_all, needs_full_grid=True)
+
  
 
     def clip_values(self, key, min_val, max_val, to_nan=False):
