@@ -1,5 +1,5 @@
 
-[![DOI](https://zenodo.org/badge/626435494.svg)](https://doi.org/10.5281/zenodo.14216613)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14216613.svg)](https://doi.org/10.5281/zenodo.14216613)
 [![PyPI version](https://img.shields.io/pypi/v/pyVPRM.svg)](https://pypi.org/project/pyVPRM/)
 [![License](https://img.shields.io/pypi/l/pyVPRM.svg)](https://pypi.org/project/pyVPRM/)
 [![Downloads](https://img.shields.io/pypi/dm/pyVPRM.svg)](https://pypi.org/project/pyVPRM/)
