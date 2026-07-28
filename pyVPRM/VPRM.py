@@ -605,6 +605,23 @@ class vprm_preprocessor:
         if isinstance(land_cover_map, str):
             logger.info("Load pre-generated land cover map: {}".format(land_cover_map))
             self.land_cover_type = satellite_data_manager(sat_img=land_cover_map)
+            # The `else` branch below always produces a DataArray (via
+            # xr.concat(..., dim="vprm_classes")). Loading a previously-saved map
+            # from a netCDF path here can come back as a Dataset instead, since
+            # DataArray -> to_netcdf() -> open_dataset() round-tripping wraps it
+            # in a Dataset container with the DataArray as its one data variable.
+            # Downstream code (e.g. to_wrf_output's `lcm.to_dataset(name=...)`)
+            # assumes sat_img is always a DataArray - normalize here so both
+            # branches produce the same type.
+            if isinstance(self.land_cover_type.sat_img, xr.Dataset):
+                data_vars = list(self.land_cover_type.sat_img.data_vars)
+                if len(data_vars) != 1:
+                    raise ValueError(
+                        f"Expected exactly one data variable in the saved land cover "
+                        f"map at {land_cover_map}, found {data_vars} - can't "
+                        f"unambiguously convert this back to a DataArray."
+                    )
+                self.land_cover_type.sat_img = self.land_cover_type.sat_img[data_vars[0]]
         else:
             logger.info("Generating satellite data compatible land cover map")
 
