@@ -731,26 +731,29 @@ class vprm_preprocessor:
         self.max_lswi.sat_img["max_lswi"] = lswi_masked.max(self.time_key, skipna=True)
         return
 
-    def lowess(self, keys, lonlats=None, times=False, frac=0.25, it=3,
-               n_cpus=None, smooth_all=False):
+    def _resolve_xvals(self, times):
         """
-        Performs the lowess smoothing
-
-            Parameters:
-                    lonlats (str): If given the smearing is only performed at the
-                                   given lats and lons
-            Returns:
-                    None
+        Shared parsing of the `times` argument used by both lowess() and
+        kalman(), turning it into `xvals` - a list of integer day-offsets
+        (from self.timestamp_start) at which the smoothed output should be
+        evaluated.
+ 
+        Accepts:
+            - a pandas DatetimeIndex or plain list of datetimes: converted
+              to day-offsets; entries outside [timestamp_start,
+              timestamp_end] are dropped with a warning, since smoothing
+              can't reliably extrapolate beyond the data it was given.
+            - the string "daily": every day in the inclusive range
+              [0, tot_num_days].
+            - None / False (the default for kalman()/lowess() respectively):
+              falls back to the satellite images' own native time values.
+ 
+        Returns:
+                list[int]: day-offsets to evaluate the smoothed curve at.
         """
-        
-        from dask.diagnostics import ProgressBar
-        with ProgressBar():
-            self.sat_imgs.sat_img = self.sat_imgs.sat_img.compute()
-
-        if n_cpus is None:
-            n_cpus = self.n_cpus
         if isinstance(times, pd.core.indexes.datetimes.DatetimeIndex):
             times = list(times)
+ 
         if isinstance(times, list):
             times = np.array(sorted(times))
             if (times[-1] > self.timestamp_end) | (times[0] < self.timestamp_start):
@@ -771,292 +774,171 @@ class vprm_preprocessor:
             ]
         elif isinstance(times, str):
             if times == "daily":
-                xvals = np.arange(self.tot_num_days)
+                xvals = list(np.arange(self.tot_num_days + 1))
             else:
                 logger.info("{} is not a valid str for times".format(times))
                 return
         else:
             xvals = self.sat_imgs.sat_img["time"]
-        logger.info("Lowess timestamps {}".format(xvals))
-
-        if (self.flux_tower_instances is not None) and (smooth_all is False):  # Is flux tower sites are given
-            if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
-                for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
-                        {
-                            key: (
-                                ["time_gap_filled", "site_names"],
-                                np.array(
-                                    [
-                                        do_lowess_smoothing(
-                                            self.sat_imgs.sat_img.sel(site_names=i)[
-                                                key
-                                            ].values,
-                                            timestamps=self.sat_imgs.sat_img.sel(
-                                                site_names=i
-                                            )["timestamps"].values,
-                                            xvals=xvals,
-                                            frac=frac,
-                                            it=it,
-                                        )
-                                        for i in self.sat_imgs.sat_img.site_names.values
-                                    ]
-                                ).T,
-                            )
-                        }
+        logger.info("Smoothing timestamps {}".format(xvals))
+        return xvals
+ 
+    def _smooth(self, keys, smoother, times, lonlats, n_cpus, smooth_all, needs_full_grid):
+        """
+        Shared implementation behind lowess() and kalman(). The two public
+        methods differ only in *which* per-column smoothing function they
+        use and that function's own keyword arguments (wrapped into
+        `smoother`, a uniform `(array, timestamps, xvals) -> smoothed_array`
+        callable) - materializing the dask-backed data, resolving the
+        requested output timestamps, iterating over the flux-tower / full-
+        grid cases, and assigning the final 'time_gap_filled' coordinate
+ 
+            Parameters:
+                    keys (list): variable names in self.sat_imgs.sat_img to smooth.
+                    smoother (callable): (array, timestamps, xvals) -> smoothed array;
+                            built by lowess()/kalman() as a closure over their own params.
+                    times: see _resolve_xvals.
+                    lonlats: if given, restrict smoothing to specific points (not
+                            currently implemented - the time dimension changes through
+                            smoothing, so crop the satellite image to the desired area
+                            first, then smooth the full crop instead).
+                    n_cpus (int or None): parallel workers for the full-grid case;
+                            defaults to self.n_cpus.
+                    smooth_all (bool): if True, smooth every pixel even when
+                            flux_tower_instances are set (normally, when flux towers
+                            are given, only their site locations are smoothed).
+                    needs_full_grid (bool): True if `smoother`'s underlying function
+                            (like do_kalman_smoothing) always returns the *full*
+                            native [0, tot_num_days] daily grid regardless of the
+                            requested xvals subset, requiring an extra trailing
+                            `.sel()` down to xvals; False if it already returns
+                            exactly at xvals (like do_lowess_smoothing), making
+                            that trailing `.sel()` a harmless no-op.
+ 
+            Returns:
+                    None
+        """
+        from dask.diagnostics import ProgressBar
+        with ProgressBar():
+            self.sat_imgs.sat_img = self.sat_imgs.sat_img.compute()
+ 
+        n_cpus = n_cpus if n_cpus is not None else self.n_cpus
+        xvals = self._resolve_xvals(times)
+        has_pixel_timestamps = "timestamps" in list(self.sat_imgs.sat_img.data_vars)
+ 
+        if (self.flux_tower_instances is not None) and (smooth_all is False):  # If flux tower sites are given
+            for key in keys:
+                per_site = []
+                for site in self.sat_imgs.sat_img.site_names.values:
+                    site_ds = self.sat_imgs.sat_img.sel(site_names=site)
+                    ts = (
+                        site_ds["timestamps"].values if has_pixel_timestamps
+                        else self.sat_imgs.sat_img["time"].values
                     )
-            else:
-                for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
-                        {
-                            key: (
-                                ["time_gap_filled", "site_names"],
-                                np.array(
-                                    [
-                                        do_lowess_smoothing(
-                                            self.sat_imgs.sat_img.sel(site_names=i)[
-                                                key
-                                            ].values,
-                                            timestamps=self.sat_imgs.sat_img[
-                                                "time"
-                                            ].values,
-                                            xvals=xvals,
-                                            frac=frac,
-                                            it=it,
-                                        )
-                                        for i in self.sat_imgs.sat_img.site_names.values
-                                    ]
-                                ).T,
-                            )
-                        }
-                    )
-
+                    per_site.append(smoother(site_ds[key].values, ts, xvals))
+                self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
+                    {key: (["time_gap_filled", "site_names"], np.array(per_site).T)}
+                )
+ 
         elif lonlats is None:  # If smoothing the entire array
-            if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
-                for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
-                        {
-                            key: (
-                                ["time_gap_filled", "y", "x"],
-                                np.array(
-                                    Parallel(n_jobs=n_cpus, max_nbytes=None)(
-                                        delayed(do_lowess_smoothing)(
-                                            self.sat_imgs.sat_img[key][:, :, i].values,
-                                            timestamps=self.sat_imgs.sat_img[
-                                                "timestamps"
-                                            ][:, :, i].values,
-                                            xvals=xvals,
-                                            frac=frac,
-                                            it=it,
-                                        )
-                                        for i, x_coord in enumerate(
-                                            self.sat_imgs.sat_img.x.values
-                                        )
-                                    )
-                                ).T,
-                            )
-                        }
+            for key in keys:
+                def _smooth_pixel(i, key=key):
+                    ts = (
+                        self.sat_imgs.sat_img["timestamps"][:, :, i].values if has_pixel_timestamps
+                        else self.sat_imgs.sat_img["time"].values
                     )
-            else:
-                for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
-                        {
-                            key: (
-                                ["time_gap_filled", "y", "x"],
-                                np.array(
-                                    Parallel(n_jobs=n_cpus, max_nbytes=None)(
-                                        delayed(do_lowess_smoothing)(
-                                            self.sat_imgs.sat_img[key][:, :, i].values,
-                                            timestamps=self.sat_imgs.sat_img[
-                                                "time"
-                                            ].values,
-                                            xvals=xvals,
-                                            frac=frac,
-                                            it=it,
-                                        )
-                                        for i, x_coord in enumerate(
-                                            self.sat_imgs.sat_img.x.values
-                                        )
-                                    )
-                                ).T,
-                            )
-                        }
-                    )
-
+                    return smoother(self.sat_imgs.sat_img[key][:, :, i].values, ts, xvals)
+ 
+                results = Parallel(n_jobs=n_cpus, max_nbytes=None)(
+                    delayed(_smooth_pixel)(i) for i in range(len(self.sat_imgs.sat_img.x.values))
+                )
+                self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
+                    {key: (["time_gap_filled", "y", "x"], np.array(results).T)}
+                )
+ 
         else:
-            logger.info("Not implemented")
-            # Originally had a function to smooth only at specific lat/long.
-            # That doesn't make sense anymore, because the time dimension will change through lowess smoothing.
-            # If this is your plan then try to crop the sat image first and then do the lowess filtering.
-
+            logger.info(
+                "Not implemented. Originally had a function to smooth only at "
+                "specific lat/long. That doesn't make sense anymore, because the "
+                "time dimension will change through lowess/kalman smoothing. If "
+                "this is your plan then try to crop the sat image first and then "
+                "do the smoothing."
+            )
+            return
+ 
         self.time_key = "time_gap_filled"
-        self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords(
-            {"time_gap_filled": list(xvals)}
-        )
+        # kalman's underlying smoother has no xvals argument - it always
+        # returns the full [0, tot_num_days] daily grid, so the coordinate
+        # we assign here must match THAT length, then we subset down to the
+        # actually-requested xvals. lowess's underlying smoother already
+        # returns exactly len(xvals) values matching xvals directly, so
+        # this assign+select is a safe no-op for it (selecting the same
+        # values already assigned)
+        native_grid = list(np.arange(self.tot_num_days + 1)) if needs_full_grid else list(xvals)
+        self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords({"time_gap_filled": native_grid})
+        self.sat_imgs.sat_img = self.sat_imgs.sat_img.sel({"time_gap_filled": list(xvals)})
         return
-
+ 
+    def lowess(self, keys, lonlats=None, times=False, frac=0.25, it=3,
+               n_cpus=None, smooth_all=False):
+        """
+        Performs the lowess smoothing
+ 
+            Parameters:
+                    keys (list): variable names in self.sat_imgs.sat_img to smooth.
+                    lonlats (str): If given the smearing is only performed at the
+                                   given lats and lons (not currently implemented -
+                                   see _smooth).
+                    times: "daily", an explicit list/DatetimeIndex of timestamps,
+                           or False to use the satellite images' own native times.
+                    frac (float): LOWESS smoothing fraction (see do_lowess_smoothing).
+                    it (int): LOWESS robustifying iterations.
+                    n_cpus (int or None): parallel workers; defaults to self.n_cpus.
+                    smooth_all (bool): smooth every pixel even if flux towers are set.
+            Returns:
+                    None
+        """
+        def smoother(array, timestamps, xvals):
+            return do_lowess_smoothing(array, timestamps=timestamps, xvals=xvals, frac=frac, it=it)
+ 
+        return self._smooth(keys, smoother, times=times, lonlats=lonlats, n_cpus=n_cpus,
+                             smooth_all=smooth_all, needs_full_grid=False)
+ 
     def kalman(self, keys, times=None, 
                transition_covariance=0.01,
                observation_covariance=0.05,
                lonlats=None, n_cpus=None, smooth_all=False):
         """
-        Performs the lowess smoothing
-
+        Performs the Kalman smoothing
+ 
             Parameters:
+                    keys (list): variable names in self.sat_imgs.sat_img to smooth.
+                    times: "daily", an explicit list/DatetimeIndex of timestamps,
+                           or None to use the satellite images' own native times.
+                    transition_covariance (float): Kalman filter process noise.
+                    observation_covariance (float): Kalman filter observation noise.
                     lonlats (str): If given the smearing is only performed at the
-                                   given lats and lons
+                                   given lats and lons (not currently implemented -
+                                   see _smooth).
+                    n_cpus (int or None): parallel workers; defaults to self.n_cpus.
+                    smooth_all (bool): smooth every pixel even if flux towers are set.
             Returns:
                     None
         """
-
-        from dask.diagnostics import ProgressBar
-        with ProgressBar():
-            self.sat_imgs.sat_img = self.sat_imgs.sat_img.compute()
-
-        if n_cpus is None:
-            n_cpus = self.n_cpus
-        if isinstance(times, pd.core.indexes.datetimes.DatetimeIndex):
-            times = list(times)
-        if isinstance(times, list):
-            times = np.array(sorted(times))
-            if (times[-1] > self.timestamp_end) | (times[0] < self.timestamp_start):
-                logger.info(
-                    "You have provied some timestamps that are not covered from satellite images.\
-                They will be ignored in the following, to avoid unreliable results"
-                )
-            times = times[
-                (times <= self.timestamp_end) & (times >= self.timestamp_start)
-            ]
-            xvals = [
-                int(
-                    np.round(
-                        (i - self.timestamp_start).total_seconds() / (24 * 60 * 60)
-                    )
-                )
-                for i in times
-            ]
-        elif isinstance(times, str):
-            if times == "daily":
-                xvals = np.arange(self.tot_num_days+1)
-            else:
-                logger.info("{} is not a valid str for times".format(times))
-                return
-        else:
-            xvals = self.sat_imgs.sat_img["time"]
-        logger.info("Kalman timestamps {}".format(xvals))
-
-        if (self.flux_tower_instances is not None) and (smooth_all is False):  # Is flux tower sites are given
-            if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
-                for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
-                        {
-                            key: (
-                                ["time_gap_filled", "site_names"],
-                                np.array(
-                                    [
-                                        do_kalman_smoothing(
-                                            self.sat_imgs.sat_img.sel(site_names=i)[
-                                                key
-                                            ].values,
-                                            timestamps=self.sat_imgs.sat_img.sel(
-                                                site_names=i
-                                            )["timestamps"].values,
-                                            transition_covariance=transition_covariance,
-                                            observation_covariance=observation_covariance,
-                                        )
-                                        for i in self.sat_imgs.sat_img.site_names.values
-                                    ]
-                                ).T,
-                            )
-                        }
-                    )
-            else:
-                for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
-                        {
-                            key: (
-                                ["time_gap_filled", "site_names"],
-                                np.array(
-                                    [
-                                        do_kalman_smoothing(
-                                            self.sat_imgs.sat_img.sel(site_names=i)[
-                                                key
-                                            ].values,
-                                            timestamps=self.sat_imgs.sat_img[
-                                                "time"
-                                            ].values,
-                                            transition_covariance=transition_covariance,
-                                            observation_covariance=observation_covariance,
-                                        )
-                                        for i in self.sat_imgs.sat_img.site_names.values
-                                    ]
-                                ).T,
-                            )
-                        }
-                    )
-
-        elif lonlats is None:  # If smoothing the entire array
-            if "timestamps" in list(self.sat_imgs.sat_img.data_vars):
-                for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
-                        {
-                            key: (
-                                ["time_gap_filled", "y", "x"],
-                                np.array(
-                                    Parallel(n_jobs=n_cpus, max_nbytes=None)(
-                                        delayed(do_kalman_smoothing)(
-                                            self.sat_imgs.sat_img[key][:, :, i].values,
-                                            timestamps=self.sat_imgs.sat_img[
-                                                "timestamps"
-                                            ][:, :, i].values,
-                                            transition_covariance=transition_covariance,
-                                            observation_covariance=observation_covariance,
-                                        )
-                                        for i, x_coord in enumerate(
-                                            self.sat_imgs.sat_img.x.values
-                                        )
-                                    )
-                                ).T,
-                            )
-                        }
-                    )
-            else:
-                for key in keys:
-                    self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign(
-                        {
-                            key: (
-                                ["time_gap_filled", "y", "x"],
-                                np.array(
-                                    Parallel(n_jobs=n_cpus, max_nbytes=None)(
-                                        delayed(do_kalman_smoothing)(
-                                            self.sat_imgs.sat_img[key][:, :, i].values,
-                                            timestamps=self.sat_imgs.sat_img[
-                                                "time"
-                                            ].values,
-                                            transition_covariance=transition_covariance,
-                                            observation_covariance=observation_covariance,
-                                        )
-                                        for i, x_coord in enumerate(
-                                            self.sat_imgs.sat_img.x.values
-                                        )
-                                    )
-                                ).T,
-                            )
-                        }
-                    )
-
-        else:
-            logger.info("Not implemented")
-            # Originally had a function to smooth only at specific lat/long.
-            # That doesn't make sense anymore, because the time dimension will change through lowess smoothing.
-            # If this is your plan then try to crop the sat image first and then do the lowess filtering.
-
-        self.time_key = "time_gap_filled"
-        self.sat_imgs.sat_img = self.sat_imgs.sat_img.assign_coords(
-            {"time_gap_filled": list(np.arange(self.tot_num_days+1))}
-        )
-        self.sat_imgs.sat_img = self.sat_imgs.sat_img.sel({"time_gap_filled": list(xvals)})
-        return
+        def smoother(array, timestamps, xvals):
+            # do_kalman_smoothing has no xvals parameter of its own - it
+            # always returns the full native [0, tot_num_days] daily grid
+            # for whatever `timestamps` it's given. `xvals` is accepted
+            # here only so this closure matches lowess's smoother
+            # signature; _smooth() handles subsetting the result down to
+            # xvals afterward (see needs_full_grid=True below).
+            return do_kalman_smoothing(array, timestamps=timestamps,
+                                        transition_covariance=transition_covariance,
+                                        observation_covariance=observation_covariance)
+ 
+        return self._smooth(keys, smoother, times=times, lonlats=lonlats, n_cpus=n_cpus,
+                             smooth_all=smooth_all, needs_full_grid=True)
+ 
 
     def clip_values(self, key, min_val, max_val, to_nan=False):
         """
