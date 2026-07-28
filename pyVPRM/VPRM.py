@@ -357,12 +357,7 @@ class vprm_preprocessor:
         if add_ndvi:
             satellite_indices.append('ndvi')
         self.satellite_indices = satellite_indices
-
-        if which_evi is not None:
-            satellite_indices.append(which_evi)
-        if add_ndvi:
-            satellite_indices.append('ndvi')
-        self.satellite_indices = satellite_indices
+        
         bands_to_mask = []
         bands = [b_nir, b_red, b_blue, b_swir, b_red_edge]  
         for btm in bands:
