@@ -170,7 +170,7 @@ class vprm_preprocessor:
                 ds_out_esmf = to_esmf_grid(out_grid)
                 src_grid_esmf.to_netcdf(src_temp_path)
                 ds_out_esmf.to_netcdf(dest_temp_path)
-                exec_str = "ESMF_RegridWeightGen --source {} --destination {} --weight {} -m {} -r --netcdf4 –src_regional –dest_regional ".format(
+                exec_str = "ESMF_RegridWeightGen --source {} --destination {} --weight {} -m {} -r --netcdf4 --src_regional --dest_regional ".format(
                     src_temp_path,
                     dest_temp_path,
                     regridder_save_path,
@@ -181,7 +181,11 @@ class vprm_preprocessor:
                 if not logs:
                     exec_str += " --no_log "
                 logger.info(exec_str)
-                os.system(exec_str)  # --no_log
+                ret = os.system(exec_str)
+                if ret != 0:
+                    raise RuntimeError(f"ESMF_RegridWeightGen failed (exit code {ret}): {exec_str}")
+                
+                # --no_log
                 # os.remove(src_temp_path)
                 # os.remove(dest_temp_path)
                 weights_for_regridder = regridder_save_path
