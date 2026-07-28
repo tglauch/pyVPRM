@@ -313,7 +313,7 @@ class vprm_preprocessor:
         drop_bands=False,
         which_evi=None,
         add_ndvi=False,
-        satellite_indices=[],
+        satellite_indices=None,
         timestamp_key=None,
         mask_bad_pixels=True,
         mask_clouds=True,
@@ -346,6 +346,14 @@ class vprm_preprocessor:
                 "Satellite image needs to bet an object of the satellite_data_manager class"
             )
             return
+            
+        satellite_indices = [] if satellite_indices is None else list(satellite_indices)  # copy, don't mutate caller's list
+        if which_evi is not None:
+            satellite_indices.append(which_evi)
+        if add_ndvi:
+            satellite_indices.append('ndvi')
+        self.satellite_indices = satellite_indices
+
         if which_evi is not None:
             satellite_indices.append(which_evi)
         if add_ndvi:
