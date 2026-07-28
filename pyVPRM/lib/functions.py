@@ -340,7 +340,24 @@ def to_esmf_grid(sat_img):
 
 def do_kalman_smoothing(array_to_smooth, timestamps,
                         transition_covariance=0.01,
-                        observation_covariance=0.05):
+                        observation_covariance=0.05,
+                        day_range=None):
+    """
+    day_range: optional (day_min, day_max) tuple fixing the output daily
+    grid's range explicitly. Without this, t_daily was derived from the
+    LOCAL min/max of whatever `timestamps` slice a given call happened to
+    receive - fine in isolation, but when called separately per-pixel/
+    per-column (as vprm_preprocessor._smooth does, once per x-index),
+    different columns' local timestamp coverage can genuinely differ
+    (e.g. a masked edge pixel missing the very first or last day of the
+    record), giving each call a DIFFERENT-length output - which then
+    fails to stack back into one array in _smooth()
+    ("ValueError: setting an array element with a sequence..."). Passing
+    an explicit, externally-known day_range (e.g. (0, self.tot_num_days))
+    guarantees every call produces the same length regardless of local
+    coverage differences. See vprm_preprocessor.kalman()'s smoother
+    closure for how this gets threaded through.
+    """
  
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
@@ -348,28 +365,38 @@ def do_kalman_smoothing(array_to_smooth, timestamps,
         if array_to_smooth.size == 0:
             return np.full_like(array_to_smooth, np.nan, dtype=float)
  
+        if day_range is not None:
+            t_daily = np.arange(day_range[0], day_range[1] + 1)
+        else:
+            t_unique_global = np.unique(timestamps)
+            if len(t_unique_global) == 0:
+                return np.full_like(array_to_smooth, np.nan, dtype=float)
+            t_daily = np.arange(t_unique_global.min(), t_unique_global.max() + 1)
+ 
         # =======================
         # 1D CASE (single pixel/site - timestamps is always 1D here already)
         # =======================
         if array_to_smooth.ndim == 1:
-            t_unique, inv = np.unique(timestamps, return_inverse=True)  ### CHANGE (performance)
+            t_unique, inv = np.unique(timestamps, return_inverse=True)
             if len(t_unique) == 0:
-                return np.full_like(array_to_smooth, np.nan, dtype=float)
+                return np.full(len(t_daily), np.nan)
  
-            t_daily = np.arange(t_unique.min(), t_unique.max() + 1)
- 
+            ### CHANGE: vectorized nanmean by time index
             y_mean = np.array([
                 np.nanmean(array_to_smooth[inv == k])
                 for k in range(len(t_unique))
             ])
  
+            ### CHANGE: guard against all-NaN series
             if np.all(np.isnan(y_mean)):
                 return np.full(len(t_daily), np.nan)
  
             y_daily = np.full(len(t_daily), np.nan, dtype=float)
             idx = (t_unique - t_daily[0]).astype(int)
-            y_daily[idx] = y_mean
+            in_range = (idx >= 0) & (idx < len(y_daily))
+            y_daily[idx[in_range]] = y_mean[in_range]
  
+            ### CHANGE: safe first valid lookup
             valid = np.where(~np.isnan(y_daily))[0]
             if len(valid) == 0:
                 return np.full(len(t_daily), np.nan)
@@ -395,11 +422,6 @@ def do_kalman_smoothing(array_to_smooth, timestamps,
         # =======================
         else:
             timestamps_is_2d = (np.ndim(timestamps) == 2)
-            t_unique_global = np.unique(timestamps)
-            if len(t_unique_global) == 0:
-                return np.full((0, array_to_smooth.shape[1]), np.nan).T
-            t_daily = np.arange(t_unique_global.min(), t_unique_global.max() + 1)
- 
             ret_array = np.full((len(t_daily), array_to_smooth.shape[1]), np.nan)  ### CHANGE
  
             for j in range(array_to_smooth.shape[1]):
@@ -408,19 +430,24 @@ def do_kalman_smoothing(array_to_smooth, timestamps,
                 if len(t_unique) == 0:
                     continue
  
+                ### CHANGE: vectorized nanmean
                 y_mean = np.array([
                     np.nanmean(array_to_smooth[:, j][inv == k])
                     for k in range(len(t_unique))
                 ])
  
+                ### CHANGE: skip all-NaN pixels
                 if np.all(np.isnan(y_mean)):
                     continue
  
                 y_daily = np.full(len(t_daily), np.nan, dtype=float)
                 idx = (t_unique - t_daily[0]).astype(int)
+                # Guard against this column's own timestamps falling
+                # outside the (now externally-fixed) t_daily range.
                 in_range = (idx >= 0) & (idx < len(y_daily))
                 y_daily[idx[in_range]] = y_mean[in_range]
  
+                ### CHANGE: safe initialization
                 valid = np.where(~np.isnan(y_daily))[0]
                 if len(valid) == 0:
                     continue
@@ -443,10 +470,6 @@ def do_kalman_smoothing(array_to_smooth, timestamps,
  
             return ret_array.T
  
-
-
-
-
 def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, frac=0.25, it=3):
     ### ToDo: Choose frac adaptively from the data.
  
