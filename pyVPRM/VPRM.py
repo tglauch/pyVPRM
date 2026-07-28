@@ -1068,20 +1068,11 @@ class vprm_preprocessor:
                 to_nan (bool): if True, values outside the range become NaN
                                instead of being clamped to the nearest bound
         """
+        da = self.sat_imgs.sat_img[key]
         if to_nan:
-            self.sat_imgs.sat_img[key].values[
-                self.sat_imgs.sat_img[key].values < min_val
-            ] = np.nan
-            self.sat_imgs.sat_img[key].values[
-                self.sat_imgs.sat_img[key].values > max_val
-            ] = np.nan
+            self.sat_imgs.sat_img[key] = da.where((da >= min_val) & (da <= max_val))
         else:
-            self.sat_imgs.sat_img[key].values[
-                self.sat_imgs.sat_img[key].values < min_val
-            ] = min_val
-            self.sat_imgs.sat_img[key].values[
-                self.sat_imgs.sat_img[key].values > max_val
-            ] = max_val
+            self.sat_imgs.sat_img[key] = da.clip(min=min_val, max=max_val)
         return
 
     def clip_non_finite(self, data_var, val, sel):
