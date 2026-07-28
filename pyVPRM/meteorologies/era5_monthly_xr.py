@@ -18,11 +18,11 @@ class met_data_handler(met_data_handler_base):
 
     def __init__(
         self,
-        year,
-        month,
-        day,
-        hour,
-        bpath,
+        year=None,
+        month=None,
+        day=None,
+        hour=None,
+        bpath=None,
         fname_fmt_str="{year}_{month}.nc",
         mpi=False,
         keys=[],
