@@ -1059,6 +1059,15 @@ class vprm_preprocessor:
         return
 
     def clip_values(self, key, min_val, max_val, to_nan=False):
+        """
+        Clip a satellite index variable to [min_val, max_val].
+    
+        Parameters:
+                key (str): variable name in self.sat_imgs.sat_img to clip
+                min_val, max_val (float): clip bounds
+                to_nan (bool): if True, values outside the range become NaN
+                               instead of being clamped to the nearest bound
+        """
         if to_nan:
             self.sat_imgs.sat_img[key].values[
                 self.sat_imgs.sat_img[key].values < min_val
@@ -1076,6 +1085,16 @@ class vprm_preprocessor:
         return
 
     def clip_non_finite(self, data_var, val, sel):
+        """
+        Replace non-finite (inf/-inf/NaN... actually only non-finite, NaN passes
+        np.isfinite as False too - double check this is intended) values of
+        data_var at selection `sel` with a fixed value.
+    
+        Parameters:
+                data_var (str): variable name in self.sat_imgs.sat_img
+                val (float): replacement value for non-finite entries
+                sel (dict or indexer): passed to .loc[] to select the region to fix
+        """
         t = self.sat_imgs.sat_img[data_var].loc[sel].values
         t[~np.isfinite(t)] = val
         self.sat_imgs.sat_img[data_var].loc[sel] = t
@@ -1243,6 +1262,16 @@ class vprm_preprocessor:
         return
 
     def is_disjoint(self, this_sat_img):
+        """
+        Check whether this_sat_img's spatial bounds are disjoint from (do not
+        overlap) the currently loaded prototype satellite image.
+    
+        Parameters:
+                this_sat_img (satellite_data_manager): image to test against
+    
+        Returns:
+                bool: True if the two images share no spatial overlap
+        """
         bounds = self.prototype_satellite_manager.sat_img.rio.transform_bounds(
             this_sat_img.sat_img.rio.crs
         )
@@ -1250,7 +1279,16 @@ class vprm_preprocessor:
         return dj
 
     def add_vprm_insts(self, vprm_insts, allow_reproject=True):
-        # Add Check that timestamps align before merging
+        """
+        Merge one or more other vprm_preprocessor instances' satellite/land-cover
+        tiles into this one (e.g. combining adjacent spatial tiles into a
+        single larger domain).
+    
+        Parameters:
+                vprm_insts (list): other vprm_preprocessor instances to merge in
+                allow_reproject (bool): reproject incoming tiles onto this
+                                        instance's grid/CRS if they don't already match
+        """
         if isinstance(self.sat_imgs, satellite_data_manager):
             self.sat_imgs.add_tile(
                 [v.sat_imgs for v in vprm_insts], reproject=allow_reproject
