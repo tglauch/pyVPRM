@@ -1,6 +1,7 @@
 """UrbanVPRM flux model using ISA, reference EVI, and UHI-adjusted temperature."""
 
 import numpy as np
+import xarray as xr
 
 from pyVPRM.vprm_models.vprm_base_model import vprm_base_model
 
@@ -58,6 +59,10 @@ class vprm_urban_model(vprm_base_model):
         super().__init__(vprm_pre=vprm_pre, met=met, fit_params_dict=fit_params_dict)
         self.urban_vprm_classes = frozenset(urban_vprm_classes)
         self.uhi_temperature_adjustment = uhi_temperature_adjustment
+        self._isa_fraction_cache = None
+        self._reference_minimum_evi_cache = None
+        self._reference_current_evi_cache = None
+        self._reference_evi_counter_cache = None
 
     def get_isa_fraction(self, lon=None, lat=None):
         """Return impervious-surface area as a fraction from zero to one.
@@ -81,6 +86,8 @@ class vprm_urban_model(vprm_base_model):
         """
         if self.vprm_pre.impervious_surface_area is None:
             raise ValueError("UrbanVPRM requires impervious-surface data.")
+        if lon is None and getattr(self, "_isa_fraction_cache", None) is not None:
+            return self._isa_fraction_cache
         manager = self.vprm_pre.impervious_surface_area
         variable_name = "impervious_surface_percentage"
         if variable_name not in manager.sat_img:
@@ -93,9 +100,20 @@ class vprm_urban_model(vprm_base_model):
             isa_percent = manager.value_at_lonlat(
                 lon, lat, key=variable_name, as_array=False
             )
-        if np.nanmin(isa_percent) < 0 or np.nanmax(isa_percent) > 100:
-            raise ValueError("Impervious-surface percentages must be within 0--100.")
-        return isa_percent / 100.0
+        tolerance = 1e-6
+        minimum_percent = float(np.nanmin(isa_percent))
+        maximum_percent = float(np.nanmax(isa_percent))
+        if minimum_percent < -tolerance or maximum_percent > 100 + tolerance:
+            raise ValueError(
+                "Impervious-surface percentages must be within 0--100; got "
+                "minimum {:.12g} and maximum {:.12g}.".format(
+                    minimum_percent, maximum_percent
+                )
+            )
+        isa_fraction = np.clip(isa_percent, 0.0, 100.0) / 100.0
+        if lon is None:
+            self._isa_fraction_cache = isa_fraction
+        return isa_fraction
 
     def _get_reference_evi(self):
         """Gather current and annual-minimum EVI at local reference cells.
@@ -115,16 +133,52 @@ class vprm_urban_model(vprm_base_model):
         if getattr(self.vprm_pre, "urban_reference_evi", None) is None:
             raise ValueError("UrbanVPRM requires a reference-EVI lookup.")
         lookup = self.vprm_pre.urban_reference_evi.sat_img
-        y_index = lookup["reference_y_index"]
-        x_index = lookup["reference_x_index"]
-        current_evi = self.vprm_pre.sat_imgs.sat_img["evi"].isel(
-            {self.vprm_pre.time_key: self.vprm_pre.counter}
-        )
-        minimum_evi = self.vprm_pre.min_max_evi.sat_img["min_evi"]
-        return (
-            current_evi.isel(y=y_index, x=x_index),
-            minimum_evi.isel(y=y_index, x=x_index),
-        )
+        current_counter = self.vprm_pre.counter
+        coordinate_free_y_index = None
+        coordinate_free_x_index = None
+
+        def get_coordinate_free_indices():
+            """Return target-grid reference indices without coordinate conflicts.
+
+            Returns
+            -------
+            tuple[xarray.DataArray, xarray.DataArray]
+                Coordinate-free y and x index arrays for vectorized indexing.
+            """
+
+            y_index = lookup["reference_y_index"]
+            x_index = lookup["reference_x_index"]
+            return (
+                xr.DataArray(y_index.data, dims=y_index.dims),
+                xr.DataArray(x_index.data, dims=x_index.dims),
+            )
+
+        if getattr(self, "_reference_minimum_evi_cache", None) is None:
+            coordinate_free_y_index, coordinate_free_x_index = (
+                get_coordinate_free_indices()
+            )
+            minimum_evi = self.vprm_pre.min_max_evi.sat_img["min_evi"]
+            self._reference_minimum_evi_cache = minimum_evi.isel(
+                y=coordinate_free_y_index, x=coordinate_free_x_index
+            ).assign_coords(y=lookup.coords["y"], x=lookup.coords["x"])
+
+        if (
+            getattr(self, "_reference_current_evi_cache", None) is None
+            or getattr(self, "_reference_evi_counter_cache", None) != current_counter
+        ):
+            if coordinate_free_y_index is None:
+                coordinate_free_y_index, coordinate_free_x_index = (
+                    get_coordinate_free_indices()
+                )
+            current_evi = self.vprm_pre.sat_imgs.sat_img["evi"].isel(
+                {self.vprm_pre.time_key: current_counter}
+            )
+            self._reference_current_evi_cache = current_evi.isel(
+                y=coordinate_free_y_index, x=coordinate_free_x_index
+            ).assign_coords(y=lookup.coords["y"], x=lookup.coords["x"])
+            self._reference_evi_counter_cache = current_counter
+
+        return self._reference_current_evi_cache, self._reference_minimum_evi_cache
 
     def _get_vprm_variables(
         self,
