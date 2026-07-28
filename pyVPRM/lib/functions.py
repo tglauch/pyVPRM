@@ -348,16 +348,15 @@ def do_kalman_smoothing(array_to_smooth, timestamps,
         if array_to_smooth.size == 0:
             return np.full_like(array_to_smooth, np.nan, dtype=float)
  
-        t_unique, inv = np.unique(timestamps, return_inverse=True)  ### CHANGE (performance)
-        if len(t_unique) == 0:
-            return np.full_like(array_to_smooth, np.nan, dtype=float)
- 
-        t_daily = np.arange(t_unique.min(), t_unique.max() + 1)
- 
         # =======================
-        # 1D CASE
+        # 1D CASE (single pixel/site - timestamps is always 1D here already)
         # =======================
         if array_to_smooth.ndim == 1:
+            t_unique, inv = np.unique(timestamps, return_inverse=True)  ### CHANGE (performance)
+            if len(t_unique) == 0:
+                return np.full_like(array_to_smooth, np.nan, dtype=float)
+ 
+            t_daily = np.arange(t_unique.min(), t_unique.max() + 1)
  
             y_mean = np.array([
                 np.nanmean(array_to_smooth[inv == k])
@@ -371,7 +370,6 @@ def do_kalman_smoothing(array_to_smooth, timestamps,
             idx = (t_unique - t_daily[0]).astype(int)
             y_daily[idx] = y_mean
  
-            ### CHANGE: safe first valid lookup
             valid = np.where(~np.isnan(y_daily))[0]
             if len(valid) == 0:
                 return np.full(len(t_daily), np.nan)
@@ -396,10 +394,20 @@ def do_kalman_smoothing(array_to_smooth, timestamps,
         # 2D CASE
         # =======================
         else:
+            timestamps_is_2d = (np.ndim(timestamps) == 2)
+            t_unique_global = np.unique(timestamps)
+            if len(t_unique_global) == 0:
+                return np.full((0, array_to_smooth.shape[1]), np.nan).T
+            t_daily = np.arange(t_unique_global.min(), t_unique_global.max() + 1)
+ 
             ret_array = np.full((len(t_daily), array_to_smooth.shape[1]), np.nan)  ### CHANGE
  
             for j in range(array_to_smooth.shape[1]):
-                
+                col_timestamps = timestamps[:, j] if timestamps_is_2d else timestamps
+                t_unique, inv = np.unique(col_timestamps, return_inverse=True)
+                if len(t_unique) == 0:
+                    continue
+ 
                 y_mean = np.array([
                     np.nanmean(array_to_smooth[:, j][inv == k])
                     for k in range(len(t_unique))
@@ -410,7 +418,8 @@ def do_kalman_smoothing(array_to_smooth, timestamps,
  
                 y_daily = np.full(len(t_daily), np.nan, dtype=float)
                 idx = (t_unique - t_daily[0]).astype(int)
-                y_daily[idx] = y_mean
+                in_range = (idx >= 0) & (idx < len(y_daily))
+                y_daily[idx[in_range]] = y_mean[in_range]
  
                 valid = np.where(~np.isnan(y_daily))[0]
                 if len(valid) == 0:
@@ -433,6 +442,8 @@ def do_kalman_smoothing(array_to_smooth, timestamps,
                 ret_array[:, j] = state_mean[:, 0]
  
             return ret_array.T
+ 
+
 
 
 
@@ -527,9 +538,6 @@ def do_lowess_smoothing(array_to_smooth, xvals=None, timestamps=None, frac=0.25,
                 ret_array[:, j] = lws_res
             return ret_array.T
  
-
-
-
 def lat_lon_to_modis(lat, lon):
     CELLS = 2400
     VERTICAL_TILES = 18
