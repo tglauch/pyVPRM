@@ -617,125 +617,64 @@ class vprm_preprocessor:
                 )
             # land_cover_map.sat_img[var_name].values[land_cover_map.sat_img[var_name].values==key] = self.map_to_vprm_class[key]
 
-            if mode == "fractional":
-                import xesmf as xe
+            import xesmf as xe
 
-                veg_inds = np.unique(
-                    [self.map_to_vprm_class[i] for i in self.map_to_vprm_class.keys()]
+            veg_inds = np.unique(
+                [self.map_to_vprm_class[i] for i in self.map_to_vprm_class.keys()]
+            )
+            if not os.path.exists(regridder_save_path):
+                src_grid = to_esmf_grid(land_cover_map.sat_img)
+                ds_out = to_esmf_grid(self.sat_imgs.sat_img)
+                src_temp_path = os.path.join(
+                    os.path.dirname(regridder_save_path),
+                    "{}.nc".format(str(uuid.uuid4())),
                 )
-                if not os.path.exists(regridder_save_path):
-                    src_grid = to_esmf_grid(land_cover_map.sat_img)
-                    ds_out = to_esmf_grid(self.sat_imgs.sat_img)
-                    src_temp_path = os.path.join(
-                        os.path.dirname(regridder_save_path),
-                        "{}.nc".format(str(uuid.uuid4())),
-                    )
-                    dest_temp_path = os.path.join(
-                        os.path.dirname(regridder_save_path),
-                        "{}.nc".format(str(uuid.uuid4())),
-                    )
-                    src_grid.to_netcdf(src_temp_path)
-                    ds_out.to_netcdf(dest_temp_path)
-                    logger.debug(f"wrote source regridder: {src_temp_path}")
-                    logger.debug(f"wrote dest regridder: {dest_temp_path}")
-                    exec_str = (
-                        "ESMF_RegridWeightGen --source {} --destination {} "
-                        "--weight {} -m conserve -r --netcdf4 --src_regional"
-                        " --dest_regional --ignore_unmapped"
-                    ).format(src_temp_path, dest_temp_path, regridder_save_path)
-                    if mpi is True:
-                        exec_str = "mpirun -np {} ".format(n_cpus) + exec_str
-                    if not logs:
-                        exec_str += " --no_log "
-                    logger.info("Run: {}".format(exec_str))
-                    os.system(exec_str)
-                    os.remove(src_temp_path)
-                    os.remove(dest_temp_path)
-                grid1_xesmf = make_xesmf_grid(land_cover_map.sat_img)
-                grid2_xesmf = make_xesmf_grid(self.sat_imgs.sat_img)
-                for i in veg_inds:
-                    land_cover_map.sat_img["veg_{}".format(i)] = (
-                        ["y", "x"],
-                        xr.where(
-                            land_cover_map.sat_img[var_name].values == i, 1.0, 0.0
-                        ),
-                    )
-                regridder = xe.Regridder(
-                    grid1_xesmf,
-                    grid2_xesmf,
-                    "conservative",
-                    weights=regridder_save_path,
-                    reuse_weights=True,
+                dest_temp_path = os.path.join(
+                    os.path.dirname(regridder_save_path),
+                    "{}.nc".format(str(uuid.uuid4())),
                 )
-                handler = regridder(land_cover_map.sat_img)
-                handler = handler.assign_coords(
-                    {
-                        "x": self.sat_imgs.sat_img.coords["x"].values,
-                        "y": self.sat_imgs.sat_img.coords["y"].values,
-                    }
+                src_grid.to_netcdf(src_temp_path)
+                ds_out.to_netcdf(dest_temp_path)
+                logger.debug(f"wrote source regridder: {src_temp_path}")
+                logger.debug(f"wrote dest regridder: {dest_temp_path}")
+                exec_str = (
+                    "ESMF_RegridWeightGen --source {} --destination {} "
+                    "--weight {} -m conserve -r --netcdf4 --src_regional"
+                    " --dest_regional --ignore_unmapped"
+                ).format(src_temp_path, dest_temp_path, regridder_save_path)
+                if mpi is True:
+                    exec_str = "mpirun -np {} ".format(n_cpus) + exec_str
+                if not logs:
+                    exec_str += " --no_log "
+                logger.info("Run: {}".format(exec_str))
+                os.system(exec_str)
+                os.remove(src_temp_path)
+                os.remove(dest_temp_path)
+            grid1_xesmf = make_xesmf_grid(land_cover_map.sat_img)
+            grid2_xesmf = make_xesmf_grid(self.sat_imgs.sat_img)
+            for i in veg_inds:
+                land_cover_map.sat_img["veg_{}".format(i)] = (
+                    ["y", "x"],
+                    xr.where(
+                        land_cover_map.sat_img[var_name].values == i, 1.0, 0.0
+                    ),
                 )
-                self.land_cover_type = satellite_data_manager(sat_img=handler)
+            regridder = xe.Regridder(
+                grid1_xesmf,
+                grid2_xesmf,
+                "conservative",
+                weights=regridder_save_path,
+                reuse_weights=True,
+            )
+            handler = regridder(land_cover_map.sat_img)
+            handler = handler.assign_coords(
+                {
+                    "x": self.sat_imgs.sat_img.coords["x"].values,
+                    "y": self.sat_imgs.sat_img.coords["y"].values,
+                }
+            )
+            self.land_cover_type = satellite_data_manager(sat_img=handler)
 
-            else:
-                if (
-                    land_cover_map.sat_img.rio.crs.to_proj4()
-                    != self.sat_imgs.sat_img.rio.crs.to_proj4()
-                ):
-                    logger.info(
-                        "Projection of land cover map and satellite images need to match. Reproject first."
-                    )
-                    return False
-                f_array = np.zeros(
-                    np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16
-                )
-                count_array = np.zeros(
-                    np.shape(land_cover_map.sat_img[var_name].values), dtype=np.int16
-                )
-                if filter_size is None:
-                    filter_size = int(
-                        np.ceil(
-                            self.sat_imgs.sat_img.rio.resolution()[0]
-                            / land_cover_map.get_resolution()
-                        )
-                    )
-                    logger.info("Filter size {}:".format(filter_size))
-                if filter_size <= 1:
-                    filter_size = 1
-                for i in veg_inds:
-                    mask = np.array(
-                        land_cover_map.sat_img[var_name].values == i, dtype=np.float64
-                    )
-                    ta = scipy.ndimage.uniform_filter(
-                        mask, size=(filter_size, filter_size)
-                    ) * (filter_size**2)
-                    f_array[ta > count_array] = i
-                    count_array[ta > count_array] = ta[ta > count_array]
-                f_array[f_array == 0] = (
-                    8  # 8 is Category for nothing | alternatively np.nan?
-                )
-                land_cover_map.sat_img[var_name].values = f_array
-                del ta
-                del count_array
-                del f_array
-                del mask
-                t = (
-                    land_cover_map.sat_img.sel(
-                        x=self.sat_imgs.sat_img.x.values,
-                        y=self.sat_imgs.sat_img.y.values,
-                        method="nearest",
-                    )
-                    .to_array()
-                    .values[0]
-                )
-                self.land_cover_type = copy.deepcopy(self.prototype_satellite_manager)
-                self.land_cover_type.sat_img = self.land_cover_type.sat_img.assign(
-                    {var_name: (["y", "x"], t)}
-                )
-                for i in veg_inds:
-                    self.land_cover_type.sat_img["veg_{}".format(i)] = (
-                        ["y", "x"],
-                        xr.where(mm.sat_img[var_name].values == i, 1.0, 0.0),
-                    )
             self.land_cover_type.sat_img = self.land_cover_type.sat_img.drop_vars(
                 [var_name]
             )
