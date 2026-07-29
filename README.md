@@ -47,14 +47,6 @@ Open an issue, or reach out directly: **theo.glauch@dlr.de**
 ---
 ⭐ If pyVPRM is useful for your work, consider starring the repo — it genuinely helps visibility and continued support for the project.
 
-## Latest Update | 26-01-2026
-
-With the new version - pyVPRM 5.3 - it is possible to replace the lowess filtering with a more stable Kalman filter. An example of the difference for EVI is shown below for the cropland site DE-RuS using Sentinel-2 data for 2022. The new function can be used by calling ```vprm_inst.kalman(...)``` instead of ```vprm_inst.lowess(...)``` for instances of the VPRM preprocessor class. 
-
-<figure>
-<img src="https://github.com/user-attachments/assets/8acdfa3f-26e8-4c40-9cd6-8c91002c22a8", width="100%">
-</figure> 
-
 # About
 
 **pyVPRM** is a Python package for estimating the exchange of CO₂ between the atmosphere and the terrestrial biosphere using the **Vegetation Photosynthesis and Respiration Model (VPRM)**.
