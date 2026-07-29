@@ -9,31 +9,43 @@
 <figure>
 <img width="100%" alt="github_logo 001" src="https://github.com/user-attachments/assets/1628353c-802d-4644-8dbc-0a327a72ab24" />
 </figure> 
-  
-pyVRPM — and it's extension pyVPRNN — are data-driven model to estimate the carbon flux between the atmosphere and the terrestrial biosphere using multi-spectral satellite observations. A description of the VPRM model is published in Geoscientific Model Development (GMD) https://gmd.copernicus.org/articles/18/4713/2025/. A description of pyVPRNN is following soon. If you use this package for you scientific work please cite as follows
 
-```
-Glauch, T., Marshall, J., Gerbig, C., Botía, S., Gałkowski, M., Vardag, S. N., & Butz, A. (2025). pyVPRM: A next-generation vegetation photosynthesis and respiration model for the post-MODIS era. Geoscientific Model Development, 18(14), 4713–4742. https://doi.org/10.5194/gmd-18-4713-2025
-```
+**pyVPRM** and its extension **pyVPRNN** are data-driven models for analyzing and estimating carbon flux exchange between the atmosphere and the terrestrial biosphere — from single flux-tower footprints up to global scale — using multi-spectral satellite observations.
 
-or using BibTeX:
-```
+📄 **Paper:** Glauch et al. (2025), *pyVPRM: a next-generation vegetation photosynthesis and respiration model for the post-MODIS era*, [Geoscientific Model Development, 18(14), 4713–4742](https://gmd.copernicus.org/articles/18/4713/2025/). A pyVPRNN paper is in preparation.
+
+🚀 **New here?** Start with the [example repository](https://github.com/tglauch/pyVPRM_examples.git) — it's the fastest way to see the pipeline end to end.
+
+### Citation
+
+If you use this package in your research, please cite:
+
+> Glauch, T., Marshall, J., Gerbig, C., Botía, S., Gałkowski, M., Vardag, S. N., & Butz, A. (2025). pyVPRM: A next-generation vegetation photosynthesis and respiration model for the post-MODIS era. *Geoscientific Model Development*, 18(14), 4713–4742. https://doi.org/10.5194/gmd-18-4713-2025
+
+<details>
+<summary>BibTeX</summary>
+
+```bibtex
 @Article{gmd-18-4713-2025,
-AUTHOR = {Glauch, T. and Marshall, J. and Gerbig, C. and Bot\'{\i}a, S. and Ga{\l}kowski, M. and Vardag, S. N. and Butz, A.},
-TITLE = {\textit{pyVPRM}: a next-generation vegetation photosynthesis and respiration model for the post-MODIS era},
-JOURNAL = {Geoscientific Model Development},
-VOLUME = {18},
-YEAR = {2025},
-NUMBER = {14},
-PAGES = {4713--4742},
-URL = {https://gmd.copernicus.org/articles/18/4713/2025/},
-DOI = {10.5194/gmd-18-4713-2025}
+  AUTHOR = {Glauch, T. and Marshall, J. and Gerbig, C. and Bot\'{\i}a, S. and Ga{\l}kowski, M. and Vardag, S. N. and Butz, A.},
+  TITLE = {\textit{pyVPRM}: a next-generation vegetation photosynthesis and respiration model for the post-MODIS era},
+  JOURNAL = {Geoscientific Model Development},
+  VOLUME = {18},
+  YEAR = {2025},
+  NUMBER = {14},
+  PAGES = {4713--4742},
+  URL = {https://gmd.copernicus.org/articles/18/4713/2025/},
+  DOI = {10.5194/gmd-18-4713-2025}
 }
 ```
+</details>
 
-In case of any questions please write an E-Mail to theo.glauch@dlr.de. If you enjoy the model leave a :star:.
+### Questions?
 
-To get startet with pyVPRM check out the example repository: https://github.com/tglauch/pyVPRM_examples.git
+Open an issue, or reach out directly: **theo.glauch@dlr.de**
+
+---
+⭐ If pyVPRM is useful for your work, consider starring the repo — it genuinely helps visibility and continued support for the project.
 
 ## Latest Update | 26-01-2026
 
