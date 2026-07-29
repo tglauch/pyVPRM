@@ -9,6 +9,7 @@
 <figure>
 <img width="100%" alt="github_logo 001" src="https://github.com/user-attachments/assets/1628353c-802d-4644-8dbc-0a327a72ab24" />
 </figure> 
+
 **pyVPRM** and its extension **pyVPRNN** are data-driven models for analyzing and estimating carbon flux exchange between the atmosphere and the terrestrial biosphere — from single flux-tower footprints up to global scale — using multi-spectral satellite observations.
 
 📄 **Paper:** Glauch et al. (2025), *pyVPRM: a next-generation vegetation photosynthesis and respiration model for the post-MODIS era*, [Geoscientific Model Development, 18(14), 4713–4742](https://gmd.copernicus.org/articles/18/4713/2025/). A pyVPRNN paper is in preparation.
