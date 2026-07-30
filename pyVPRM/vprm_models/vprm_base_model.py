@@ -337,62 +337,46 @@ class vprm_base_model:
             s.add_columns(ret_dict)
         return self.vprm_pre.flux_tower_instances
 
-    def _get_vprm_variables(
-        self,
-        land_cover_type,
-        datetime_utc=None,
-        lat=None,
-        lon=None,
-        add_era_variables=[],
-        regridder_weights=None,
-    ):
-        """
-        Get the variables for the Vegetation Photosynthesis and Respiration Model
-
-            Parameters:
-                datetime_utc (datetime): The time of interest
-                lat (float): A latitude (optional)
-                lon (float): A longitude (optional)
-                add_era_variables (list): Additional era variables for modifications of the VPRM
-                regridder_weights (str): Path to the pre-computed weights for the ERA5 regridder
-                tower_dict (dict): Alternatively to a model meteorology and land cover map also the data from the flux tower can be passed in a dictionary Minimaly required are the variables 't2m', 'ssrd', 'land_cover_type'
-            Returns:
-                    None
-        """
-
+    def _get_vprm_variables(self, land_cover_type, datetime_utc=None, lat=None, lon=None,
+                             add_era_variables=[], regridder_weights=None):
         era_keys = ["ssrd", "t2m"]
         era_keys.extend(add_era_variables)
-
-        self.counter = 0
-        hour = datetime_utc.hour
-        day = datetime_utc.day
-        month = datetime_utc.month
-        year = datetime_utc.year
-
+    
+        hour, day, month, year = datetime_utc.hour, datetime_utc.day, datetime_utc.month, datetime_utc.year
+    
         img_status = self.vprm_pre._set_sat_img_counter(datetime_utc)
         if img_status is False:
             logger.info("No sat image for {}. Return None.".format(datetime_utc))
             return None
-
+    
         if (lat != self.buffer["cur_lat"]) | (lon != self.buffer["cur_lon"]):
-            self.new = True  # Change in lat lon needs new query from satellite images
+            self.new = True
             self.buffer["cur_lat"] = lat
             self.buffer["cur_lon"] = lon
-
+    
         if len(era_keys) > 0:
-
             if self.vprm_pre.empty_xr_lat_lon_grid is None:
                 self.vprm_pre._set_empty_xr_lat_lon_grid()
-
-            self.load_weather_data(hour, day, month, year, era_keys=era_keys)
-
-            if (lat is None) & (lon is None):
-                self.era5_inst.regrid(
-                    dataset=self.vprm_pre.empty_xr_lat_lon_grid,
-                    weights=regridder_weights,
-                    n_cpus=self.vprm_pre.n_cpus,
-                )
-
+    
+            # Meteorology (and its regridding) doesn't depend on land_cover_type
+            # at all - make_vprm_predictions calls this once PER CLASS for the
+            # same datetime, so without this cache the load+regrid pipeline
+            # (a real xESMF regrid, not free) gets redone redundantly per class
+            # instead of once per hour.
+            met_key = (year, month, day, hour, lat, lon)
+            if getattr(self, "_met_cache_key", None) != met_key:
+                self.load_weather_data(hour, day, month, year, era_keys=era_keys)
+                if (lat is None) & (lon is None):
+                    self.era5_inst.regrid(
+                        dataset=self.vprm_pre.empty_xr_lat_lon_grid,
+                        weights=regridder_weights,
+                        n_cpus=self.vprm_pre.n_cpus,
+                    )
+                self._met_cache_key = met_key
+            else:
+                self.hour, self.day, self.month, self.year = hour, day, month, year
+                self.date = "{}-{}-{} {}:00:00".format(year, month, day, hour)
+    
         ret_dict = dict()
         ret_dict["evi"] = self.get_evi(lon, lat)
         ret_dict["Ps"] = self.get_p_scale(lon, lat, land_cover_type=land_cover_type)
@@ -404,9 +388,7 @@ class vprm_base_model:
         if add_era_variables != []:
             for i in add_era_variables:
                 if lon is not None:
-                    ret_dict[i] = self.era5_inst.get_data(
-                        lonlat=(lon, lat), key=i
-                    ).values.flatten()
+                    ret_dict[i] = self.era5_inst.get_data(lonlat=(lon, lat), key=i).values.flatten()
                 else:
                     ret_dict[i] = self.era5_inst.get_data(key=i).values.flatten()
         return ret_dict

@@ -141,27 +141,35 @@ class met_data_handler(met_data_handler_base):
             a valid_time slice)
           - self.lat_slice / self.lon_slice, including antimeridian
             wraparound handling
+    
+        Longitude is selected via boolean masking rather than .sel(slice(...))
+        - slicing needs an EXACT match on the boundary values, and the lon
+          coordinate has float32 rounding error (from load_ds()'s
+          .astype("float32")) that can make a "nice" boundary like 350.0 not
+          exact-match anything in the index, raising a bare KeyError. Boolean
+          masking only needs >=/<= comparisons, so it's immune to that.
         """
         source = self.ds if source is None else source
         sel_dict = dict(sel_dict)
-
+    
         if self.lat_slice is not None:
             lat_min, lat_max = self.lat_slice
             sel_dict["lat"] = slice(lat_max, lat_min)
-
+    
+        result = source.sel(sel_dict) if not self.lon_slice else source.sel(
+            {k: v for k, v in sel_dict.items() if k != "lon"}
+        )
+    
         if self.lon_slice is not None:
             lon_min, lon_max = self.lon_slice
+            lon = result["lon"]
             if lon_min < lon_max:
-                sel_dict["lon"] = slice(lon_min, lon_max)
-                return source.sel(sel_dict)
+                mask = (lon >= lon_min) & (lon <= lon_max)
             else:
-                # Requested range wraps around the antimeridian (e.g. 350 -> 10).
-                base = source.sel(sel_dict)
-                part1 = base.sel(lon=slice(lon_min, 360))
-                part2 = base.sel(lon=slice(0, lon_max))
-                return xr.concat([part1, part2], dim="lon")
-
-        return source.sel(sel_dict)
+                mask = (lon >= lon_min) | (lon <= lon_max)
+            result = result.where(mask, drop=True)
+    
+        return result
 
     def _load_selection(self, sel_dict):
         """
@@ -185,15 +193,27 @@ class met_data_handler(met_data_handler_base):
         if self.ds is None:
             logger.error("No dataset loaded from Earth Data Hub.")
             return
+    
+        day_key = (self.year, self.month, self.day)
+    
+        if getattr(self, "_cached_day_key", None) != day_key:
+            day_start = pd.Timestamp(year=self.year, month=self.month, day=self.day)
+            window_t0 = day_start - pd.Timedelta(hours=1)
+            window_t1 = day_start + pd.Timedelta(hours=25)
+            day_sel_dict = {"valid_time": slice(window_t0, window_t1)}
+            self._load_selection(day_sel_dict)  
+            self._day_cache = self.ds_out
+            self._cached_day_key = day_key
+        else:
+            self.ds_out = self._day_cache
+            self.instantaneous = True  
+            self.regridded = False
+            self.rearranged = False
+    
+        hour_str = "{}-{}-{} {}:00:00".format(self.year, self.month, self.day, self.hour)
+        self.ds_out = self.ds_out.sel(valid_time=hour_str)
+        return
 
-        # Caution: the date argument corresponds to the END of the ERA5
-        # integration time.
-        sel_dict = {
-            "valid_time": "{}-{}-{} {}:00:00".format(
-                self.year, self.month, self.day, self.hour
-            )
-        }
-        self._load_selection(sel_dict)
 
     def _current_time_sel_dict(self):
         """
