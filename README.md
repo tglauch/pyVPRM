@@ -115,7 +115,7 @@ Then install `pyVPRM` itself via pip:
 pip install pyVPRM
 ```
 
-> If you're actively developing `pyVPRM` (rather than just using it), install it as an editable clone instead — see the note in the [main README](../README.md#development) — so local edits are picked up immediately without reinstalling.
+> If you're actively developing `pyVPRM` (rather than just using it), install it as an editable clone instead so local edits are picked up immediately without reinstalling.
 
 ## Start Your Project
 
