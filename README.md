@@ -78,26 +78,24 @@ pyVPRM provides a flexible, modular implementation that lets you mix and match d
 <img src="https://github.com/user-attachments/assets/26913805-f188-477a-9a85-08911a165b1e", height=300pt>
 </figure> 
 
-# How to use
+# How to Use
 
 ## Installation
 
-We generally recommend setting up a **dedicated virtual environment** for using `pyVPRM` and installing all required dependencies there.
+We recommend setting up a **dedicated virtual environment** for `pyVPRM` and installing all dependencies there.
 
-If you are using **conda**, you may want to follow best practices for mixing `conda` and `pip`. The following blog post provides a good overview:  
-https://www.anaconda.com/blog/using-pip-in-a-conda-environment
+If you're using **conda**, it's worth following best practices for mixing `conda` and `pip` — this post from Anaconda gives a good overview: [Using pip in a conda environment](https://www.anaconda.com/blog/using-pip-in-a-conda-environment).
 
 ### Prerequisites
 
-`pyVPRM` requires the **Earth System Modeling Framework (ESMF)** and its Python interface **ESMFpy** for all functionalities that involve regridding.
+`pyVPRM` requires the **Earth System Modeling Framework (ESMF)** and its Python interface, **ESMPy**, for any functionality involving regridding.
 
-On many HPC systems specialized for Earth system modeling and climate research, ESMF is already pre-installed. If this is the case, make sure that both `esmf` and `esmpy` are available in your environment.
+Many HPC systems built for Earth system modeling and climate research already have ESMF pre-installed — if so, just confirm that both `esmf` and `esmpy` are available in your environment. If not, you'll need to install it yourself:
 
-If you need to install ESMF yourself, you can find installation instructions here:
-- ESMF GitHub repository: https://github.com/esmf-org
-- Conda-forge ESMF package: https://github.com/conda-forge/esmf-feedstock
+- [ESMF GitHub repository](https://github.com/esmf-org)
+- [ESMF on conda-forge](https://github.com/conda-forge/esmf-feedstock)
 
-To ensure full ESMF functionality, it is also recommended to install **netCDF4**.
+Installing **netCDF4** alongside ESMF is also recommended, for full functionality.
 
 ### Example conda setup
 
@@ -111,86 +109,74 @@ conda config --set channel_priority strict
 conda install dask netCDF4 esmf esmpy
 ```
 
-Then install ```pyVPRM``` via pip
+Then install `pyVPRM` itself via pip:
 
-```
+```bash
 pip install pyVPRM
 ```
 
-## Start your Project
+> If you're actively developing `pyVPRM` (rather than just using it), install it as an editable clone instead — see the note in the [main README](../README.md#development) — so local edits are picked up immediately without reinstalling.
 
-To start your own `pyVPRM` project, you typically need to follow these steps:
+## Start Your Project
 
-1. Obtain the required **satellite data** for your region of interest
-2. Obtain the corresponding **land-cover maps** for your region of interest
+To start your own `pyVPRM` project, you'll typically:
+
+1. Obtain the **satellite data** for your region of interest
+2. Obtain the corresponding **land-cover map(s)** for your region of interest
 3. Create a **project configuration file**
-4. Generate project-specific scripts using the functionality provided by the `VPRM` class in `VPRM.py`
+4. Generate project-specific scripts using the `VPRM` class in `VPRM.py`
 5. Run the calculations
 
-### Remarks
+### Data Sources
 
-- If no interface exists yet for your satellite product or land-cover dataset, implement a new subclass in  
-  `pyVPRM/sat_managers/`
-- For new land-cover products, you must additionally provide a **mapping from land-cover classes to VPRM classes**.  
-  This mapping is defined in a configuration file stored in `pyVPRM/vprm_configs/`
-- Open-access land-cover datasets:
-  - **Copernicus Global Land Service**: https://land.copernicus.eu/en/products/global-dynamic-land-cover
-  - **ESA WorldCover**:  https://viewer.esa-worldcover.org
-- Open-access satellite data:
-  - **MODIS, VIIRS**:  https://e4ftl01.cr.usgs.gov
-  - **Sentinel-2**:  https://scihub.copernicus.eu
+- **Land cover**
+  - [Copernicus Global Land Service](https://land.copernicus.eu/en/products/global-dynamic-land-cover)
+  - [ESA WorldCover](https://viewer.esa-worldcover.org)
+- **Satellite imagery**
+  - **MODIS / VIIRS**: [LP DAAC Data Pool](https://e4ftl01.cr.usgs.gov)
+  - **Sentinel-2**: [Copernicus Data Space Ecosystem](https://dataspace.copernicus.eu) (the former Copernicus Open Access Hub / SciHub was permanently retired in November 2023 — use this instead)
+
+### Extending pyVPRM
+
+If no interface exists yet for your satellite product or land-cover dataset:
+
+- Implement a new subclass in `pyVPRM/sat_managers/`
+- For a new land-cover product, also provide a **mapping from its land-cover classes to VPRM classes**, defined in a config file under `pyVPRM/vprm_configs/`
 
 ## Package Structure
 
-The pyVPRM implementation follows a **modular design** that allows easy replacement and extension of  
-satellite imagery, land cover maps, meteorological data, flux tower datasets, and VPRM model implementations.
-
-The directory structure is outlined below.
+`pyVPRM` follows a modular design: satellite imagery, land cover maps, meteorological data, flux tower datasets, and VPRM model implementations can each be swapped or extended independently. The directory layout reflects this:
 
 ---
 
 ### `pyVPRM/sat_managers`
 
-This directory contains the core classes for handling satellite imagery and land cover maps.
+Core classes for handling satellite imagery and land cover maps.
 
-The `satellite_data_manager` class provides the **base data structure** for all satellite- and land-cover-related calculations in pyVPRM. It implements common functionality such as:
+`satellite_data_manager` is the base class for all satellite- and land-cover-related data in `pyVPRM`, providing shared functionality — reprojection, transformation, merging, cropping — that every product-specific subclass builds on. Each supported satellite or land-cover product has its own subclass file in this directory.
 
-- reprojection  
-- transformation  
-- merging  
-- cropping  
+---
 
-All satellite- or land-cover-specific classes (including their respective data loading routines) inherit from this base class and are implemented as separate class files within this directory.
+### `pyVPRM/vprm_configs`
+
+Configuration files defining, for each supported land-cover product, the mapping from that product's own land-cover classes to VPRM's internal vegetation classes (plus the associated `tmin`/`topt`/`tmax`/`tlow` temperature parameters per class). Required for any land-cover product you add — see [Extending pyVPRM](#extending-pyvprm) above.
 
 ---
 
 ### `pyVPRM/meteorologies`
 
-This directory contains classes that provide the **meteorological interface** for the model.
+Classes providing the meteorological interface to the model.
 
-Meteorological data handling typically depends on the data availability on the user’s system.  
-A generic and widely applicable option is the **Destination Earth platform**  
-(https://platform.destine.eu/).
-
-All meteorology classes inherit from the base class defined in `met_base_class.py`.  
-An example implementation for adding a new meteorology source is provided in `era5_class_draft.py`.
+Meteorological data handling depends heavily on what's available on your own system — a generic, widely-usable option is the [Destination Earth platform](https://platform.destine.eu/). All meteorology classes inherit from `met_base_class.py`; `era5_class_draft.py` is a worked example for adding a new meteorology source.
 
 ---
 
 ### `pyVPRM/vprm_models`
 
-This directory contains the different implementations of the VPRM model.
-
-Each model requires:
-- an instance of the **VPRM preprocessor** class, and  
-- a corresponding **meteorology** object  
-
-as input.
+The different VPRM model implementations. Each one takes a **VPRM preprocessor** instance and a **meteorology** object as input.
 
 ---
 
 ### `pyVPRM/flux_tower_libs`
 
-This directory provides interfaces to different **flux tower datasets** (e.g. FLUXNET, ICOS, etc.).
-
-It also includes functionality to compute **tower footprints** from eddy covariance measurements.
+Interfaces to flux tower datasets (FLUXNET, ICOS, etc.), including functionality for computing tower footprints from eddy-covariance measurements.
