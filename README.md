@@ -140,27 +140,6 @@ To start your own `pyVPRM` project, you typically need to follow these steps:
   - **MODIS, VIIRS**:  https://e4ftl01.cr.usgs.gov
   - **Sentinel-2**:  https://scihub.copernicus.eu
 
-
-## Examples
-
-To help you get started with `pyVPRM`, we provide a companion repository containing example scripts, each with their own `README` files and in-line comments:
-
-https://github.com/tglauch/pyVPRM_examples.git
-
-The repository includes examples for:
-
-- **Generating WRF input files**: `./wrf_preprocessor`
-- **Generating VPRM fluxes (GPP / NEE)**: `./vprm_predictions`
-- **Fitting VPRM parameters**: `./fit_vprm_parameters`
-- **Downloading MODIS/VIIRS data using `pyVPRM`**: `./sat_data_download`
-  
-Clone the full example repository with:
-```
-git clone https://github.com/tglauch/pyVPRM_examples.git
-```
-
-The repository comes with pre-prepared input data, so you can run the examples immediately without downloading or preprocessing any datasets.
-
 ## Package Structure
 
 The pyVPRM implementation follows a **modular design** that allows easy replacement and extension of  
