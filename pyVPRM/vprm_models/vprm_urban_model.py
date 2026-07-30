@@ -1,6 +1,7 @@
 """UrbanVPRM flux model using ISA, reference EVI, and UHI-adjusted temperature."""
 
 import numpy as np
+import scipy
 import xarray as xr
 
 from pyVPRM.vprm_models.vprm_base_model import vprm_base_model
@@ -25,6 +26,13 @@ class vprm_urban_model(vprm_base_model):
         Callable accepting ``(temperature, isa_fraction, datetime_utc)`` and
         returning UHI-adjusted air temperature in degrees Celsius. It is
         required when preparing drivers for an urban class.
+    reference_search_mode : {"dynamic_positive", "static"}, default="dynamic_positive"
+        Method for selecting ISA-zero vegetated EVI references. Dynamic mode
+        selects the nearest candidate with positive EVI for each satellite
+        composite and caches that result until the composite changes.
+    minimum_reference_evi : float, default=1e-6
+        Strict lower EVI bound for dynamic reference-cell selection and for
+        validating a reference EVI in the respiration calculation.
 
     Notes
     -----
@@ -40,6 +48,8 @@ class vprm_urban_model(vprm_base_model):
         fit_params_dict=None,
         urban_vprm_classes=(10, 11),
         uhi_temperature_adjustment=None,
+        reference_search_mode="dynamic_positive",
+        minimum_reference_evi=1e-6,
     ):
         """Initialize UrbanVPRM model state.
 
@@ -55,10 +65,20 @@ class vprm_urban_model(vprm_base_model):
             VPRM classes using UrbanVPRM adjustments.
         uhi_temperature_adjustment : callable, optional
             UHI temperature adjustment callable.
+        reference_search_mode : {"dynamic_positive", "static"}, default="dynamic_positive"
+            EVI reference selection method.
+        minimum_reference_evi : float, default=1e-6
+            Strict lower bound for usable reference EVI.
         """
         super().__init__(vprm_pre=vprm_pre, met=met, fit_params_dict=fit_params_dict)
         self.urban_vprm_classes = frozenset(urban_vprm_classes)
         self.uhi_temperature_adjustment = uhi_temperature_adjustment
+        if reference_search_mode not in {"dynamic_positive", "static"}:
+            raise ValueError(
+                "reference_search_mode must be 'dynamic_positive' or 'static'."
+            )
+        self.reference_search_mode = reference_search_mode
+        self.minimum_reference_evi = minimum_reference_evi
         self._isa_fraction_cache = None
         self._reference_minimum_evi_cache = None
         self._reference_current_evi_cache = None
@@ -116,7 +136,12 @@ class vprm_urban_model(vprm_base_model):
         return isa_fraction
 
     def _get_reference_evi(self):
-        """Gather current and annual-minimum EVI at local reference cells.
+        """Gather EVI at static or current-composite reference cells.
+
+        In ``dynamic_positive`` mode, a distance transform finds the nearest
+        ISA-zero vegetated candidate with finite positive EVI for the current
+        satellite composite. The resulting indices and both EVI fields are
+        cached until the satellite-composite counter changes.
 
         Returns
         -------
@@ -134,49 +159,77 @@ class vprm_urban_model(vprm_base_model):
             raise ValueError("UrbanVPRM requires a reference-EVI lookup.")
         lookup = self.vprm_pre.urban_reference_evi.sat_img
         current_counter = self.vprm_pre.counter
-        coordinate_free_y_index = None
-        coordinate_free_x_index = None
+        if (
+            getattr(self, "_reference_current_evi_cache", None) is not None
+            and getattr(self, "_reference_evi_counter_cache", None)
+            == current_counter
+        ):
+            return (
+                self._reference_current_evi_cache,
+                self._reference_minimum_evi_cache,
+            )
 
-        def get_coordinate_free_indices():
-            """Return target-grid reference indices without coordinate conflicts.
+        def coordinate_free_indices(y_index, x_index):
+            """Return index arrays without conflicting coordinate labels.
+
+            Parameters
+            ----------
+            y_index, x_index : xarray.DataArray
+                Reference-cell row and column index arrays.
 
             Returns
             -------
             tuple[xarray.DataArray, xarray.DataArray]
-                Coordinate-free y and x index arrays for vectorized indexing.
+                Coordinate-free row and column arrays for vectorized indexing.
             """
-
-            y_index = lookup["reference_y_index"]
-            x_index = lookup["reference_x_index"]
             return (
                 xr.DataArray(y_index.data, dims=y_index.dims),
                 xr.DataArray(x_index.data, dims=x_index.dims),
             )
 
-        if getattr(self, "_reference_minimum_evi_cache", None) is None:
-            coordinate_free_y_index, coordinate_free_x_index = (
-                get_coordinate_free_indices()
+        current_evi = self.vprm_pre.sat_imgs.sat_img["evi"].isel(
+            {self.vprm_pre.time_key: current_counter}
+        )
+        reference_search_mode = getattr(self, "reference_search_mode", "static")
+        minimum_reference_evi = getattr(self, "minimum_reference_evi", 1e-6)
+        if reference_search_mode == "dynamic_positive":
+            candidate_values = np.asarray(lookup["reference_eligible"].values, dtype=bool)
+            valid_reference = (
+                candidate_values
+                & np.isfinite(current_evi.values)
+                & (current_evi.values > minimum_reference_evi)
+            )
+            if valid_reference.any():
+                y_resolution = np.abs(np.diff(current_evi.y.values)).mean()
+                x_resolution = np.abs(np.diff(current_evi.x.values)).mean()
+                _, nearest_indices = scipy.ndimage.distance_transform_edt(
+                    ~valid_reference,
+                    sampling=(y_resolution, x_resolution),
+                    return_indices=True,
+                )
+                y_index = xr.DataArray(nearest_indices[0], dims=("y", "x"))
+                x_index = xr.DataArray(nearest_indices[1], dims=("y", "x"))
+            else:
+                y_index = x_index = None
+        else:
+            y_index = lookup["reference_y_index"]
+            x_index = lookup["reference_x_index"]
+
+        if y_index is None:
+            self._reference_current_evi_cache = xr.full_like(current_evi, np.nan)
+            self._reference_minimum_evi_cache = xr.full_like(current_evi, np.nan)
+        else:
+            coordinate_free_y_index, coordinate_free_x_index = coordinate_free_indices(
+                y_index, x_index
             )
             minimum_evi = self.vprm_pre.min_max_evi.sat_img["min_evi"]
-            self._reference_minimum_evi_cache = minimum_evi.isel(
-                y=coordinate_free_y_index, x=coordinate_free_x_index
-            ).assign_coords(y=lookup.coords["y"], x=lookup.coords["x"])
-
-        if (
-            getattr(self, "_reference_current_evi_cache", None) is None
-            or getattr(self, "_reference_evi_counter_cache", None) != current_counter
-        ):
-            if coordinate_free_y_index is None:
-                coordinate_free_y_index, coordinate_free_x_index = (
-                    get_coordinate_free_indices()
-                )
-            current_evi = self.vprm_pre.sat_imgs.sat_img["evi"].isel(
-                {self.vprm_pre.time_key: current_counter}
-            )
             self._reference_current_evi_cache = current_evi.isel(
                 y=coordinate_free_y_index, x=coordinate_free_x_index
             ).assign_coords(y=lookup.coords["y"], x=lookup.coords["x"])
-            self._reference_evi_counter_cache = current_counter
+            self._reference_minimum_evi_cache = minimum_evi.isel(
+                y=coordinate_free_y_index, x=coordinate_free_x_index
+            ).assign_coords(y=lookup.coords["y"], x=lookup.coords["x"])
+        self._reference_evi_counter_cache = current_counter
 
         return self._reference_current_evi_cache, self._reference_minimum_evi_cache
 
@@ -268,6 +321,12 @@ class vprm_urban_model(vprm_base_model):
         -------
         float, pandas.Series, or xarray.DataArray
             Ecosystem respiration for the requested class.
+
+        Notes
+        -----
+        A non-finite or non-positive reference EVI is not physically usable
+        for the UrbanVPRM autotrophic-respiration ratio. It therefore yields
+        missing respiration rather than an arbitrarily large value.
         """
         if land_cover_type not in self.urban_vprm_classes:
             return super()._calculate_respiration(
@@ -286,7 +345,10 @@ class vprm_urban_model(vprm_base_model):
             land_cover_fraction, land_cover_type, inputs
         )
         heterotrophic_respiration = (1.0 - inputs["ISA"]) * re_initial / 2.0
-        reference_evi = np.maximum(inputs["evi_ref"], 1e-6)
+        reference_evi = inputs["evi_ref"].where(
+            np.isfinite(inputs["evi_ref"])
+            & (inputs["evi_ref"] > getattr(self, "minimum_reference_evi", 1e-6))
+        )
         autotrophic_respiration = (
             (inputs["evi"] + inputs["min_evi_ref"] * inputs["ISA"])
             / reference_evi

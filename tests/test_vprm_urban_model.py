@@ -165,3 +165,62 @@ def test_reference_evi_lookup_uses_target_grid_coordinates():
         ),
     )
     xr.testing.assert_allclose(refreshed_minimum_reference_evi, minimum_reference_evi)
+
+
+def test_dynamic_reference_evi_search_uses_positive_current_evi():
+    """Select the nearest currently positive EVI reference per composite.
+
+    Returns
+    -------
+    None
+        The test verifies that the cached dynamic search changes reference
+        cells only when the satellite-composite counter changes.
+    """
+    evi = xr.DataArray(
+        [
+            [[0.0, 0.5], [0.0, 0.0]],
+            [[0.6, 0.0], [0.0, 0.0]],
+        ],
+        dims=("time", "y", "x"),
+        coords={"time": [0, 1], "y": [10.0, 20.0], "x": [30.0, 40.0]},
+    )
+    lookup = xr.Dataset(
+        {
+            "reference_y_index": xr.DataArray(
+                [[0, 0], [0, 0]],
+                dims=("y", "x"),
+                coords={"y": evi.y, "x": evi.x},
+            ),
+            "reference_x_index": xr.DataArray(
+                [[0, 0], [0, 0]],
+                dims=("y", "x"),
+                coords={"y": evi.y, "x": evi.x},
+            ),
+            "reference_eligible": xr.DataArray(
+                [[True, True], [True, True]],
+                dims=("y", "x"),
+                coords={"y": evi.y, "x": evi.x},
+            ),
+        }
+    )
+    model = object.__new__(vprm_urban_model)
+    model.reference_search_mode = "dynamic_positive"
+    model.minimum_reference_evi = 1e-6
+    model._reference_current_evi_cache = None
+    model._reference_minimum_evi_cache = None
+    model._reference_evi_counter_cache = None
+    model.vprm_pre = type("Preprocessor", (), {})()
+    model.vprm_pre.time_key = "time"
+    model.vprm_pre.counter = 0
+    model.vprm_pre.sat_imgs = satellite_data_manager(sat_img=evi.to_dataset(name="evi"))
+    model.vprm_pre.min_max_evi = satellite_data_manager(
+        sat_img=evi.min("time").to_dataset(name="min_evi")
+    )
+    model.vprm_pre.urban_reference_evi = satellite_data_manager(sat_img=lookup)
+
+    first_reference, _ = model._get_reference_evi()
+    xr.testing.assert_allclose(first_reference, xr.full_like(evi.isel(time=0), 0.5))
+
+    model.vprm_pre.counter = 1
+    second_reference, _ = model._get_reference_evi()
+    xr.testing.assert_allclose(second_reference, xr.full_like(evi.isel(time=1), 0.6))
