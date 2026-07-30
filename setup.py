@@ -8,11 +8,11 @@ def readme():
 
 setup(
     name="pyVPRM",
-    version="5.3",
+    version="6.0b",
     description="Vegetation Photosynthesis and Respiration Model",
     long_description="pyVPRM is a framework for data-driven modelling and interpreting atmosphere-biosphere CO2 fluxes — from eddy-covariance towers to the global scale.",
     classifiers=[
-        "Development Status :: 5 - Production/Stable",
+        "Development Status :: 6 - Production/Stable",
         "Environment :: Console",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: MIT License",
