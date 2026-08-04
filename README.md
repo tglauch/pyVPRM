@@ -10,7 +10,7 @@
 <img width="100%" alt="github_logo 001" src="https://github.com/user-attachments/assets/1628353c-802d-4644-8dbc-0a327a72ab24" />
 </figure> 
 
-**pyVPRM** and its extension **pyVPRNN** are data-driven models for analyzing and estimating carbon flux exchange between the atmosphere and the terrestrial biosphere — from single flux-tower footprints up to global scale — using multi-spectral satellite observations.
+**pyVPRM** and its extension **pyVPRNN** are python implementations of data-driven models for analyzing and estimating carbon flux exchange between the atmosphere and the terrestrial biosphere — from single flux-tower footprints up to global scale — using multi-spectral satellite observations.
 
 📄 **Paper:** Glauch et al. (2025), *pyVPRM: a next-generation vegetation photosynthesis and respiration model for the post-MODIS era*, [Geoscientific Model Development, 18(14), 4713–4742](https://gmd.copernicus.org/articles/18/4713/2025/). A pyVPRNN paper is in preparation.
 
@@ -46,11 +46,9 @@ If you use this package in your research, please cite:
 
 # About
 
-**pyVPRM** is a Python package for estimating CO₂ exchange between the atmosphere and the terrestrial biosphere using the **Vegetation Photosynthesis and Respiration Model (VPRM)**.
+Biospheric carbon fluxes have two components: **Gross Primary Productivity (GPP)**, the uptake of carbon dioxide through photosynthesis, and **ecosystem respiration (Reco)**, the release of carbon dioxide back to the atmosphere. Their balance gives the **Net Ecosystem Exchange (NEE)**, which is what is usually measured.
 
-VPRM represents two opposing fluxes — **Gross Primary Productivity (GPP)**, the uptake of CO₂ through photosynthesis, and **ecosystem respiration (Reco)**, the release of CO₂ back to the atmosphere. Their balance gives the **Net Ecosystem Exchange (NEE)**, the net flux actually measured at a flux tower or resolved on a model grid.
-
-pyVPRM provides a flexible, modular implementation that lets you mix and match data sources for vegetation, land cover, and meteorological forcing:
+pyVPRM implements the **Vegetation Photosynthesis and Respiration Model (VPRM)**, together with its AI-driven submodule **pyVPRNN**, in a flexible, modular framework for interpreting and estimating these fluxes within data-driven biosphere models. It lets you mix and match data sources for vegetation, land cover, and meteorological forcing:
 
 - **Satellite products** — Sentinel-2, MODIS, VIIRS, and others
 - **Land-cover datasets** — Copernicus Land Cover Service, ESA WorldCover (10 m), MapBiomas
