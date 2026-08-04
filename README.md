@@ -78,6 +78,13 @@ pyVPRM provides a flexible, modular implementation that lets you mix and match d
 <img src="https://github.com/user-attachments/assets/26913805-f188-477a-9a85-08911a165b1e", height=300pt>
 </figure> 
 
+### Examples of pyVPRNN for the deciduous forest site DK-Sor
+
+
+https://github.com/user-attachments/assets/2beee9fa-5d68-4fd3-aee1-61c3549b21a6
+
+
+
 # How to Use
 
 ## Installation
