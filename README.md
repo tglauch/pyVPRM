@@ -70,13 +70,8 @@ pyVPRM provides a flexible, modular implementation that lets you mix and match d
 
 ### pyVPRM Example
 
-<figure>
-<img src="https://github.com/user-attachments/assets/c099ef1f-6c5a-445c-bc6e-f6697c47b641", height=300pt>
-</figure> 
-
-<figure>
-<img src="https://github.com/user-attachments/assets/26913805-f188-477a-9a85-08911a165b1e", height=300pt>
-</figure> 
+<video src="https://github.com/user-attachments/assets/c06ff8b0-5602-4f54-81d3-46446b4cc09d" 
+       controls height="300pt" title="pyVPRM NEE in the Amazon Basin"></video>
 
 ### pyVPRNN Example
 
