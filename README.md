@@ -68,6 +68,15 @@ pyVPRM provides a flexible, modular implementation that lets you mix and match d
 # Examples
 
 <details>
+<summary><strong>pyVPRNN Partitioning at DK-Sor</strong> (click to expand)</summary>
+
+Animated example of pyVPRNN's flux partitioning: modeled GPP, ecosystem respiration, and net ecosystem exchange (NEE) evolve alongside the flux footprint and observed NEE, showing how the model tracks measured fluxes over time.
+
+<video src="https://github.com/user-attachments/assets/93d177b4-fd0e-40dd-83d4-097709618e1c" 
+       controls width="500"></video>
+</details>
+
+<details>
 <summary><strong>pyVPRM NEE in the Amazon Basin</strong> (click to expand)</summary>
   
 Animated example of pyVPRM's flux prediction: shown is the hourly net ecosystem exchange (NEE) in the Amazon basin for January 2020. Green indicates a net carbon sink and purple a net carbon release.
@@ -77,14 +86,7 @@ Animated example of pyVPRM's flux prediction: shown is the hourly net ecosystem 
 
 </details>
 
-<details>
-<summary><strong>pyVPRNN Partitioning at DK-Sor</strong> (click to expand)</summary>
 
-Animated example of pyVPRNN's flux partitioning: modeled GPP, ecosystem respiration, and net ecosystem exchange (NEE) evolve alongside the flux footprint and observed NEE, showing how the model tracks measured fluxes over time.
-
-<video src="https://github.com/user-attachments/assets/93d177b4-fd0e-40dd-83d4-097709618e1c" 
-       controls width="500"></video>
-</details>
 
 # How to Use
 
