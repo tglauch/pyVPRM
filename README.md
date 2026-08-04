@@ -68,7 +68,7 @@ pyVPRM provides a flexible, modular implementation that lets you mix and match d
 4. **Partition measured fluxes into GPP and Reco** using a process-informed neural network approach (**pyVPRNN**)
 5. **Interpret partitioned GPP/Reco responses** to meteorological drivers using explainable AI
 
-### Examples
+# Examples
 
 <details>
 <summary><strong>pyVPRM NEE in the Amazon Basin</strong> (click to expand)</summary>
