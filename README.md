@@ -68,7 +68,7 @@ pyVPRM provides a flexible, modular implementation that lets you mix and match d
 4. **Partition measured fluxes into GPP and Reco** using a process-informed neural network approach (**pyVPRNN**)
 5. **Interpret partitioned GPP/Reco responses** to meteorological drivers using explainable AI
 
-### Examples of pyVPRM Net Ecosystem Exchange
+### pyVPRM Example
 
 <figure>
 <img src="https://github.com/user-attachments/assets/c099ef1f-6c5a-445c-bc6e-f6697c47b641", height=300pt>
@@ -78,12 +78,9 @@ pyVPRM provides a flexible, modular implementation that lets you mix and match d
 <img src="https://github.com/user-attachments/assets/26913805-f188-477a-9a85-08911a165b1e", height=300pt>
 </figure> 
 
-### Examples of pyVPRNN for the deciduous forest site DK-Sor
+### pyVPRNN Example
 
-
-https://github.com/user-attachments/assets/2beee9fa-5d68-4fd3-aee1-61c3549b21a6
-
-
+https://github.com/user-attachments/assets/93d177b4-fd0e-40dd-83d4-097709618e1c
 
 # How to Use
 
