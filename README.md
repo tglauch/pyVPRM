@@ -67,7 +67,7 @@ pyVPRM provides a flexible, modular implementation that lets you mix and match d
 
 # Examples
 
-<details>
+<details open>
 <summary><strong>pyVPRNN Partitioning at DK-Sor</strong> (click to expand)</summary>
 
 Animated example of pyVPRNN's flux partitioning: modeled GPP, ecosystem respiration, and net ecosystem exchange (NEE) evolve alongside the flux footprint and observed NEE, showing how the model tracks measured fluxes over time.
