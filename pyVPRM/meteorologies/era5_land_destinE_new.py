@@ -1,4 +1,6 @@
 import os
+import time
+import random
 import uuid
 import numpy as np
 import xarray as xr
@@ -109,6 +111,69 @@ class met_data_handler(met_data_handler_base):
                 sel_dict["valid_time"] = slice(t0, t1)
             self.ds = self._select(sel_dict, source=self.ds)
 
+    def reload_ds(self):
+        """
+        Re-open the underlying Zarr/HTTP dataset connection from scratch.
+
+        A repeated 500/connection failure from the EarthDataHub backend
+        can mean more than "server hiccuped" -- it can also mean the
+        underlying aiohttp session/auth handshake has gone stale. Simple
+        retries won't fix that; re-opening the store (which rebuilds the
+        session and re-applies the PAT) can. Used as a last resort inside
+        _compute_with_retry() after repeated failures, but can also be
+        called directly if you suspect a stale connection.
+        """
+        logger.info(
+            "Reloading dataset connection for data_product='{}'...".format(self.data_product)
+        )
+        self.ds = None
+        self.load_ds()
+
+    def _compute_with_retry(self, obj, max_retries=5, base_delay=5, max_delay=60,
+                             reload_on_exhaustion=True):
+        """
+        Call .compute() on a lazy xarray/dask object with exponential
+        backoff + jitter, retrying on any exception raised during the
+        actual network fetch (e.g. transient 500s from the DestinE
+        EarthDataHub Zarr/HTTP backend).
+
+        If every retry fails and reload_on_exhaustion is True, reload the
+        dataset connection once (see reload_ds()) and make one final
+        attempt -- this covers the case where the failures are caused by
+        a stale session/token rather than a one-off server blip. Re-raises
+        the last exception if that final attempt also fails.
+        """
+        last_exc = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                return obj.compute()
+            except Exception as e:
+                last_exc = e
+                if attempt == max_retries:
+                    break
+                delay = min(base_delay * (2 ** (attempt - 1)), max_delay)
+                delay += random.uniform(0, delay * 0.1)  # jitter
+                logger.warning(
+                    "compute() failed (attempt {}/{}): {}. Retrying in {:.1f}s...".format(
+                        attempt, max_retries, e, delay
+                    )
+                )
+                time.sleep(delay)
+
+        if reload_on_exhaustion:
+            logger.warning(
+                "compute() failed {} times in a row ({}). Reloading dataset "
+                "connection and retrying once more...".format(max_retries, last_exc)
+            )
+            try:
+                self.reload_ds()
+                return obj.compute()
+            except Exception as e:
+                last_exc = e
+
+        logger.error("compute() failed after {} attempts + reload.".format(max_retries))
+        raise last_exc
+
     def _init_data_for_day(self):
         # Nothing to precompute per day for this backend; data is fetched
         # lazily/on demand in _load_data_for_hour().
@@ -180,8 +245,14 @@ class met_data_handler(met_data_handler_base):
         -- so whatever the instantaneous/rearranged/regridded flags said
         about the PREVIOUS self.ds_out no longer applies and must be reset
         before re-deriving them for this one.
+
+        The actual network fetch happens in .compute() below -- this is
+        the point where transient 500s / connection errors from the
+        DestinE backend surface, so it goes through _compute_with_retry()
+        rather than a bare .compute().
         """
-        self.ds_out = self._select(sel_dict).compute()
+        selection = self._select(sel_dict)
+        self.ds_out = self._compute_with_retry(selection)
 
         self.instantaneous = False
         self.rearranged = False
@@ -352,7 +423,11 @@ class met_data_handler(met_data_handler_base):
                     if grid_src.data_vars:
                         first_var = list(grid_src.data_vars)[0]
                         grid_src = grid_src[[first_var]]
-                    grid_src.compute().to_netcdf(src_temp_path)
+                    # This also forces a network fetch (compute() under the
+                    # hood via to_netcdf) -- give it the same retry/reload
+                    # treatment as _load_selection().
+                    grid_src = self._compute_with_retry(grid_src)
+                    grid_src.to_netcdf(src_temp_path)
                     t_ds_out.to_netcdf(dest_temp_path)
 
                     cmd = (
