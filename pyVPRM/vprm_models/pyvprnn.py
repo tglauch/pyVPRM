@@ -71,18 +71,18 @@ class pyvprnn:
         ds["nirv_90pct"] = ds["nirv"].quantile(0.9, dim="time_gap_filled")
         ds["nirv_10pct"] = ds["nirv"].quantile(0.1, dim="time_gap_filled")
 
-        scl = ds["scl"]
-        valid_classes = [4, 5, 6]
+        # scl = ds["scl"]
+        # valid_classes = [4, 5, 6]
     
-        scl_valid = scl.where(scl.isin(valid_classes))
+        # scl_valid = scl.where(scl.isin(valid_classes))
     
-        counts = xr.concat(
-            [(scl_valid == c).sum(dim="time") for c in valid_classes],
-            dim="class"
-        ).assign_coords({"class": valid_classes})
+        # counts = xr.concat(
+        #     [(scl_valid == c).sum(dim="time") for c in valid_classes],
+        #     dim="class"
+        # ).assign_coords({"class": valid_classes})
     
-        if "dominant_scl" not in ds:
-            ds["dominant_scl"] = counts.idxmax(dim="class")
+        # if "dominant_scl" not in ds:
+        #     ds["dominant_scl"] = counts.idxmax(dim="class")
     
         ds["flux_mask"] = ds["land_cover_map"].sel(vprm_classes=7) < 0.99
     

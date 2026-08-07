@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 import pathlib
 import glob
 from pyVPRM.lib.functions import get_eth_canopy_height, get_elevation_copernicus_dem
+import logging
+logger = logging.getLogger("vprm_pipeline")
 
 class flux_tower_data:
     # Class to store flux tower data in unique format
@@ -721,17 +723,29 @@ class fluxnet_shuttle(flux_tower_data):
         idata["datetime_utc"] = self.local_to_utc(idata["TIMESTAMP_END"])
 
         if self.need_footprint_variables:
+            D_OVER_H = {
+                'ENF': 0.68, 'EBF': 0.68, 'DBF': 0.68, 'DNF': 0.68, 'MF': 0.68,
+                'WSA': 0.5,   # woody savanna - substantial but non-closed woody canopy
+                'SAV': 0.3,   # savanna - lower woody fraction
+                'CSH': 0.4,   # closed shrubland - dense but short
+                'OSH': 0.15,  # open shrubland - sparse, low
+            }
+            
             canopy_height = get_eth_canopy_height(self.lat, self.lon, basepath=canopy_height_path)
-            print('Land Cover Type', self.land_cover_type)
-            if self.land_cover_type in ['ENF', 'EBF', 'DBF', 'DNF', 'MF']:
-                idata['z_footprint'] = 0.68 * canopy_height
+
+            if self.land_cover_type in D_OVER_H:
+                idata['z_footprint'] = D_OVER_H[self.land_cover_type] * canopy_height
             else:
                 idata['z_footprint'] = idata['z_measurement']
             idata['z_displacement'] = idata['z_measurement'] - idata['z_footprint']
             self.mean_z_footprint = idata['z_footprint'].mean()
             self.mean_z_displacement = idata['z_displacement'].mean()
-            print('sensor height above ground:', self.mean_z_measurement)
-            print('displacement height above ground:', self.mean_z_displacement)
+            
+            logger.info(
+                "Land Cover Type: %s | Canopy Height: %s | "
+                "Sensor height above ground: %s | Displacement height above ground: %s",
+                self.land_cover_type, canopy_height, self.mean_z_measurement, self.mean_z_displacement,
+            )
 
             rho = idata['PA_F'] * 1000 / (287.05 * (idata['TA_F_MDS'] + 273.15))
             MO_LENGTH = -(rho * 1004 * (idata['TA_F_MDS'] + 273.15) * idata['USTAR'] ** 3) / (

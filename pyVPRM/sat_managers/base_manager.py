@@ -97,15 +97,15 @@ class satellite_data_manager:
         return True
 
     def add_ndre(self, nir='nir08', red='rededge'):
-        nir = self.sat_img['nir08']
+        nir = self.sat_img[nir]
         # No red-edge in default_bands, using red as proxy
-        red_edge = self.sat_img['red']
+        red_edge = self.sat_img[red]
         self.sat_img['ndre'] = self.safe_divide(nir - red_edge, nir + red_edge)
         return True
 
     def add_ndwi(self, nir='nir08', swir='swir16'):
-        nir = self.sat_img['nir08']
-        swir1 = self.sat_img['swir16']
+        nir = self.sat_img[nir]
+        swir1 = self.sat_img[swir]
         self.sat_img['ndwi'] = self.safe_divide(nir - swir1, nir + swir1)
         return True
 

@@ -351,7 +351,7 @@ class vprm_preprocessor:
             )
             return
             
-        satellite_indices = [] if satellite_indices is None else list(satellite_indices)  # copy, don't mutate caller's list
+        satellite_indices = [] if satellite_indices is None else list(satellite_indices)
         if which_evi is not None:
             satellite_indices.append(which_evi)
         if add_ndvi:
@@ -514,10 +514,28 @@ class vprm_preprocessor:
             self.prototype_satellite_manager = copy.deepcopy(self.sat_imgs[0])
             keys = list(self.prototype_satellite_manager.sat_img.keys())
             self.prototype_satellite_manager.sat_img = self.prototype_satellite_manager.sat_img.drop(keys)
-        self.sat_imgs = satellite_data_manager(
-            sat_img=xr.concat([k.sat_img for k in self.sat_imgs], "time")
-        )
-        self.sat_imgs.sat_img = self.sat_imgs.sat_img.sortby(self.sat_imgs.sat_img.time)
+
+    
+        concatenated = xr.concat([k.sat_img for k in self.sat_imgs], "time")
+        concatenated = concatenated.sortby(concatenated.time)
+        day = concatenated["time"].dt.floor("D")
+        if day.to_index().duplicated().any():
+            n_before = concatenated.sizes["time"]
+            concatenated = concatenated.assign_coords(time=day)
+            concatenated = concatenated.groupby("time").mean(skipna=True)  # was .first(skipna=True)
+            logger.info(
+                "sort_and_merge_by_timestamp: merged same-day scenes (%d -> %d calendar days)",
+                n_before,
+                concatenated.sizes["time"],
+            )
+            if "time" in self.prototype_satellite_manager.sat_img.dims:
+                self.prototype_satellite_manager.sat_img = (
+                    self.prototype_satellite_manager.sat_img.drop_dims("time").assign_coords(
+                        time=concatenated["time"]
+                    )
+                )
+     
+        self.sat_imgs = satellite_data_manager(sat_img=concatenated)
         self.timestamps = self.sat_imgs.sat_img.time
         self.timestamps = np.array(
             [pd.Timestamp(i).to_pydatetime() for i in self.timestamps.values]

@@ -98,9 +98,9 @@ class modis(earthdata):
         # For technical details: https://compscistudies.quora.com/Python-Implementing-a-bitmasking-procedure-to-extract-bits
 
         if bands is None:
-            bands = self.bands
-            if self.bands is not None:
-                self.bands = [i for i in list(self.sat_img.keys()) if "sur_refl_b" in i]
+               if self.bands is not None:
+                   self.bands = [i for i in list(self.sat_img.keys()) if "sur_refl_b" in i]
+               bands = self.bands
 
         band_nums = [(band, int(band.split("_b")[1])) for band in bands]
         masks = dict()
@@ -127,55 +127,32 @@ class modis(earthdata):
 
     def mask_clouds(self, bands=None):
         if bands is None:
-            bands = self.bands
             if self.bands is not None:
                 self.bands = [i for i in list(self.sat_img.keys()) if "sur_refl_b" in i]
-
-        start_bit = 0  # Start Bit
-        end_bit = 1  # End Bit  (inclusive)
-        num_bits_to_extract = end_bit - start_bit + 1
-        bit_mask = (1 << num_bits_to_extract) - 1
-        mask1 = (
-            (
-                np.array(self.sat_img["sur_refl_state_500m"].values, dtype=np.uint32)
-                >> start_bit
-            )
-            & bit_mask
-        ) != int("00", 2)
-
-        start_bit = 2  # Start Bit
-        end_bit = 2  # End Bit  (inclusive)
-        num_bits_to_extract = end_bit - start_bit + 1
-        bit_mask = (1 << num_bits_to_extract) - 1
-        mask2 = (
-            (
-                np.array(self.sat_img["sur_refl_state_500m"].values, dtype=np.uint32)
-                >> start_bit
-            )
-            & bit_mask
-        ) != int("0", 2)
-
-        start_bit = 8  # Start Bit
-        end_bit = 9  # End Bit  (inclusive)
-        num_bits_to_extract = end_bit - start_bit + 1
-        bit_mask = (1 << num_bits_to_extract) - 1
-        mask3 = (
-            (
-                np.array(self.sat_img["sur_refl_state_500m"].values, dtype=np.uint32)
-                >> start_bit
-            )
-            & bit_mask
-        ) != int("00", 2)
-
-        # start_bit = 0 # Start Bit
-        # end_bit = 1 # End Bit  (inclusive)
-        # num_bits_to_extract = end_bit - start_bit + 1
-        # bit_mask = (1 << num_bits_to_extract) - 1
-        # mask = (np.array(self.sat_img['sur_refl_state_500m'].values, dtype=np.uint32) >> start_bit) & bit_mask
-
+            bands = self.bands
+    
+        state = np.array(self.sat_img["sur_refl_state_500m"].values, dtype=np.uint32)
+    
+        # Bits 0-1: cloud state — 0=clear, 1=cloudy, 2=mixed, 3=undefined/assumed clear.
+        # Per MOD09 docs, 3 ("assumed clear") is NOT flagged as bad — only 1 and 2 are.
+        cloud_state = state & 0b11
+        mask_cloud_state = (cloud_state == 1) | (cloud_state == 2) | (cloud_state == 3)
+    
+        # Bit 2: cloud shadow (1 = yes)
+        mask_cloud_shadow = ((state >> 2) & 0b1) == 1
+    
+        # Bits 8-9: cirrus detected — 0=none, 1=small, 2=average, 3=high.
+        # Kept conservative (any nonzero cirrus flagged)
+        cirrus = (state >> 8) & 0b11
+        mask_cirrus = cirrus != 0
+    
+        # Bit 13: pixel adjacent to cloud (1 = yes)
+        mask_adjacent = ((state >> 13) & 0b1) == 1
+    
+        combined_mask = mask_cloud_state | mask_cloud_shadow | mask_cirrus | mask_adjacent
+    
         for b in bands:
-            self.sat_img[b] = xr.where((mask1 | mask2 | mask3), np.nan, self.sat_img[b])
-        # self.sat_img[b].values[(mask1 | mask2 | mask3)] = np.nan
+            self.sat_img[b] = xr.where(combined_mask, np.nan, self.sat_img[b])
         return
 
     def get_resolution(self):
@@ -199,9 +176,7 @@ class modis(earthdata):
             else:
                 test = stop_date - timedelta(days=float(np.abs(this_ts - stop_day)))
                 new[self.sat_img[key].values == this_ts] = test
-        self.sat_img = self.sat_img.assign(
-            {key: (list(self.sat_img.dims.mapping.keys()), new)}
-        )
+        self.sat_img = self.sat_img.assign({key: (self.sat_img[key].dims, new)})
         return
 
     def individual_loading(self, adjust_timestamps=True):
@@ -268,27 +243,31 @@ class modis(earthdata):
 
     def mask_snow(self, bands=None):
         if bands is None:
-            bands = self.bands
             if self.bands is not None:
                 self.bands = [i for i in list(self.sat_img.keys()) if "sur_refl_b" in i]
-        start_bit = 12  # Start Bit
-        end_bit = 12  # End Bit  (inclusive)
-        num_bits_to_extract = end_bit - start_bit + 1
-        bit_mask = (1 << num_bits_to_extract) - 1
-        mask = (
-            np.array(self.sat_img["sur_refl_state_500m"].values, dtype=np.uint32)
-            >> start_bit
-        ) & bit_mask
+            bands = self.bands
+    
+        state = np.array(self.sat_img["sur_refl_state_500m"].values, dtype=np.uint32)
+    
+        # Bit 12: MOD35 snow/ice flag
+        mask_mod35_snow = ((state >> 12) & 0b1) == 1
+    
+        # Bit 15: internal snow mask — the two can disagree, so combine both
+        mask_internal_snow = ((state >> 15) & 0b1) == 1
+    
+        combined_mask = mask_mod35_snow | mask_internal_snow
+    
         for b in bands:
-            self.sat_img[b] = xr.where(mask == int("1", 2), np.inf, self.sat_img[b])
-            # self.sat_img[b].values[mask == int('1', 2)] = np.inf
+            # inf (not nan) is intentional here — keeps snow-flagged pixels
+            # distinguishable from genuinely missing data downstream
+            self.sat_img[b] = xr.where(combined_mask, np.inf, self.sat_img[b])
         return
 
     def mask_water(self, bands=None):
         if bands is None:
-            bands = self.bands
-            if self.bands is not None:
-                self.bands = [i for i in list(self.sat_img.keys()) if "sur_refl_b" in i]
+               if self.bands is not None:
+                   self.bands = [i for i in list(self.sat_img.keys()) if "sur_refl_b" in i]
+               bands = self.bands
         start_bit = 3  # Start Bit
         end_bit = 5  # End Bit  (inclusive)
         num_bits_to_extract = end_bit - start_bit + 1

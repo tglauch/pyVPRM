@@ -574,7 +574,7 @@ class pyvprnn_v1(pyvprnn):
 
         reco_map = TimeIntegratedRatioPenalty(
             max_ratio=1.0,  # derive some reference ratio spread
-            weight=1e-2,
+            weight=1e-4,
             gpp_floor=1.0,
             name="time_integrated_ratio_penalty",
         )([gpp_map, reco_map, day_mask])
@@ -596,14 +596,14 @@ class pyvprnn_v1(pyvprnn):
 
         def nll_loss_from_stacked(y_with_sigma_true, y_pred):
             y_true = y_with_sigma_true[..., 0][..., None]
-            sigma = tf.maximum(y_with_sigma_true[..., 1], 0.5)[..., None]
+            sigma = tf.maximum(y_with_sigma_true[..., 1], 0.4)[..., None]
             return tf.reduce_mean((y_true - y_pred) ** 2 / (2 * sigma ** 2) + 0.5 * tf.math.log(2 * np.pi * sigma ** 2))
 
         def mse_true_only(y_with_sigma_true, y_pred):
             y_true = y_with_sigma_true[..., 0][..., None]
             return tf.reduce_mean(tf.square(y_true - y_pred))
             
-        def nll_loss_laplace_from_stacked(y_with_sigma_true, y_pred, sigma_floor=0.5):
+        def nll_loss_laplace_from_stacked(y_with_sigma_true, y_pred, sigma_floor=0.4):
             # https://research.fs.usda.gov/download/treesearch/21276.pdf
             y_true = y_with_sigma_true[..., 0][..., None]
             sigma = tf.maximum(y_with_sigma_true[..., 1], sigma_floor)[..., None]
