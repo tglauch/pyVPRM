@@ -14,6 +14,7 @@ from pyVPRM.vprm_models.pyvprnn_v1 import (
     DayMask,
     SelectFeatures,
     GPPPenalty,
+    TimeIntegratedRatioPenalty
 )
 
 
@@ -124,7 +125,7 @@ class pyvprnn_v2(pyvprnn_v1):
 
     DEFAULT_VARIABLE_LAGS = {
         "t2m": [2, 6, 12, 24, 48],
-        "swvl1_era5": [6, 12, 24, 72, 168],
+        "swvl1_era5": [2, 6, 12, 24, 72, 144, 336, 672, 1344, 2688],
         "stl2_era5": [3, 6, 12, 24, 48],   # single soil temperature level - dropped stl1_era5 entirely
     }
     DEFAULT_LAGGED_MET_VARS = ["t2m", "swvl1_era5", "stl2_era5"]
@@ -132,10 +133,11 @@ class pyvprnn_v2(pyvprnn_v1):
     def __init__(self, lagged_met_vars=None, variable_lags=None, lag_window=None, **kwargs):
         super().__init__(**kwargs)
 
-        self.met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl1_era5", "swvl2_era5",
-                         "hours_since_rain", 'precip_sum_1', 'precip_sum_4', 'precip_sum_2976']
-        self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl2_era5"]
-        self.reco_met_vars = ["t2m", "RH_from_VDP", "swvl1_era5", "hours_since_rain",'precip_sum_1' , 'precip_sum_4', 'precip_sum_2976']
+        self.met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl1_era5", "swvl2_era5", 'sd',
+                         "hours_since_rain",]
+        self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl2_era5", 'sd']
+        self.reco_met_vars = ["t2m", "RH_from_VDP", "swvl1_era5", 'sd', 
+                              "hours_since_rain"]
         
         self.lagged_met_vars = list(lagged_met_vars) if lagged_met_vars is not None else list(self.DEFAULT_LAGGED_MET_VARS)
         self.variable_lags = dict(variable_lags) if variable_lags is not None else dict(self.DEFAULT_VARIABLE_LAGS)
@@ -300,6 +302,14 @@ class pyvprnn_v2(pyvprnn_v1):
             bias_initializer=tf.keras.initializers.Constant(0.7), name="x_reco_map",
         )(x_reco)
         reco_map = layers.Multiply(name="reco_map")([x_reco_map, flux_mask_exp])
+
+        reco_map = TimeIntegratedRatioPenalty(
+            max_ratio=1.0,  # derive some reference ratio spread
+            weight=1e-4,
+            gpp_floor=1.0,
+            name="time_integrated_ratio_penalty",
+        )([gpp_map, reco_map, day_mask])
+        
         reco_weighted = layers.Multiply(name="reco_weighted")([reco_map, fp_exp])
         reco_sum = GlobalSumPooling(name="reco_sum")(reco_weighted)
 

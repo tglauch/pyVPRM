@@ -192,7 +192,7 @@ def apply_met_scaling(var_name, arr):
         return arr / 10
     return arr
 
-def compute_hours_since_rain(precip_values, dt_hours=0.5, rain_threshold_mm=0.1):
+def compute_hours_since_rain(precip_values, dt_hours=0.5, rain_threshold_mm=1):
     """
     Hours elapsed since precipitation last exceeded rain_threshold_mm.
     NaN before the first recorded rain event in the series (no prior
@@ -399,15 +399,15 @@ class pyvprnn_v1(pyvprnn):
         self.valid_weights = None
 
         self.sat_vars = ["lswi", "nirv", "ndre"]
-        self.met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl1_era5", "swvl2_era5"]
+        self.met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl1_era5", "swvl2_era5"] # 'sd_era5']
         # GPP excludes swvl1_era5 (kept for Reco's water-availability signal);
         # Reco excludes ssrd (no direct light-driven respiration signal) and
         # swvl2_era5 (deeper layer, judged more relevant to GPP's root-zone
         # water access). Note ssrd (actual measured radiation) still feeds
         # GPP as a real driver of photosynthetic rate - only the day/night
         # MASK now comes from SW_IN_POT instead, a separate concern.
-        self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl2_era5"]
-        self.reco_met_vars = ["t2m", "RH_from_VDP", "swvl1_era5"]
+        self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl2_era5"] #, 'sd_era5']
+        self.reco_met_vars = ["t2m", "RH_from_VDP", "swvl1_era5"] #, 'sd_era5']
 
         self.land_cover_classes = (
             list(land_cover_classes) if land_cover_classes is not None
@@ -423,6 +423,7 @@ class pyvprnn_v1(pyvprnn):
             "DayMask": DayMask,
             "SelectFeatures": SelectFeatures,
             "GPPPenalty": GPPPenalty,
+            "TimeIntegratedRatioPenalty": TimeIntegratedRatioPenalty,
         })
 
     def make_veg_fraction_plot(self, opath):
@@ -531,9 +532,6 @@ class pyvprnn_v1(pyvprnn):
         met_reco = SelectFeatures(reco_met_idx, name="met_reco")(self.met_input)
         met_bc_reco = BroadcastToImage(name="met_bc_reco")([met_reco, sat_static])
 
-        # =========================================================
-        # Day/night mask - from SW_IN_POT, not ssrd (see BatchGenerator note)
-        # =========================================================
         sw_in_pot_bc = BroadcastToImage(name="sw_in_pot_bc")([self.sw_in_pot_input, sat_static])
         day_mask = DayMask(0, name="day_mask")(sw_in_pot_bc)
 

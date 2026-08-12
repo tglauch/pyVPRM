@@ -730,21 +730,42 @@ class fluxnet_shuttle(flux_tower_data):
                 'CSH': 0.4,   # closed shrubland - dense but short
                 'OSH': 0.15,  # open shrubland - sparse, low
             }
-            
+
             canopy_height = get_eth_canopy_height(self.lat, self.lon, basepath=canopy_height_path)
 
+            # Naming convention must match the `icos` class, since
+            # base_footprint_class.setup() reads these columns:
+            #   z_displacement = d          (displacement height above ground)
+            #   z_footprint    = z_m - d    (aerodynamic measurement height, -> self.z)
             if self.land_cover_type in D_OVER_H:
-                idata['z_footprint'] = D_OVER_H[self.land_cover_type] * canopy_height
+                idata['z_displacement'] = D_OVER_H[self.land_cover_type] * canopy_height
             else:
-                idata['z_footprint'] = idata['z_measurement']
-            idata['z_displacement'] = idata['z_measurement'] - idata['z_footprint']
+                idata['z_displacement'] = 0.0
+            idata['z_footprint'] = idata['z_measurement'] - idata['z_displacement']
+
+            # Guard against a non-physical aerodynamic height: a canopy taller
+            # than the sensor (or a bad/missing canopy retrieval) would give
+            # z_footprint <= 0, which makes X_star infinite and silently zeroes
+            # the whole footprint downstream.
+            n_bad = int((idata['z_footprint'] <= 0).sum())
+            if n_bad:
+                logger.warning(
+                    "%s: z_footprint <= 0 for %d/%d timestamps "
+                    "(canopy_height=%s, mean z_measurement=%s) - setting to NaN.",
+                    self.site_name, n_bad, len(idata),
+                    canopy_height, idata['z_measurement'].mean(),
+                )
+                idata.loc[idata['z_footprint'] <= 0, 'z_footprint'] = np.nan
+
             self.mean_z_footprint = idata['z_footprint'].mean()
             self.mean_z_displacement = idata['z_displacement'].mean()
-            
+
             logger.info(
                 "Land Cover Type: %s | Canopy Height: %s | "
-                "Sensor height above ground: %s | Displacement height above ground: %s",
-                self.land_cover_type, canopy_height, self.mean_z_measurement, self.mean_z_displacement,
+                "Sensor height above ground: %s | Displacement height above ground: %s | "
+                "Aerodynamic measurement height (z_m - d): %s",
+                self.land_cover_type, canopy_height, self.mean_z_measurement,
+                self.mean_z_displacement, self.mean_z_footprint,
             )
 
             rho = idata['PA_F'] * 1000 / (287.05 * (idata['TA_F_MDS'] + 273.15))
@@ -753,7 +774,9 @@ class fluxnet_shuttle(flux_tower_data):
             )
             MO_LENGTH = MO_LENGTH.where((MO_LENGTH > -1000) & (MO_LENGTH < 1000))
             idata['MO_LENGTH'] = MO_LENGTH
-            idata['ZL'] = idata['z_displacement'] / idata['MO_LENGTH']  
+            # z/L uses the aerodynamic height (z_m - d), i.e. z_footprint under
+            # the ICOS convention - NOT the displacement height itself.
+            idata['ZL'] = idata['z_footprint'] / idata['MO_LENGTH'] 
 
         mask = np.ones(len(idata), dtype=bool)
         if self.tstart is not None:
