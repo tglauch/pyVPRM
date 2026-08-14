@@ -91,9 +91,15 @@ class met_data_handler(met_data_handler_base):
         self.load_ds()
 
     def load_ds(self):
+        import aiohttp
+        async def get_client(**kwargs):
+            connector = aiohttp.TCPConnector(ssl=False)
+            return aiohttp.ClientSession(connector=connector, **kwargs)
+
         url = "https://edh:{}@{}".format(self.PAT, DATA_PRODUCT_PATH[self.data_product])
         self.ds = (
-            xr.open_dataset(url, chunks={}, engine="zarr")
+            xr.open_dataset(url, chunks={}, engine="zarr",
+                            storage_options={"get_client": get_client})
             .astype("float32")
             .rename({"longitude": "lon", "latitude": "lat"})
         )
