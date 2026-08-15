@@ -472,9 +472,11 @@ class vprm_base_model:
                 ret_res["gpp"] = gpps[0]
                 ret_res["nee"] = -gpps[0] + respirations[0]
             else:
-                ret_res["gpp"] = xr.concat(gpps, dim="z").sum(dim="z")
+                ret_res["gpp"] = xr.concat(gpps, dim="z").sum(
+                    dim="z", skipna=True, min_count=1
+                )
                 ret_res["nee"] = -ret_res["gpp"] + xr.concat(respirations, dim="z").sum(
-                    dim="z"
+                    dim="z", skipna=True, min_count=1
                 )
         else:
             ret_res["gpp"] = xr.concat(gpps, dim="veg_classes")
