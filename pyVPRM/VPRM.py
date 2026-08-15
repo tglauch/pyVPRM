@@ -724,6 +724,120 @@ class vprm_preprocessor:
                 self.land_cover_type.save(save_path)
         return
 
+    def add_fractional_land_cover_map(
+        self,
+        fractions,
+        class_mapping,
+        class_dim="land_cover_class",
+        source_name=None,
+    ):
+        """Map pre-apportioned source-class fractions to VPRM fractions.
+
+        Parameters
+        ----------
+        fractions : xarray.DataArray
+            Fractional land-cover coverage on the VPRM satellite grid. The
+            array must have dimensions ``class_dim``, ``y``, and ``x`` and
+            values from zero to one.
+        class_mapping : dict
+            Mapping from values along ``class_dim`` to integer VPRM class
+            identifiers. Contributions assigned to the same VPRM class are
+            summed.
+        class_dim : str, default="land_cover_class"
+            Dimension containing source land-cover class identifiers.
+        source_name : str, optional
+            Human-readable source product name recorded in output metadata.
+
+        Returns
+        -------
+        None
+            Mapped fractional VPRM classes are stored in
+            :attr:`land_cover_type` without regridding.
+
+        Raises
+        ------
+        TypeError
+            If ``fractions`` is not an :class:`xarray.DataArray`.
+        ValueError
+            If fractions are not on the satellite grid, lie outside the
+            fractional range, or contain unmapped source classes.
+        """
+        if not isinstance(fractions, xr.DataArray):
+            raise TypeError("fractions must be an xarray.DataArray.")
+        required_dims = {class_dim, "y", "x"}
+        if not required_dims.issubset(fractions.dims):
+            raise ValueError(
+                "fractions must contain dimensions {}.".format(
+                    ", ".join(sorted(required_dims))
+                )
+            )
+        if self.sat_imgs is None or not hasattr(self.sat_imgs, "sat_img"):
+            raise ValueError("Satellite imagery must be added before land-cover fractions.")
+
+        target_grid = self.sat_imgs.sat_img
+        for coordinate in ("x", "y"):
+            if coordinate not in target_grid.coords or not np.array_equal(
+                fractions.coords[coordinate].values,
+                target_grid.coords[coordinate].values,
+            ):
+                raise ValueError(
+                    "fractions must use the same {} coordinates as the satellite grid.".format(
+                        coordinate
+                    )
+                )
+        if fractions.rio.crs != target_grid.rio.crs:
+            raise ValueError("fractions must use the same CRS as the satellite grid.")
+
+        minimum = fractions.min(skipna=True).item()
+        maximum = fractions.max(skipna=True).item()
+        if minimum < -1e-6 or maximum > 1.0 + 1e-6:
+            raise ValueError("fractions must contain values between zero and one.")
+
+        source_classes = fractions.coords[class_dim].values.tolist()
+        missing_classes = [
+            source_class
+            for source_class in source_classes
+            if source_class not in class_mapping
+        ]
+        if missing_classes:
+            raise ValueError(
+                "class_mapping is missing source classes: {}.".format(
+                    ", ".join(str(value) for value in missing_classes)
+                )
+            )
+
+        vprm_classes = np.array(
+            sorted({int(class_mapping[source_class]) for source_class in source_classes}),
+            dtype=np.int32,
+        )
+        mapped_fractions = []
+        for vprm_class in vprm_classes:
+            source_class_values = [
+                source_class
+                for source_class in source_classes
+                if int(class_mapping[source_class]) == vprm_class
+            ]
+            mapped_fractions.append(
+                fractions.sel({class_dim: source_class_values}).sum(class_dim)
+            )
+        mapped_fractions = xr.concat(mapped_fractions, dim="vprm_classes")
+        mapped_fractions = mapped_fractions.assign_coords(vprm_classes=vprm_classes)
+        mapped_fractions.name = "vprm_fraction"
+        mapped_fractions.attrs.update(
+            {
+                "long_name": "fractional VPRM land-cover coverage",
+                "source_class_dimension": class_dim,
+            }
+        )
+        if source_name is not None:
+            mapped_fractions.attrs["source_product"] = source_name
+        mapped_fractions = mapped_fractions.rio.write_crs(target_grid.rio.crs)
+        mapped_fractions = mapped_fractions.rio.write_transform(
+            target_grid.rio.transform(recalc=False)
+        )
+        self.land_cover_type = satellite_data_manager(sat_img=mapped_fractions)
+        return
+
     def calc_min_max_evi_lswi(self):
         """
         Calculate the minimim and maximum EVI and LSWI
