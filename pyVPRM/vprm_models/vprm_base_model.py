@@ -156,14 +156,30 @@ class vprm_base_model:
         return ret
 
     def get_w_scale(self, lon=None, lat=None, site_name=None, land_cover_type=None):
-        """
-        Get VPRM w_scale
+        """Calculate the VPRM water scalar from LSWI.
 
-            Parameters:
-                    lon (float): longitude
-                    lat (float): latitude
-            Returns:
-                    w_scale array
+        Parameters
+        ----------
+        lon : float, optional
+            Longitude of a requested point.
+        lat : float, optional
+            Latitude of a requested point.
+        site_name : str, optional
+            Flux-tower site name for point-based evaluation.
+        land_cover_type : int, optional
+            VPRM land-cover class. Retained for API compatibility; the
+            published water-scalar form is used for every class.
+
+        Returns
+        -------
+        float or xarray.DataArray
+            Water scalar ``(1 + LSWI) / (1 + max_LSWI)``.
+
+        Notes
+        -----
+        This is the form given in Mahadevan et al. (2008), Eq. 8. It avoids
+        division by a near-zero annual LSWI range in the former class-specific
+        alternative.
         """
 
         # if (self.new is False) & ('w_scale' in self.buffer.keys()):
@@ -213,11 +229,7 @@ class vprm_base_model:
             diff = max_lswi - min_lswi
             diff = xr.where(diff < 0.01, 0.01, diff)
 
-        # Doesn't show any improvements, but increases instability
-        if land_cover_type in [4, 7]:
-            self.buffer["w_scale"] = (lswi - min_lswi) / (max_lswi - min_lswi)
-        else:
-            self.buffer["w_scale"] = (1 + lswi) / (1 + max_lswi)
+        self.buffer["w_scale"] = (1 + lswi) / (1 + max_lswi)
         return self.buffer["w_scale"]
 
     def get_evi(self, lon=None, lat=None, site_name=None):
