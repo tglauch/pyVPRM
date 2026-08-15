@@ -60,7 +60,7 @@ def make_model(inputs):
     return model
 
 
-def make_inputs(evi, tcorr):
+def make_inputs(evi, tcorr, n_cells=1):
     """Build otherwise-valid VPRM inputs with selected missing drivers.
 
     Parameters
@@ -69,6 +69,8 @@ def make_inputs(evi, tcorr):
         Enhanced Vegetation Index input value.
     tcorr : float
         Respiration temperature input value in degrees Celsius.
+    n_cells : int, default=1
+        Number of identical test cells to create.
 
     Returns
     -------
@@ -90,7 +92,7 @@ def make_inputs(evi, tcorr):
             One-dimensional field over the test cell.
         """
 
-        return xr.DataArray([value], dims="x")
+        return xr.DataArray(np.full(n_cells, value), dims="x")
 
     return {
         "Ps": field(1.0),
@@ -134,3 +136,31 @@ def test_all_missing_respiration_contributions_remain_missing():
 
     assert bool(fluxes["gpp"].notnull().all())
     assert bool(fluxes["nee"].isnull().all())
+
+
+def test_no_flux_cells_are_zero_without_hiding_missing_active_fluxes():
+    """Return zero only where no flux-capable class has coverage.
+
+    Returns
+    -------
+    None
+        The test verifies that an all-no-flux cell is zero while a neighboring
+        active cell with missing EVI remains missing.
+    """
+
+    model = make_model(make_inputs(evi=np.nan, tcorr=20.0, n_cells=2))
+    model.fit_params_dict = {
+        3: {"lamb": 0.5, "par0": 1000.0, "alpha": 0.2, "beta": 1.0},
+    }
+    model.vprm_pre.land_cover_type.sat_img = xr.DataArray(
+        [[1.0, 0.0], [0.0, 1.0]],
+        dims=("vprm_classes", "x"),
+        coords={"vprm_classes": [0, 3], "x": [0, 1]},
+    )
+
+    fluxes = model.make_vprm_predictions(date=object())
+
+    assert fluxes["gpp"].sel(x=0).item() == 0.0
+    assert fluxes["nee"].sel(x=0).item() == 0.0
+    assert np.isnan(fluxes["gpp"].sel(x=1).item())
+    assert np.isnan(fluxes["nee"].sel(x=1).item())
