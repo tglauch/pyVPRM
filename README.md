@@ -12,8 +12,6 @@
 
 **pyVPRM** and its extension **pyVPRNN** are python implementations of data-driven models for analyzing and estimating carbon flux exchange between the atmosphere and the terrestrial biosphere — from single flux-tower footprints up to global scale — using multi-spectral satellite observations.
 
-📄 **Paper:** Glauch et al. (2025), *pyVPRM: a next-generation vegetation photosynthesis and respiration model for the post-MODIS era*, [Geoscientific Model Development, 18(14), 4713–4742](https://gmd.copernicus.org/articles/18/4713/2025/). A pyVPRNN paper is in preparation.
-
 🚀 **New here?** Start with the [example repository](https://github.com/tglauch/pyVPRM_examples.git) — it's the fastest way to see the pipeline end to end.
 
 ### Citation
@@ -36,6 +34,26 @@ If you use this package in your research, please cite:
   PAGES = {4713--4742},
   URL = {https://gmd.copernicus.org/articles/18/4713/2025/},
   DOI = {10.5194/gmd-18-4713-2025}
+}
+```
+</details>
+
+
+> Glauch, T., Kroker, M. J., Vardag, S. N., Botía, S., Butz, A., and Marshall, J.: A process-informed deep learning biosphere model for ecosystem carbon flux partitioning and beyond, EGUsphere [preprint], https://doi.org/10.5194/egusphere-2026-4847, 2026. 
+
+<details>
+<summary>BibTeX</summary>
+
+```bibtex
+@Article{egusphere-2026-4847,
+AUTHOR = {Glauch, T. and Kroker, M. J. and Vardag, S. N. and Bot\'{\i}a, S. and Butz, A. and Marshall, J.},
+TITLE = {A process-informed deep learning biosphere model for ecosystem carbon flux partitioning and beyond},
+JOURNAL = {EGUsphere},
+VOLUME = {2026},
+YEAR = {2026},
+PAGES = {1--51},
+URL = {https://egusphere.copernicus.org/preprints/2026/egusphere-2026-4847/},
+DOI = {10.5194/egusphere-2026-4847}
 }
 ```
 </details>
