@@ -10,7 +10,7 @@
 <img width="100%" alt="github_logo 001" src="https://github.com/user-attachments/assets/1628353c-802d-4644-8dbc-0a327a72ab24" />
 </figure> 
 
-**pyVPRM** and its extension **pyVPRNN** are python implementations of data-driven models for analyzing and estimating carbon flux exchange between the atmosphere and the terrestrial biosphere — from single flux-tower footprints up to global scale — using multi-spectral satellite observations.
+**pyVPRM** and its extension **pyVPRNN** are python implementations of data-driven models for partitioning, interpreting and upscaling of carbon flux exchange between the atmosphere and the terrestrial biosphere — from single flux-tower footprints up to global scale — using multi-spectral satellite observations.
 
 🚀 **New here?** Start with the [example repository](https://github.com/tglauch/pyVPRM_examples.git) — it's the fastest way to see the pipeline end to end.
 
