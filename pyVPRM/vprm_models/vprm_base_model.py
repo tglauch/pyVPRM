@@ -410,7 +410,9 @@ class vprm_base_model:
                 regridder_weights (str): Path to the weights file for regridding from ERA5
                                          to the satellite grid
                 no_flux_veg_types (list of ints): flux type ids that get a default GPP/NEE of 0
-                                                  (e.g. oceans, deserts...)
+                                                  (e.g. oceans, deserts...). Cells with no
+                                                  fractional coverage in any remaining
+                                                  flux-capable class are returned as zero.
             Returns:
                     None
         """
@@ -435,6 +437,11 @@ class vprm_base_model:
 
         lc_classes = [i for i in lc_classes if ((i not in no_flux_veg_types) & (i in self.fit_params_dict.keys()))]
         lc_classes = np.atleast_1d(lc_classes)
+        flux_capable_fraction = None
+        if mode == "2d":
+            flux_capable_fraction = self.vprm_pre.land_cover_type.sat_img.sel(
+                {"vprm_classes": lc_classes}
+            ).sum(dim="vprm_classes")
         for i in lc_classes:
             if mode == "2d":
                 inputs = self._get_vprm_variables(
@@ -472,9 +479,17 @@ class vprm_base_model:
                 ret_res["gpp"] = gpps[0]
                 ret_res["nee"] = -gpps[0] + respirations[0]
             else:
-                ret_res["gpp"] = xr.concat(gpps, dim="z").sum(dim="z")
+                ret_res["gpp"] = xr.concat(gpps, dim="z").sum(
+                    dim="z", skipna=True, min_count=1
+                )
                 ret_res["nee"] = -ret_res["gpp"] + xr.concat(respirations, dim="z").sum(
-                    dim="z"
+                    dim="z", skipna=True, min_count=1
+                )
+                ret_res["gpp"] = ret_res["gpp"].where(
+                    flux_capable_fraction > 0.0, other=0.0
+                )
+                ret_res["nee"] = ret_res["nee"].where(
+                    flux_capable_fraction > 0.0, other=0.0
                 )
         else:
             ret_res["gpp"] = xr.concat(gpps, dim="veg_classes")
