@@ -16,12 +16,12 @@
 
 ### Citation
 
-If you use this package in your research, please cite:
+If you use this package in your research, please cite pyVPRM/pyVPRNN accordingly:
 
 > Glauch, T., Marshall, J., Gerbig, C., Botía, S., Gałkowski, M., Vardag, S. N., & Butz, A. (2025). pyVPRM: A next-generation vegetation photosynthesis and respiration model for the post-MODIS era. *Geoscientific Model Development*, 18(14), 4713–4742. https://doi.org/10.5194/gmd-18-4713-2025
 
 <details>
-<summary>BibTeX</summary>
+<summary>BibTeX (pyVPRM)</summary>
 
 ```bibtex
 @Article{gmd-18-4713-2025,
@@ -42,7 +42,7 @@ If you use this package in your research, please cite:
 > Glauch, T., Kroker, M. J., Vardag, S. N., Botía, S., Butz, A., and Marshall, J.: A process-informed deep learning biosphere model for ecosystem carbon flux partitioning and beyond, EGUsphere [preprint], https://doi.org/10.5194/egusphere-2026-4847, 2026. 
 
 <details>
-<summary>BibTeX</summary>
+<summary>BibTeX (pyVPRNN)</summary>
 
 ```bibtex
 @Article{egusphere-2026-4847,
