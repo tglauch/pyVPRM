@@ -54,7 +54,8 @@ setup(
         "pykalman",
         "numexpr",
         "cartopy",
-        "planetary_computer"
+        "planetary_computer",
+        "utils"
     ],
     zip_safe=False,
 )
