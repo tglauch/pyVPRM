@@ -55,7 +55,7 @@ setup(
         "numexpr",
         "cartopy",
         "planetary_computer",
-        "utils"
+        "aiohttp"
     ],
     zip_safe=False,
 )
