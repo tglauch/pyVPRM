@@ -53,7 +53,8 @@ setup(
         "fiona",
         "pykalman",
         "numexpr",
-        "cartopy"
+        "cartopy",
+        "planetary_computer"
     ],
     zip_safe=False,
 )
