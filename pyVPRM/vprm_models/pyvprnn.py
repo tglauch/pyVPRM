@@ -918,7 +918,7 @@ class pyvprnn:
                 vmax = np.nanpercentile(color_var, 95)
             print(vmin, vmax)
             norm = plt.Normalize(vmin=vmin, vmax=vmax)
-            colors = plt.cm.get_cmap(cmap)(norm(color_var))
+            colors = plt.get_cmap(cmap)(norm(color_var))
         else:
             colors = ["gray"] * ice.shape[0]
     
