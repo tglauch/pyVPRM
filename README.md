@@ -16,6 +16,8 @@
 
 ⭐ If pyVPRM is useful for your work, consider starring the repo — it helps visibility and continued support for the project.
 
+Questions? Open an issue, or reach out directly: **theo.glauch@dlr.de**
+
 ### Citation
 
 If you use this package in your research, please cite pyVPRM/pyVPRNN accordingly:
@@ -59,8 +61,6 @@ DOI = {10.5194/egusphere-2026-4847}
 }
 ```
 </details>
-
-Questions? Open an issue, or reach out directly: **theo.glauch@dlr.de**
 
 # About
 
