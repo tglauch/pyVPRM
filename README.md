@@ -14,6 +14,8 @@
 
 🚀 **New here?** Start with the [example repository](https://github.com/tglauch/pyVPRM_examples.git) — it's the fastest way to see the pipeline end to end.
 
+⭐ If pyVPRM is useful for your work, consider starring the repo — it helps visibility and continued support for the project.
+
 ### Citation
 
 If you use this package in your research, please cite pyVPRM/pyVPRNN accordingly:
@@ -58,9 +60,7 @@ DOI = {10.5194/egusphere-2026-4847}
 ```
 </details>
 
-### Questions? Open an issue, or reach out directly: **theo.glauch@dlr.de**
-
-⭐ If pyVPRM is useful for your work, consider starring the repo — it helps visibility and continued support for the project.
+Questions? Open an issue, or reach out directly: **theo.glauch@dlr.de**
 
 # About
 
