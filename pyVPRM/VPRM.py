@@ -559,8 +559,7 @@ class vprm_preprocessor:
                         self.sat_imgs.sat_img["timestamps"].values
                         - np.datetime64(self.timestamp_start)
                     )
-                    / 1e9
-                    / (24 * 60 * 60),
+                    / np.timedelta64(1, "D"),
                     dtype=float,
                 )
             )
