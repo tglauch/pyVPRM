@@ -582,6 +582,56 @@ class vprm_preprocessor:
                 self.sat_imgs.sat_img[sat_ind] = da.where(np.isfinite(da))
         return
 
+    def forward_fill_satellite_indices(self, keys=("evi", "lswi"), max_age_days=None):
+        """Forward-fill missing satellite-index values along composite time.
+
+        Parameters
+        ----------
+        keys : sequence of str, default=("evi", "lswi")
+            Satellite-index variables to fill. Each must use the current
+            ``time_key`` dimension.
+        max_age_days : float, optional
+            Maximum permitted age in days of a carried-forward observation.
+            Values with no earlier valid observation, or whose earlier value
+            exceeds this age, remain missing. ``None`` permits an unlimited
+            forward fill.
+
+        Returns
+        -------
+        None
+            Selected index variables are updated in :attr:`sat_imgs`.
+
+        Raises
+        ------
+        ValueError
+            If ``max_age_days`` is negative or a requested index is absent.
+
+        Notes
+        -----
+        ``sort_and_merge_by_timestamp`` represents composite time as elapsed
+        days from the first image. Call this method after merging satellite
+        images and before calculating index-derived VPRM statistics.
+        """
+        if max_age_days is not None and max_age_days < 0:
+            raise ValueError("max_age_days must be non-negative or None.")
+
+        satellite_dataset = self.sat_imgs.sat_img
+        time_values = satellite_dataset[self.time_key]
+        for key in keys:
+            if key not in satellite_dataset:
+                raise ValueError("Satellite index is unavailable: {}.".format(key))
+            index_values = satellite_dataset[key]
+            filled_values = index_values.ffill(dim=self.time_key)
+            if max_age_days is not None:
+                last_valid_time = xr.where(
+                    index_values.notnull(), time_values, np.nan
+                ).ffill(dim=self.time_key)
+                filled_values = filled_values.where(
+                    (time_values - last_valid_time) <= max_age_days
+                )
+            satellite_dataset[key] = filled_values
+        return
+
     def clip_to_box(self, sat_to_crop):
         bounds = sat_to_crop.sat_img.rio.bounds()
         self.sat_imgs.sat_img = self.sat_imgs.sat_img.rio.clip_box(
