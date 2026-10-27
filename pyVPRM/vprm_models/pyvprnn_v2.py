@@ -3,7 +3,9 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import layers, Model
 from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.models import load_model
 
+from pyVPRM.lib.functions import sel_nearest_valid
 from pyVPRM.vprm_models.pyvprnn_v1 import (
     pyvprnn_v1,
     BatchGenerator,
@@ -14,162 +16,340 @@ from pyVPRM.vprm_models.pyvprnn_v1 import (
     DayMask,
     SelectFeatures,
     GPPPenalty,
-    TimeIntegratedRatioPenalty
+    TimeIntegratedRatioPenalty,
+    apply_met_scaling,
 )
 
 
-class LaggedBatchGenerator(BatchGenerator):
+# =============================================================================
+# pyvprnn_v2 -- simplified successor of pyvprnn_v3
+#
+# Changes w.r.t. pyvprnn_v3:
+#   - No temperature lag encoder (Conv1D + peak/trend pooling) and no
+#     lagged-met input. Heat diffusion into the soil is represented directly
+#     by ERA5 soil temperature at two depths (stl1: 0-7 cm, stl2: 7-28 cm).
+#     -> generator and network have the same 6-input signature as pyvprnn_v1.
+#   - No air-soil temperature gradient feature (t2m - stl2), which mainly
+#     acted as a day/night switch for the Reco branch.
+#   - GPP branch additionally receives swvl1_era5 (near-surface root zone),
+#     which responds to rain events within hours to days; swvl2_era5 (deeper
+#     roots) is kept.
+#   - Consistent input scaling for engineered/raw features:
+#     temperatures in degC, precipitation APIs log1p-transformed.
+#
+# Unchanged w.r.t. pyvprnn_v3:
+#   - Precipitation API timescales (6, 24, 72, 168 h) from tower precipitation
+#     (pulse onset/decay), snow-gated.
+#   - swvl1 rolling mean/min drought memory (168, 720, 2160, 3600 h).
+#   - GPP penalty, time-integrated Reco/GPP ratio penalty, day mask, loss.
+#
+# Feature/source logic (as in v3):
+#   - Pulse onset + fast decay needs precise timing -> measured precipitation
+#     (self.precip_var, "P_F" at training time; swap for a gridded product at
+#     upscaling time).
+#   - Seasonal drought memory is a rolling statistic over long windows, where
+#     timing errors are smoothed out -> swvl1_era5, available everywhere.
+# =============================================================================
+
+
+def apply_snow_gating(precip_values, snow_depth_values, melt_threshold=1e-3):
     """
-    Same as BatchGenerator, but also precomputes a windowed/lagged met
-    array (one row per requested lag, per lagged variable) for the Reco
-    branch's temporal-history encoder.
+    Cheap leaky-reservoir gate: withholds precipitation's contribution to
+    the pulse-onset API while snow is on the ground, then releases it back
+    in proportion to how much the snowpack has shrunk since the previous
+    step (a coarse melt proxy), with anything still held released in full
+    once the snowpack is gone.
 
-    NOTE on batch tuple shape: BatchGenerator.__getitem__ now returns
-    (sat, static, met, sw_in_pot, fp, mask) - this class inserts
-    lagged_met right after sw_in_pot, giving
-    (sat, static, met, sw_in_pot, lagged_met, fp, mask), ypack.
+    This is NOT a real snowpack water-equivalent model. It is a gate against
+    the failure mode of a snowfall event registering as an immediate
+    rewetting pulse.
+    """
+    n = len(precip_values)
+    gated = np.zeros(n, dtype=np.float32)
+    reservoir = 0.0
+    prev_depth = float(snow_depth_values[0]) if n else 0.0
 
-    IMPORTANT - units: `lags` in variable_lags are counted in *rows of
-    met_array*, i.e. in whatever step size self.time actually is (half-
-    hourly for a typical FLUXNET-derived datetime_utc axis) - NOT
-    necessarily hours, despite variable names like "24" suggesting a day.
-    Verify this matches your intent; multiply lag values by 2 if you meant
-    hours but the underlying axis is half-hourly.
+    for i in range(n):
+        depth = float(snow_depth_values[i])
+        p = float(precip_values[i])
+
+        if depth > melt_threshold:
+            reservoir += p
+            if depth < prev_depth and prev_depth > melt_threshold:
+                melt_fraction = (prev_depth - depth) / prev_depth
+                release = reservoir * melt_fraction
+                gated[i] = release
+                reservoir -= release
+        else:
+            gated[i] = p + reservoir
+            reservoir = 0.0
+
+        prev_depth = depth
+
+    return gated
+
+
+def compute_api(precip_values, dt_hours, tau_hours):
+    """
+    Exponentially-weighted Antecedent Precipitation Index: a decaying
+    running sum of precipitation with memory timescale tau_hours.
+    API_t = P_t + exp(-dt/tau) * API_{t-1}
+    """
+    api = np.empty(len(precip_values), dtype=np.float32)
+    decay = float(np.exp(-dt_hours / tau_hours))
+    running = 0.0
+    for i, p in enumerate(precip_values):
+        running = running * decay + float(np.nan_to_num(p))
+        api[i] = running
+    return api
+
+
+def compute_rolling_stat(values, window_steps, stat):
+    """Rolling mean/min over the trailing window_steps, min_periods=1 (mild
+    early-record underestimate, not hard-excluded)."""
+    s = pd.Series(values)
+    roll = s.rolling(window=window_steps, min_periods=1)
+    if stat == "mean":
+        return roll.mean().values.astype(np.float32)
+    if stat == "min":
+        return roll.min().values.astype(np.float32)
+    raise ValueError(f"Unknown stat '{stat}'")
+
+
+def to_celsius(values):
+    """ERA5 temperatures are stored in K; convert to degC if needed so that
+    all temperature inputs share the same scale."""
+    values = np.asarray(values, dtype=np.float32)
+    if np.nanmedian(values) > 150.0:
+        values = values - 273.15
+    return values
+
+
+# =============================================================================
+# Batch generator
+# =============================================================================
+
+class EngineeredBatchGenerator(BatchGenerator):
+    """
+    BatchGenerator plus engineered met features. No lag history, i.e. the
+    generator returns the same (sat, static, met, sw_in_pot, fp, mask), y
+    tuple as pyvprnn_v1's BatchGenerator.
+
+    Met-variable names recognized on top of BatchGenerator:
+      - "t2m", "sd"              : ERA5 2 m temperature / snow depth
+                                    (stored as t2m_era5 / sd_era5).
+      - "stl1_era5", "stl2_era5" : ERA5 soil temperature, layers 1 and 2.
+      - "swvl1_era5"             : ERA5 soil moisture, layer 1 (raw).
+      - "precip_api_tau<H>h"     : snow-gated Antecedent Precipitation Index
+                                    at timescale H hours from self.precip_var,
+                                    log1p-transformed.
+      - "swvl1_roll_mean_<H>h"   : rolling mean of swvl1_era5 over H hours.
+      - "swvl1_roll_min_<H>h"    : rolling min of swvl1_era5 over H hours.
+    Everything else is handled exactly as in v3 (apply_met_scaling).
+
+    precip_var (default "P_F") is the single place that decides which
+    precipitation source feeds the API features - swap it at upscale time.
     """
 
-    def __init__(self, *args, lagged_met_vars, variable_lags, lag_window=None, **kwargs):
-        self.lagged_met_vars = lagged_met_vars
-        self.variable_lags = variable_lags
-        # Derived automatically rather than kept as a separately-hardcoded
-        # constant that has to be manually kept in sync with variable_lags
-        # (exactly the kind of "two numbers must agree" drift this project
-        # keeps running into) - lag_window is now just "how far back do we
-        # need full history," computed from the lags actually requested.
-        self.lag_window = lag_window if lag_window is not None else max(
-            max(lags) for lags in variable_lags.values()
-        )
+    ERA5_KEY_OVERRIDES = {"t2m": "t2m_era5", "sd": "sd_era5"}
+    TEMPERATURE_VARS = ("t2m", "stl1_era5", "stl2_era5")
+
+    def __init__(self, *args, precip_var="P_F", **kwargs):
+        self.precip_var = precip_var
         super().__init__(*args, **kwargs)
 
-        # Exclude any requested sample lacking full lag history, instead of
-        # just warning about it - a NaN row here would otherwise silently
-        # corrupt the whole batch's loss/gradient during training.
-        valid_mask = ~np.isnan(self.lagged_met_array).any(axis=(1, 2))
-        n_before = len(self.indexes)
-        self.indexes = self.indexes[valid_mask[self.indexes]]
-        self.n = len(self.indexes)
-        n_dropped = n_before - self.n
-        if n_dropped:
-            import logging
-            logging.getLogger("vprm_pipeline").warning(
-                "Dropped %d/%d requested samples lacking full lag history "
-                "(need >= %d steps of prior record) - these were within "
-                "max(lags) of the start of the dataset.",
-                n_dropped, n_before, self.lag_window,
-            )
-    
+    def _fetch_era5_nearest(self, var):
+        return sel_nearest_valid(
+            self.ds_cropped[[var]].compute(),
+            lon=self.ds_cropped.attrs["site_lon"],
+            lat=self.ds_cropped.attrs["site_lat"],
+        )[var]
+
+    def _era5_at_site(self, var):
+        key = self.ERA5_KEY_OVERRIDES.get(var, var)
+        return (self._fetch_era5_nearest(key)
+                .sel(datetime_utc=self.time).values.astype(np.float32))
+
     def init_training_cache(self, sat_vars, met_vars, met_dim=1):
-        super().init_training_cache(sat_vars, met_vars, met_dim)
+        self.time = self.ds_cropped["datetime_utc"].values
+        self.time_index = {t: i for i, t in enumerate(self.time)}
+        self.sat_time_index = self.ds_cropped["days_since_t0"].values
 
-        missing = set(self.lagged_met_vars) - set(met_vars)
-        if missing:
-            raise ValueError(
-                f"lagged_met_vars {sorted(missing)} not present in met_vars {met_vars} - "
-                f"every lagged variable must also be fetched as a regular met_var."
-            )
+        dt_hours = float(
+            np.median(np.diff(pd.DatetimeIndex(self.time))).astype("timedelta64[s]").astype(float) / 3600.0
+        )
+        if dt_hours <= 0:
+            raise ValueError("Could not infer a positive time step from datetime_utc.")
+        self.dt_hours_ = dt_hours
 
-        n_lags_per_var = {v: len(self.variable_lags[v]) for v in self.lagged_met_vars}
-        n_lags = next(iter(n_lags_per_var.values()))
-        if len(set(n_lags_per_var.values())) != 1:
-            raise ValueError(
-                f"All lagged_met_vars must have the same number of lags (Conv1D needs a "
-                f"fixed sequence length) - got {n_lags_per_var}."
-            )
+        # Base variables for the engineered features (fetched lazily, once).
+        cache = {}
 
-        n_times = len(self.time)
-        n_vars = len(self.lagged_met_vars)
-        met_flat = self.met_array[:, 0, 0, :]
+        def base(var):
+            if var not in cache:
+                cache[var] = self._era5_at_site(var)
+            return cache[var]
 
-        lagged = np.full((n_times, n_lags, n_vars), np.nan, dtype=np.float32)
-        for v_idx, var in enumerate(self.lagged_met_vars):
-            var_col = met_flat[:, met_vars.index(var)]
-            for lag_idx, lag in enumerate(self.variable_lags[var]):
-                if lag <= 0:
-                    raise ValueError(f"Lags must be positive (steps into the past); got {lag} for {var}.")
-                lagged[lag:, lag_idx, v_idx] = var_col[: n_times - lag]
+        precip_gated = None
+        if any(v.startswith("precip_api_tau") for v in met_vars):
+            precip_raw = self.ds_cropped[self.precip_var].sel(datetime_utc=self.time).values.astype(np.float32)
+            precip_gated = apply_snow_gating(precip_raw, base("sd"))
 
-        self.lagged_met_array = lagged
+        met_list = []
+        for v in met_vars:
+            if v in self.TEMPERATURE_VARS:
+                arr = to_celsius(base(v))
+            elif v in ("sd", "swvl1_era5"):
+                arr = base(v)
+            elif v.startswith("precip_api_tau") and v.endswith("h"):
+                tau = float(v[len("precip_api_tau"):-1])
+                arr = compute_api(precip_gated, dt_hours, tau) # np.log1p()
+            elif v.startswith("swvl1_roll_mean_") and v.endswith("h"):
+                h = float(v[len("swvl1_roll_mean_"):-1])
+                window_steps = max(1, int(round(h / dt_hours)))
+                arr = compute_rolling_stat(base("swvl1_era5"), window_steps, "mean")
+            elif v.startswith("swvl1_roll_min_") and v.endswith("h"):
+                h = float(v[len("swvl1_roll_min_"):-1])
+                window_steps = max(1, int(round(h / dt_hours)))
+                arr = compute_rolling_stat(base("swvl1_era5"), window_steps, "min")
+            elif v.endswith("_era5"):
+                da = self._fetch_era5_nearest(v).sel(datetime_utc=self.time)
+                arr = apply_met_scaling(v, da.values)
+            else:
+                da = self.ds_cropped[v].sel(datetime_utc=self.time)
+                arr = apply_met_scaling(v, da.values)
 
-        n_nan_rows = np.isnan(lagged).any(axis=(1, 2)).sum()
-        if n_nan_rows:
-            import logging
-            logging.getLogger("vprm_pipeline").warning(
-                "%d of %d timesteps have incomplete lag history (NaN) - make sure your "
-                "train/val time selections start at least max(lags)=%d steps into the "
-                "record, or these rows will feed NaN into the Reco branch.",
-                n_nan_rows, n_times, max(max(v) for v in self.variable_lags.values()),
-            )
+            met_list.append(np.asarray(arr, dtype=np.float32))
 
-    def __getitem__(self, batch_index):
-        (sat, static, met, sw_in_pot, fp, mask), ypack = super().__getitem__(batch_index)
-        batch_idxs = self.indexes[
-            batch_index * self.batch_size: (batch_index + 1) * self.batch_size
-        ]
-        lagged_met = self.lagged_met_array[batch_idxs]
-        return (sat, static, met, sw_in_pot, lagged_met, fp, mask), ypack
+        self.met_array = np.stack(met_list, axis=-1).astype(np.float32)
+        if met_dim == 1:
+            self.met_array = self.met_array[:, None, None, :]
 
+        # Identical to BatchGenerator.init_training_cache from here.
+        sw_in_pot = self.ds_cropped["SW_IN_POT"].sel(datetime_utc=self.time).values.astype(np.float32)
+        self.sw_in_pot_array = sw_in_pot
+        if met_dim == 1:
+            self.sw_in_pot_array = self.sw_in_pot_array[:, None, None, None]
+
+        self.sat_array = np.stack(
+            [self.ds_cropped[v].values for v in sat_vars], axis=-1
+        ).astype(np.float32)
+
+        self.lc = np.moveaxis(
+            self.ds_cropped["land_cover_map"].sel(vprm_classes=self.land_cover_classes).values,
+            0, -1,
+        ).astype(np.float32)
+
+        self.nirv_max = self.ds_cropped["nirv_90pct"].values[..., None].astype(np.float32)
+        self.nirv_min = self.ds_cropped["nirv_10pct"].values[..., None].astype(np.float32)
+
+        self.y_array = self.ds_cropped[self._target].sel(datetime_utc=self.time).values.astype(np.float32)
+        self.y_unc_array = self.ds_cropped[self._unc].sel(datetime_utc=self.time).values.astype(np.float32)
+        if "ffp_footprint" in self.ds_cropped.variables:
+            self.fp_array = self.ds_cropped["ffp_footprint"].sel(t=self.time).values.astype(np.float32)
+        else:
+            self.fp_array = None
+        self.mask_static = self.ds_cropped["flux_mask"].values.astype(np.float32)
+        self.static_stack = np.concatenate([self.nirv_max, self.nirv_min, self.lc], axis=-1)
+        self.y_pack = np.stack([self.y_array, self.y_unc_array], axis=-1).astype(np.float32)
+
+    # No __getitem__ override: BatchGenerator.__getitem__ returns
+    # (sat, static, met, sw_in_pot, fp, mask), ypack -- the v1 signature.
+
+
+# =============================================================================
+# Model
+# =============================================================================
 
 class pyvprnn_v2(pyvprnn_v1):
     """
-    pyvprnn_v1 plus a lagged-history encoder feeding the Reco branch only.
+    pyvprnn_v1 plus time-sensitive water inputs, without a temperature lag
+    encoder:
+
+      HEAT (soil depth)     -- stl1_era5 (0-7 cm) and stl2_era5 (7-28 cm)
+                               for soil respiration, t2m for aboveground
+                               respiration. ERA5 soil temperature represents
+                               heat diffusion into the soil directly.
+
+      PULSE ONSET/DECAY     -- snow-gated precipitation API from precip_var
+                               at API_TAUS_HOURS (Reco branch).
+
+      DROUGHT MEMORY        -- swvl1_era5 rolling mean/min at
+                               SWVL_ROLLING_HOURS (Reco branch).
+
+      GPP WATER SUPPLY      -- swvl1_era5 (shallow roots, responds to rain
+                               within hours to days) and swvl2_era5 (deeper
+                               roots).
+
+    Generator and network use the same 6-input signature as pyvprnn_v1.
     """
 
-    DEFAULT_VARIABLE_LAGS = {
-        "t2m": [2, 6, 12, 24, 48],
-        "swvl1_era5": [2, 6, 12, 24, 72, 144, 336, 672, 1344, 2688],
-        "stl2_era5": [3, 6, 12, 24, 48],   # single soil temperature level - dropped stl1_era5 entirely
-    }
-    DEFAULT_LAGGED_MET_VARS = ["t2m", "swvl1_era5", "stl2_era5"]
-    
-    def __init__(self, lagged_met_vars=None, variable_lags=None, lag_window=None, **kwargs):
+    API_TAUS_HOURS = (6, 24, 72, 168)             # as in pyvprnn_v3
+    SWVL_ROLLING_HOURS = (168, 720, 2160, 3600)   # as in pyvprnn_v3
+    DEFAULT_PRECIP_VAR = "P_F"  # tower measurement; swap for a gridded var at upscale time
+
+    # Used by utils.make_generator (training AND inference) so that the
+    # engineered features are always computed the same way.
+    generator_cls = EngineeredBatchGenerator
+
+    def __init__(self, precip_var=None, **kwargs):
         super().__init__(**kwargs)
 
-        self.met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl1_era5", "swvl2_era5", 'sd',
-                         "hours_since_rain",]
-        self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl2_era5", 'sd']
-        self.reco_met_vars = ["t2m", "RH_from_VDP", "swvl1_era5", 'sd', 
-                              "hours_since_rain"]
-        
-        self.lagged_met_vars = list(lagged_met_vars) if lagged_met_vars is not None else list(self.DEFAULT_LAGGED_MET_VARS)
-        self.variable_lags = dict(variable_lags) if variable_lags is not None else dict(self.DEFAULT_VARIABLE_LAGS)
-        self.lag_window = lag_window if lag_window is not None else max(
-            max(lags) for lags in self.variable_lags.values()
+        self.sat_vars = ["lswi", "nirv"]
+        self.precip_var = precip_var if precip_var is not None else self.DEFAULT_PRECIP_VAR
+        self.generator_kwargs = {"precip_var": self.precip_var}
+
+        api_vars = [f"precip_api_tau{h}h" for h in self.API_TAUS_HOURS]
+        swvl_roll_vars = []
+        for h in self.SWVL_ROLLING_HOURS:
+            swvl_roll_vars += [f"swvl1_roll_mean_{h}h", f"swvl1_roll_min_{h}h"]
+
+        self.met_vars = (
+            ["t2m", "ssrd", "RH_from_VDP", "swvl1_era5", "swvl2_era5", "sd",
+             "stl1_era5", "stl2_era5"]
+            + api_vars + swvl_roll_vars
         )
-    
-        # Anything referenced by lagged_met_vars must be fetched into
-        # met_array for LaggedBatchGenerator to read its history from - stl2_era5
-        # isn't part of pyvprnn_v1's base met_vars (v1 has no lag mechanism to
-        # use it), so extend it here, for v2 specifically, instead of making
-        # v1 fetch a variable it would never read.
-        for v in self.lagged_met_vars:
-            if v not in self.met_vars:
-                self.met_vars.append(v)
-    
-        unknown = set(self.lagged_met_vars) - set(self.variable_lags)
-        if unknown:
-            raise ValueError(f"lagged_met_vars {sorted(unknown)} have no entry in variable_lags.")
+
+        self.gpp_met_vars = [
+            "t2m", "ssrd", "RH_from_VDP", "swvl2_era5", "sd",
+            "swvl1_roll_mean_168h", "swvl1_roll_min_720h",
+            "precip_api_tau168h",
+        ]
+
+        self.reco_met_vars = (
+            ["t2m", "swvl1_era5", "stl2_era5", "sd"]
+            + api_vars + swvl_roll_vars
+        )
+
+        for name, subset in (("gpp_met_vars", self.gpp_met_vars),
+                             ("reco_met_vars", self.reco_met_vars)):
+            unknown = set(subset) - set(self.met_vars)
+            if unknown:
+                raise ValueError(f"{name} {sorted(unknown)} missing from met_vars.")
+
+    def load_model(self, path):
+        self.pixel_model = load_model(path, custom_objects={
+            "BroadcastToImage": BroadcastToImage,
+            "ExpandLastDim": ExpandLastDim,
+            "GlobalSumPooling": GlobalSumPooling,
+            "DayMask": DayMask,
+            "SelectFeatures": SelectFeatures,
+            "GPPPenalty": GPPPenalty,
+            "TimeIntegratedRatioPenalty": TimeIntegratedRatioPenalty,
+        })
 
     def train(self, save_path_model,
               save_path_history=None,
               train_params={"batch_size": 42,
-                             "max_runtime_in_seconds": None,
-                             "epochs": 1000,
-                             "patience": 10,
-                             "plateau_patience": 5,
-                             "learning rate": 5e-4,
-                             "workers": 1,
-                             "multiprocessing": False,
-                             "max_queue_size": 1,
-                             "loss": "nll_loss_from_stacked"},
+                            "max_runtime_in_seconds": None,
+                            "epochs": 1000,
+                            "patience": 10,
+                            "plateau_patience": 5,
+                            "learning rate": 5e-4,
+                            "workers": 1,
+                            "multiprocessing": False,
+                            "max_queue_size": 1,
+                            "loss": "nll_loss_from_stacked"},
               target="NEE_VUT_REF",
               target_unc="NEE_VUT_REF_JOINTUNC",
               cv_fold=0,
@@ -177,24 +357,17 @@ class pyvprnn_v2(pyvprnn_v1):
 
         train_times = self.cv_folds[cv_fold]["train_times"]
         qc_train = self.ds_cropped["NEE_VUT_REF_QC"].sel(datetime_utc=train_times)
-        wrong_nigttime_train = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=train_times) < 0) &
+        wrong_nighttime_train = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=train_times) < 0) &
                                  (self.ds_cropped["ssrd"].sel(datetime_utc=train_times) == 0))
-        train_times_qc0 = train_times[(qc_train == 0) & ~wrong_nigttime_train]
+        train_times_qc0 = train_times[(qc_train == 0) & ~wrong_nighttime_train]
 
         val_times = self.cv_folds[cv_fold]["val_times"]
         qc_val = self.ds_cropped["NEE_VUT_REF_QC"].sel(datetime_utc=val_times)
-        wrong_nigttime_val = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=val_times) < 0) &
+        wrong_nighttime_val = ((self.ds_cropped["NEE_VUT_REF"].sel(datetime_utc=val_times) < 0) &
                                (self.ds_cropped["ssrd"].sel(datetime_utc=val_times) == 0))
-        val_times_qc0 = val_times[(qc_val == 0) & ~wrong_nigttime_val]
+        val_times_qc0 = val_times[(qc_val == 0) & ~wrong_nighttime_val]
 
-        gen_kwargs = dict(
-            land_cover_classes=self.land_cover_classes,
-            lagged_met_vars=self.lagged_met_vars,
-            variable_lags=self.variable_lags,
-            lag_window=self.lag_window,
-        )
-
-        train_gen = LaggedBatchGenerator(
+        train_gen = self.generator_cls(
             self.ds_cropped, self.sat_vars, self.met_vars,
             batch_size=train_params["batch_size"],
             times=train_times_qc0,
@@ -202,19 +375,20 @@ class pyvprnn_v2(pyvprnn_v1):
             use_multiprocessing=train_params["multiprocessing"],
             max_queue_size=train_params["max_queue_size"],
             target=target, unc=target_unc,
-            **gen_kwargs,
+            land_cover_classes=self.land_cover_classes,
+            **self.generator_kwargs,
         )
-
-        val_gen = LaggedBatchGenerator(
+        val_gen = self.generator_cls(
             self.ds_cropped, self.sat_vars, self.met_vars,
             batch_size=train_params["batch_size"],
             times=val_times_qc0,
             shuffle=False,
             target=target, unc=target_unc,
-            **gen_kwargs,
+            land_cover_classes=self.land_cover_classes,
+            **self.generator_kwargs,
         )
 
-        (Xsat_batch, Xstatic_batch, Xmet_batch, _, Xmet_lagged_batch, _, _), _ = train_gen[0]
+        (Xsat_batch, Xstatic_batch, Xmet_batch, _, _, _), _ = train_gen[0]
 
         n_sat_features = Xsat_batch.shape[-1]
         n_static_features = Xstatic_batch.shape[-1]
@@ -225,15 +399,12 @@ class pyvprnn_v2(pyvprnn_v1):
         filter_size = 1
 
         # =========================================================
-        # Inputs
+        # Inputs (same signature as pyvprnn_v1)
         # =========================================================
         self.sat_input = layers.Input(shape=(None, None, n_sat_features), name="sat")
         self.static_input = layers.Input(shape=(None, None, n_static_features), name="static")
         self.met_input = layers.Input(shape=(None, None, n_met_features), name="met")
         self.sw_in_pot_input = layers.Input(shape=(None, None, 1), name="sw_in_pot")
-        self.met_input_lagged = layers.Input(
-            shape=(Xmet_lagged_batch.shape[1], Xmet_lagged_batch.shape[2]), name="met_lagged"
-        )
         self.fp_input = layers.Input(shape=(None, None), name="fp")
         self.flux_mask_input = layers.Input(shape=(None, None), name="flux_mask")
 
@@ -249,34 +420,18 @@ class pyvprnn_v2(pyvprnn_v1):
         met_bc_reco = BroadcastToImage(name="met_bc_reco")([met_reco, sat_static])
 
         # =========================================================
-        # Day/night mask - from SW_IN_POT, not ssrd (see BatchGenerator note)
+        # Day/night mask
         # =========================================================
         sw_in_pot_bc = BroadcastToImage(name="sw_in_pot_bc")([self.sw_in_pot_input, sat_static])
         day_mask = DayMask(0, name="day_mask")(sw_in_pot_bc)
 
         # =========================================================
-        # Lagged-history encoder (Reco branch only)
-        # =========================================================
-        x_met_lagged = layers.Conv1D(
-            filters=16, kernel_size=4, padding="causal",
-            activation="softplus", kernel_initializer="he_normal",
-            name="conv1d_lagged_1",
-        )(self.met_input_lagged)
-        x_met_lagged = layers.Conv1D(
-            filters=16, kernel_size=4, padding="causal",
-            activation="softplus", kernel_initializer="he_normal",
-            name="conv1d_lagged_2",
-        )(x_met_lagged)
-        x_met_lagged = layers.Dense(3, activation="softplus", name="dense_lagged_summary")(x_met_lagged[:, -1, :])
-        met_bc_lagged = BroadcastToImage(name="met_bc_lagged")([x_met_lagged, sat_static])
-
-        # =========================================================
-        # GPP branch (unchanged from pyvprnn_v1)
+        # GPP branch
         # =========================================================
         x_gpp = layers.Concatenate(name="gpp_concat")([self.sat_input, self.static_input, met_bc_gpp])
         for i in range(6):
             x_gpp = layers.Conv2D(32, filter_size, padding="same", activation="softplus",
-                                   kernel_initializer="he_normal")(x_gpp)
+                                  kernel_initializer="he_normal")(x_gpp)
         x_gpp = layers.Conv2D(
             1, 1, activation="softplus", kernel_initializer="he_normal",
             bias_initializer=tf.keras.initializers.Constant(0.3), name="x_gpp_map",
@@ -289,39 +444,38 @@ class pyvprnn_v2(pyvprnn_v1):
         gpp_sum = GlobalSumPooling(name="gpp_sum_raw")(gpp_weighted)
 
         # =========================================================
-        # Reco branch - now also sees the lagged-history encoding
+        # Reco branch
         # =========================================================
-        x_reco = layers.Concatenate(name="reco_concat")([
-            self.sat_input, self.static_input, met_bc_reco, met_bc_lagged,
-        ])
+        x_reco = layers.Concatenate(name="reco_concat")([self.sat_input, self.static_input, met_bc_reco])
         for i in range(6):
             x_reco = layers.Conv2D(32, filter_size, padding="same", activation="softplus",
-                                    kernel_initializer="he_normal")(x_reco)
+                                   kernel_initializer="he_normal")(x_reco)
         x_reco_map = layers.Conv2D(
             1, 1, activation="softplus", kernel_initializer="he_normal",
             bias_initializer=tf.keras.initializers.Constant(0.7), name="x_reco_map",
         )(x_reco)
         reco_map = layers.Multiply(name="reco_map")([x_reco_map, flux_mask_exp])
 
+        # ---- Reco-to-GPP constraint: unchanged from pyvprnn_v1/v3. ----
         reco_map = TimeIntegratedRatioPenalty(
-            max_ratio=1.0,  # derive some reference ratio spread
+            max_ratio=1.0,
             weight=1e-4,
             gpp_floor=1.0,
             name="time_integrated_ratio_penalty",
         )([gpp_map, reco_map, day_mask])
-        
+
         reco_weighted = layers.Multiply(name="reco_weighted")([reco_map, fp_exp])
         reco_sum = GlobalSumPooling(name="reco_sum")(reco_weighted)
 
         # =========================================================
-        # NEE (physics only)
+        # NEE
         # =========================================================
         nee = layers.Subtract(name="nee")([reco_sum, gpp_sum])
         nee = layers.Flatten(name="Output")(nee)
 
         self.model = Model(
             inputs=[self.sat_input, self.static_input, self.met_input, self.sw_in_pot_input,
-                    self.met_input_lagged, self.fp_input, self.flux_mask_input],
+                    self.fp_input, self.flux_mask_input],
             outputs=nee,
         )
 
@@ -335,7 +489,6 @@ class pyvprnn_v2(pyvprnn_v1):
             return tf.reduce_mean(tf.square(y_true - y_pred))
 
         def nll_loss_laplace_from_stacked(y_with_sigma_true, y_pred, sigma_floor=0.5):
-            # https://research.fs.usda.gov/download/treesearch/21276.pdf
             y_true = y_with_sigma_true[..., 0][..., None]
             sigma = tf.maximum(y_with_sigma_true[..., 1], sigma_floor)[..., None]
             b = sigma / tf.sqrt(2.0)
@@ -379,7 +532,7 @@ class pyvprnn_v2(pyvprnn_v1):
 
         self.pixel_model = Model(
             inputs=[self.sat_input, self.static_input, self.met_input, self.sw_in_pot_input,
-                    self.met_input_lagged, self.flux_mask_input],
+                    self.flux_mask_input],
             outputs=[self.model.get_layer("gpp_map").output, self.model.get_layer("reco_map").output],
             name="pixel_flux_model",
         )

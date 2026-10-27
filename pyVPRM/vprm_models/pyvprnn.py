@@ -922,7 +922,6 @@ class pyvprnn:
                 vmin = np.nanpercentile(color_var, 5)
             if vmax is None:
                 vmax = np.nanpercentile(color_var, 95)
-            print(vmin, vmax)
             norm = plt.Normalize(vmin=vmin, vmax=vmax)
             colors = plt.get_cmap(cmap)(norm(color_var))
         else:
@@ -993,9 +992,8 @@ class pyvprnn:
         #ax.set_title(title)
         ax.grid(True)
         # ax.legend()
-        if (out_path != '') & (fig != None):  
-            fig.savefig(out_path, dpi=300,
-                bbox_inches="tight")
+        if out_path and fig is not None:
+            fig.savefig(out_path, dpi=300, bbox_inches="tight")
         return ax
         
     

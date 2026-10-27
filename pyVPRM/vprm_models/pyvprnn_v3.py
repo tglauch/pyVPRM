@@ -392,13 +392,20 @@ class pyvprnn_v3(pyvprnn_v1):
             + api_vars + swvl_roll_vars
         )
 
-        self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl2_era5", "sd"]
+        # self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl2_era5", "sd"]
+
+        # self.reco_met_vars = (
+        #     ["t2m", "RH_from_VDP", "swvl1_era5", "stl2_era5", "sd",
+        #      "t_gradient_air_soil"]
+        #     + api_vars + swvl_roll_vars
+        # )
+
+        self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl1_era5", "swvl2_era5", "sd"]
 
         self.reco_met_vars = (
-            ["t2m", "RH_from_VDP", "swvl1_era5", "stl2_era5", "sd",
-             "t_gradient_air_soil"]
-            + api_vars + swvl_roll_vars
-        )
+             ["t2m", "RH_from_VDP", "swvl1_era5", "stl2_era5", "sd"]
+             + api_vars + swvl_roll_vars
+         )
 
         for v in self.lagged_met_vars:
             if v not in self.met_vars:
