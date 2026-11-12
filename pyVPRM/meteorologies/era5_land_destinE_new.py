@@ -90,17 +90,36 @@ class met_data_handler(met_data_handler_base):
         self.ds_out = None
         self.load_ds()
 
-    def load_ds(self):
+    def load_ds(self, tries=6, wait=30):
+        import time
         import aiohttp
+
         async def get_client(**kwargs):
             connector = aiohttp.TCPConnector(ssl=False)
             return aiohttp.ClientSession(connector=connector, **kwargs)
 
         url = "https://edh:{}@{}".format(self.PAT, DATA_PRODUCT_PATH[self.data_product])
+
+        # Earth Data Hub sometimes answers 502/503/504 for a few minutes: retry with growing waits
+        # (30, 60, 120, ... s, max 600 s). 401/403/404 are not transient -> fail at once.
+        for k in range(tries):
+            try:
+                ds = xr.open_dataset(url, chunks={}, engine="zarr",
+                                     storage_options={"get_client": get_client})
+                break
+            except (aiohttp.ClientResponseError, aiohttp.ClientConnectionError,
+                    asyncio.TimeoutError, OSError) as e:
+                status = getattr(e, "status", None)
+                if (status is not None and status < 500) or k == tries - 1:
+                    raise
+                # never print the URL: it contains the access token
+                print(f"[ERA5 DestinE] {self.data_product}: {e.__class__.__name__} {status or ''} "
+                      f"-> retry {k + 1}/{tries - 1} in {wait} s")
+                time.sleep(wait)
+                wait = min(wait * 2, 600)
+
         self.ds = (
-            xr.open_dataset(url, chunks={}, engine="zarr",
-                            storage_options={"get_client": get_client})
-            .astype("float32")
+            ds.astype("float32")
             .rename({"longitude": "lon", "latitude": "lat"})
         )
         if self.keys:

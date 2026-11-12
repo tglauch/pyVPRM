@@ -405,15 +405,15 @@ class pyvprnn_v1(pyvprnn):
         self.valid_weights = None
 
         self.sat_vars = ["lswi", "nirv"] # "ndre"
-        self.met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl1_era5", "swvl2_era5"] # 'sd_era5']
+        self.met_vars = ["t2m", "ssrd", "RH_from_VPD", "swvl1_era5", "swvl2_era5"] # 'sd_era5']
         # GPP excludes swvl1_era5 (kept for Reco's water-availability signal);
         # Reco excludes ssrd (no direct light-driven respiration signal) and
         # swvl2_era5 (deeper layer, judged more relevant to GPP's root-zone
         # water access). Note ssrd (actual measured radiation) still feeds
         # GPP as a real driver of photosynthetic rate - only the day/night
         # MASK now comes from SW_IN_POT instead, a separate concern.
-        self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VDP", "swvl2_era5"] #, 'sd_era5']
-        self.reco_met_vars = ["t2m", "RH_from_VDP", "swvl1_era5"] #, 'sd_era5']
+        self.gpp_met_vars = ["t2m", "ssrd", "RH_from_VPD", "swvl2_era5"] #, 'sd_era5']
+        self.reco_met_vars = ["t2m", "RH_from_VPD", "swvl1_era5"] #, 'sd_era5']
 
         self.land_cover_classes = (
             list(land_cover_classes) if land_cover_classes is not None

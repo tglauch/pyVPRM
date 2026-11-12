@@ -67,7 +67,12 @@ class pyvprnn:
         ds = self.ds  # work on local reference
     
 
-        ds["RH_from_VDP"] = vpd_hpa_to_rh(ds["VPD_F"], ds["t2m"]) / 100
+        # compute it only otherwise
+        if "RH_from_VPD" not in ds.variables:
+            if "RH_from_VDP" in ds.variables:
+                ds["RH_from_VPD"] = ds["RH_from_VDP"]
+            else:
+                ds["RH_from_VPD"] = vpd_hpa_to_rh(ds["VPD_F"], ds["t2m"]) / 100
         ds["nirv_90pct"] = ds["nirv"].quantile(0.9, dim="time_gap_filled")
         ds["nirv_10pct"] = ds["nirv"].quantile(0.1, dim="time_gap_filled")
 
